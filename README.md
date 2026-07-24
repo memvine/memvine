@@ -24,6 +24,10 @@ through someone else's servers. memvine does neither:
   key. File-based agentic retrieval — the approach that outscored vector
   RAG by ~30 points on [LongMemEval-V2](https://arxiv.org/html/2605.12493v1).
 
+## Architecture
+
+![memvine architecture](docs/architecture.svg)
+
 ## Quickstart
 
 ```bash
