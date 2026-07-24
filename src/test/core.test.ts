@@ -33,31 +33,47 @@ test("init creates store with gitignored local dir", () => {
   );
 });
 
-test("add, list, and scope filtering", () => {
+test("add, list, tags, and scope filtering", () => {
   const store = Store.init(makeRepo());
-  store.add({ body: "Auth tests need vault container", kind: "gotcha", scope: ["src/auth/**"] });
-  store.add({ body: "We use pnpm not npm", kind: "convention" });
+  store.add({
+    body: "Auth tests need vault container",
+    kind: "semantic",
+    tags: ["test", "auth"],
+    scope: ["src/auth/**"],
+  });
+  store.add({ body: "We use pnpm not npm", kind: "semantic" });
   assert.equal(store.list().length, 2);
   const authScoped = store.list({ forPath: "src/auth/login.ts" });
   assert.equal(authScoped.length, 2); // scoped match + repo-wide
   const otherScoped = store.list({ forPath: "src/billing/pay.ts" });
   assert.equal(otherScoped.length, 1); // only repo-wide
+  // tags are searchable
+  assert.equal(store.search("auth").length >= 1, true);
 });
 
 test("supersede retires the old memory", () => {
   const store = Store.init(makeRepo());
-  const old = store.add({ body: "API uses REST", kind: "decision" });
-  store.add({ body: "API migrated to gRPC", kind: "decision", supersedes: old.meta.id });
+  const old = store.add({ body: "API uses REST", kind: "semantic" });
+  store.add({ body: "API migrated to gRPC", kind: "semantic", supersedes: old.meta.id });
   const retired = store.get(old.meta.id);
   assert.equal(retired?.memory.meta.status, "superseded");
   assert.equal(store.list({ status: ["active"] }).length, 1);
 });
 
-test("staleness: scoped memory flagged when its files change", () => {
+test("staleness: semantic memory stales when its code changes; episodic never does", () => {
   const repo = makeRepo();
   const store = Store.init(repo);
-  store.add({ body: "Login flow uses magic links", kind: "decision", scope: ["src/auth/**"] });
-  store.add({ body: "Repo-wide fact", kind: "convention" });
+  store.add({
+    body: "Login flow uses magic links",
+    kind: "semantic",
+    scope: ["src/auth/**"],
+  });
+  store.add({
+    body: "March 2026: tried passwordless-only rollout, support tickets spiked, partially rolled back",
+    kind: "episodic",
+    scope: ["src/auth/**"], // same scope — but history never stales
+  });
+  store.add({ body: "Repo-wide fact", kind: "semantic" });
   assert.equal(findStale(store).length, 0, "fresh right after learning");
 
   // Change the scoped file in a new commit.
@@ -67,7 +83,8 @@ test("staleness: scoped memory flagged when its files change", () => {
   g(["commit", "-q", "-m", "change auth"]);
 
   const reports = findStale(store);
-  assert.equal(reports.length, 1, "only the scoped memory goes stale");
+  assert.equal(reports.length, 1, "only the scoped SEMANTIC memory goes stale");
+  assert.equal(reports[0].memory.meta.kind, "semantic");
   assert.deepEqual(reports[0].changedFiles, ["src/auth/login.ts"]);
   assert.equal(markStale(store, reports), 1);
   assert.equal(store.list({ status: ["stale"] }).length, 1);
@@ -76,11 +93,12 @@ test("staleness: scoped memory flagged when its files change", () => {
 
 test("compile renders digest with markers and respects budget", () => {
   const store = Store.init(makeRepo());
-  store.add({ body: "High-value fact", kind: "gotcha", confidence: "high" });
+  store.add({ body: "High-value fact", kind: "semantic", tags: ["build"], confidence: "high" });
   const target = compileInto(store, "CLAUDE.md");
   const content = fs.readFileSync(target, "utf8");
   assert.match(content, /memvine:begin/);
   assert.match(content, /High-value fact/);
+  assert.match(content, /semantic · build/);
   // Re-compile is idempotent (single block).
   compileInto(store, "CLAUDE.md");
   const again = fs.readFileSync(target, "utf8");
@@ -92,8 +110,8 @@ test("compile renders digest with markers and respects budget", () => {
 
 test("local memories stay out of the compiled digest", () => {
   const store = Store.init(makeRepo());
-  store.add({ body: "My personal note", kind: "other", local: true });
-  store.add({ body: "Shared team fact", kind: "convention" });
+  store.add({ body: "My personal note", kind: "episodic", local: true });
+  store.add({ body: "Shared team fact", kind: "semantic" });
   const digest = buildDigest(store, 12_000);
   assert.ok(!digest.includes("My personal note"));
   assert.ok(digest.includes("Shared team fact"));

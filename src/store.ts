@@ -95,6 +95,7 @@ export class Store {
   add(opts: {
     body: string;
     kind: MemoryKind;
+    tags?: string[];
     scope?: string[];
     agent?: string;
     confidence?: MemoryMeta["confidence"];
@@ -104,6 +105,7 @@ export class Store {
     const meta: MemoryMeta = {
       id: newId(),
       kind: opts.kind,
+      tags: opts.tags ?? [],
       scope: opts.scope ?? [],
       learned_at: new Date().toISOString(),
       learned_commit: headCommit(this.root),
@@ -143,10 +145,9 @@ export class Store {
 
   private read(filePath: string): Memory {
     const parsed = matter(fs.readFileSync(filePath, "utf8"));
-    return {
-      meta: parsed.data as MemoryMeta,
-      body: parsed.content.trim(),
-    };
+    const meta = parsed.data as MemoryMeta;
+    meta.tags ??= []; // tolerate pre-tags memory files
+    return { meta, body: parsed.content.trim() };
   }
 
   list(filter?: {
@@ -186,7 +187,7 @@ export class Store {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
     return this.list({ status: ["active", "stale"], forPath })
       .map((m) => {
-        const haystack = (m.body + " " + m.meta.kind).toLowerCase();
+        const haystack = (m.body + " " + m.meta.kind + " " + m.meta.tags.join(" ")).toLowerCase();
         const score = terms.filter((t) => haystack.includes(t)).length;
         return { m, score };
       })

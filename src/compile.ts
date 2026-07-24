@@ -16,8 +16,9 @@ const END = "<!-- memvine:end -->";
 const CONFIDENCE_RANK = { high: 0, medium: 1, low: 2 } as const;
 
 function renderMemory(m: Memory): string {
+  const tags = m.meta.tags.length ? ` · ${m.meta.tags.join(", ")}` : "";
   const scope = m.meta.scope.length ? ` _(scope: ${m.meta.scope.join(", ")})_` : "";
-  return `- **[${m.meta.kind}]**${scope} ${m.body.replace(/\s+/g, " ").trim()}`;
+  return `- **[${m.meta.kind}${tags}]**${scope} ${m.body.replace(/\s+/g, " ").trim()}`;
 }
 
 export function buildDigest(store: Store, budgetBytes: number): string {

@@ -122,7 +122,7 @@
     <!-- frontmatter sample -->
     <rect x="392" y="710" width="238" height="160" rx="10" fill="#ffffff" stroke="#fde68a"/>
     <text x="408" y="734" font-size="11.5" fill="#94a3b8" font-family="ui-monospace,Menlo,monospace">--- frontmatter ---</text>
-    <text x="408" y="754" font-size="11.5" fill="#78350f" font-family="ui-monospace,Menlo,monospace">kind: gotcha</text>
+    <text x="408" y="754" font-size="11.5" fill="#78350f" font-family="ui-monospace,Menlo,monospace">kind: semantic</text>
     <text x="408" y="772" font-size="11.5" fill="#78350f" font-family="ui-monospace,Menlo,monospace">scope: [src/auth/**]</text>
     <text x="408" y="790" font-size="11.5" fill="#78350f" font-family="ui-monospace,Menlo,monospace">learned_commit: a1b4c9e</text>
     <text x="408" y="808" font-size="11.5" fill="#78350f" font-family="ui-monospace,Menlo,monospace">status: active</text>

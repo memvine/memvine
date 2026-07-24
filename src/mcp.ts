@@ -20,6 +20,7 @@ function fmt(memories: ReturnType<Store["list"]>): string {
     .map(
       (m) =>
         `[${m.meta.id}] (${m.meta.kind}, ${m.meta.status}, confidence=${m.meta.confidence}` +
+        (m.meta.tags.length ? `, tags=${m.meta.tags.join(",")}` : "") +
         (m.meta.scope.length ? `, scope=${m.meta.scope.join(",")}` : "") +
         `, learned@${m.meta.learned_commit})\n${m.body}`,
     )
@@ -52,15 +53,16 @@ export async function serve(store: Store): Promise<void> {
 
   server.tool(
     "remember",
-    "Store a durable project memory for future sessions (yours, other machines', and teammates' agents — memories are committed to the repo). BEFORE storing: call recall to check for duplicates or contradictions. If this new knowledge CONTRADICTS an existing memory, do not just add it — pass supersedes with the old memory's id so the old one is retired with a pointer to its replacement. Store things worth re-learning: build quirks, architectural decisions, gotchas, conventions, environment setup. Do NOT store secrets, credentials, or anything you'd not commit to the repo.",
+    "Store a durable project memory for future sessions (yours, other machines', and teammates' agents — memories are committed to the repo). BEFORE storing: call recall to check for duplicates or contradictions. If this new knowledge CONTRADICTS an existing memory, do not just add it — pass supersedes with the old memory's id so the old one is retired with a pointer to its replacement. Memory kinds mirror human memory — pick by asking what sentence you're storing: what HAPPENED (an event, an attempt, an outcome) → episodic; what IS TRUE about this codebase (a fact, decision, convention, quirk) → semantic; HOW TO do something here (a runbook, workflow, sequence of steps) → procedural; something to do LATER when a condition arrives → prospective. Do NOT store secrets, credentials, or anything you'd not commit to the repo.",
     {
       body: z.string().describe("The memory itself, in plain markdown. Be specific and self-contained."),
-      kind: z.enum(KINDS as [MemoryKind, ...MemoryKind[]]).describe("Category of memory"),
+      kind: z.enum(KINDS as [MemoryKind, ...MemoryKind[]]).describe("episodic = what happened · semantic = what is true · procedural = how to · prospective = do later"),
+      tags: z.array(z.string()).optional().describe("Freeform domain labels, e.g. ['test','auth','deploy']"),
       scope: z
         .array(z.string())
         .optional()
         .describe(
-          "Path globs this memory is about, e.g. ['src/auth/**']. IMPORTANT for staleness detection: scoped memories get flagged when their code changes. Omit only for truly repo-wide knowledge.",
+          "Path globs this memory is about, e.g. ['src/auth/**']. IMPORTANT for staleness detection: scoped semantic/procedural memories get flagged when their code changes (episodic memories are history and never stale). Omit only for truly repo-wide knowledge.",
         ),
       confidence: z.enum(["high", "medium", "low"]).optional(),
       supersedes: z
@@ -76,6 +78,7 @@ export async function serve(store: Store): Promise<void> {
       const m = store.add({
         body: args.body,
         kind: args.kind,
+        tags: args.tags,
         scope: args.scope,
         confidence: args.confidence,
         supersedes: args.supersedes,
@@ -120,7 +123,7 @@ export async function serve(store: Store): Promise<void> {
 
   server.tool(
     "check_stale",
-    "Scan for memories whose scoped files have changed since they were learned, and mark them stale. Run at session start. Returns the list of newly-stale memories so you can revalidate the relevant ones as you encounter their territory.",
+    "Scan for semantic/procedural memories whose scoped files have changed since they were learned, and mark them stale (episodic memories are historical facts and are never staled). Run at session start. Returns the list of newly-stale memories so you can revalidate the relevant ones as you encounter their territory.",
     {},
     async () => {
       const reports = findStale(store);

@@ -6,22 +6,37 @@
  * gitignored). The frontmatter carries the lifecycle metadata that makes
  * memvine different from a notes folder: provenance (when, at which commit,
  * by which agent), scope (which paths this memory is about), and status.
+ *
+ * ## Memory types — modeled on human memory
+ *
+ * Cognitive science divides long-term memory into distinct systems, and
+ * agent memory maps onto them cleanly:
+ *
+ * - `episodic`    — what HAPPENED: events and experiences from sessions.
+ *                   ("Tried Node 22 in March — broke the linter, rolled back.")
+ *                   Historical facts: they never go stale.
+ * - `semantic`    — what IS TRUE: facts, decisions, conventions about the
+ *                   codebase. ("Auth uses magic links, chosen over passwords.")
+ *                   Goes stale when the code it describes changes.
+ * - `procedural`  — HOW TO do something here: runbooks, workflows.
+ *                   ("To deploy: make stage, wait for green, promote.")
+ *                   Goes stale when the code it describes changes.
+ * - `prospective` — what to do LATER, when a condition arrives.
+ *                   ("When billing v2 ships, delete the LAUNCH_FLAG hack.")
+ *                   Archived once fulfilled.
+ *
+ * Domain labels (build, test, auth, deploy, …) are freeform `tags`, not kinds.
  */
 
-export type MemoryKind =
-  | "gotcha"
-  | "decision"
-  | "convention"
-  | "build"
-  | "test"
-  | "env"
-  | "other";
+export type MemoryKind = "episodic" | "semantic" | "procedural" | "prospective";
 
 export type MemoryStatus = "active" | "stale" | "superseded" | "archived";
 
 export interface MemoryMeta {
   id: string;
   kind: MemoryKind;
+  /** Freeform domain labels, e.g. ["test", "auth"]. */
+  tags: string[];
   /** Path globs this memory is about, e.g. ["src/auth/**"]. Empty = repo-wide. */
   scope: string[];
   learned_at: string; // ISO timestamp
@@ -41,14 +56,14 @@ export interface Memory {
 }
 
 export const KINDS: MemoryKind[] = [
-  "gotcha",
-  "decision",
-  "convention",
-  "build",
-  "test",
-  "env",
-  "other",
+  "episodic",
+  "semantic",
+  "procedural",
+  "prospective",
 ];
+
+/** Kinds whose truth depends on the current code — eligible for staleness. */
+export const STALEABLE_KINDS: MemoryKind[] = ["semantic", "procedural"];
 
 export function newId(): string {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";

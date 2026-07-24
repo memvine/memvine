@@ -53,7 +53,8 @@ changed).
 ```markdown
 ---
 id: mem_7f3a2b9c
-kind: gotcha
+kind: semantic
+tags: [test, auth]
 scope: [src/auth/**]
 learned_at: 2026-07-22T21:14:00Z
 learned_commit: a1b4c9e
@@ -69,12 +70,30 @@ this is NOT a flaky test.
 Commit it, push it, and every teammate's agent knows it too. Refactor
 `src/auth/` and memvine flags it stale for revalidation.
 
+## Memory types — modeled on human memory
+
+Cognitive science divides human long-term memory into distinct systems.
+Agent memory maps onto them cleanly, and each type gets the lifecycle it
+deserves:
+
+| Kind | It stores | Example | Staleness |
+|---|---|---|---|
+| `episodic` | what **happened** | "Tried Node 22 in March — broke the linter, rolled back" | Never — history stays true |
+| `semantic` | what **is true** | "Auth uses magic links, chosen over passwords" | Stales when its code changes |
+| `procedural` | **how to** do something | "To deploy: make stage, wait for green, promote" | Stales when its code changes |
+| `prospective` | what to do **later** | "When billing v2 ships, delete the LAUNCH_FLAG hack" | Archived once fulfilled |
+
+Domain labels (`test`, `auth`, `deploy`, …) are freeform `tags`, orthogonal
+to the kind. An agent picks the kind by asking one question: *what sentence
+am I storing?* What happened → episodic. What's true → semantic. How to →
+procedural. Do later → prospective.
+
 ## CLI
 
 | Command | What it does |
 |---|---|
 | `memvine init` | Create the `.memvine/` store in your repo |
-| `memvine add "..." -k gotcha -s "src/auth/**"` | Add a memory manually |
+| `memvine add "..." -k semantic -t test auth -s "src/auth/**"` | Add a memory manually |
 | `memvine list` | List memories (`--all` includes retired ones) |
 | `memvine stale` | Report memories whose scoped files changed (`--mark` to flag them) |
 | `memvine compile` | Render top memories into CLAUDE.md / AGENTS.md digest blocks |

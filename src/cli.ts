@@ -38,7 +38,12 @@ program
 program
   .command("add <body>")
   .description("Manually add a memory (agents usually do this via MCP)")
-  .option("-k, --kind <kind>", `one of: ${KINDS.join(", ")}`, "other")
+  .option(
+    "-k, --kind <kind>",
+    "episodic (what happened) | semantic (what is true) | procedural (how to) | prospective (do later)",
+    "semantic",
+  )
+  .option("-t, --tags <tags...>", "freeform domain labels, e.g. test auth")
   .option("-s, --scope <globs...>", "path globs this memory is about")
   .option("-c, --confidence <level>", "high | medium | low", "medium")
   .option("-l, --local", "personal memory (gitignored, not shared)")
@@ -46,6 +51,7 @@ program
     const m = requireStore().add({
       body,
       kind: opts.kind as MemoryKind,
+      tags: opts.tags,
       scope: opts.scope,
       confidence: opts.confidence,
       local: opts.local,
@@ -71,8 +77,9 @@ program
     }
     for (const m of memories) {
       const scope = m.meta.scope.length ? ` scope=${m.meta.scope.join(",")}` : "";
+      const tags = m.meta.tags.length ? ` tags=${m.meta.tags.join(",")}` : "";
       console.log(
-        `${m.meta.id}  [${m.meta.status}] (${m.meta.kind}, ${m.meta.confidence}${scope}, learned@${m.meta.learned_commit})`,
+        `${m.meta.id}  [${m.meta.status}] (${m.meta.kind}, ${m.meta.confidence}${tags}${scope}, learned@${m.meta.learned_commit})`,
       );
       console.log(`  ${m.body.split("\n")[0].slice(0, 100)}`);
     }
