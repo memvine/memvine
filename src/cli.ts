@@ -32,7 +32,7 @@ program
     const store = Store.init(process.cwd());
     console.log(`Initialized memvine store at ${store.dir}`);
     console.log("Next: add it to your agent as an MCP server:");
-    console.log("  claude mcp add memvine -- npx memvine serve");
+    console.log("  claude mcp add memvine -- memvine serve");
   });
 
 program

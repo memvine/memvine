@@ -51,6 +51,37 @@ test("add, list, tags, and scope filtering", () => {
   assert.equal(store.search("auth").length >= 1, true);
 });
 
+test("recall works when the agent passes an absolute path", () => {
+  const repo = makeRepo();
+  const store = Store.init(repo);
+  store.add({
+    body: "Auth uses magic links, chosen over passwords",
+    kind: "semantic",
+    tags: ["auth"],
+    scope: ["src/auth/**"],
+  });
+  const absolute = path.join(store.root, "src/auth/login.ts");
+  // Absolute path must resolve to the same scope match as the repo-relative one.
+  assert.equal(store.search("magic links", absolute).length, 1);
+  assert.equal(store.search("magic links", "src/auth/login.ts").length, 1);
+  // ...and a path outside the scope still excludes the scoped memory.
+  assert.equal(store.search("magic links", path.join(store.root, "src/billing/pay.ts")).length, 0);
+});
+
+test("recall falls back to scoped memories when the query wording doesn't overlap", () => {
+  const store = Store.init(makeRepo());
+  store.add({
+    body: "Auth uses magic links, chosen over passwords",
+    kind: "semantic",
+    tags: ["auth"],
+    scope: ["src/auth/**"],
+  });
+  // No lexical overlap with the memory body/tags, but the memory is relevant to
+  // the path — recall must surface it rather than coming back empty.
+  const hits = store.search("how does sign-in work", "src/auth/login.ts");
+  assert.equal(hits.length, 1);
+});
+
 test("supersede retires the old memory", () => {
   const store = Store.init(makeRepo());
   const old = store.add({ body: "API uses REST", kind: "semantic" });

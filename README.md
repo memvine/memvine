@@ -28,8 +28,18 @@ file-based memory beat vector RAG by about 30 points.
 
 ## Quickstart
 
+memvine isn't on npm yet (v0.1), so install it from source:
+
 ```bash
-npm install -g memvine
+git clone https://github.com/memvine/memvine.git
+cd memvine
+npm install && npm run build
+npm link            # puts the `memvine` command on your PATH
+```
+
+Then, in the repo you want memory for:
+
+```bash
 cd your-repo
 memvine init
 ```
@@ -37,8 +47,18 @@ memvine init
 Add it to your agent. For Claude Code:
 
 ```bash
-claude mcp add memvine -- npx memvine serve
+claude mcp add memvine -- memvine serve
 ```
+
+(Once memvine is published, `npm install -g memvine` will replace the clone
+step and `npx memvine serve` will work as the MCP command.)
+
+Memories are plain files under `.memvine/memories/`, but they only reach
+another machine once they're committed and pushed — `remember` writes the
+file, it doesn't commit for you. If you clone your repo on a second laptop
+and memory comes up empty, check that `.memvine/memories/` was committed on
+the machine that learned them (`git status` in `.memvine/`). Personal notes
+under `.memvine/local/` are gitignored by design and never travel.
 
 Your agent gets four tools: `recall` fetches relevant memories at task
 start, `remember` stores knowledge after checking for contradictions,
