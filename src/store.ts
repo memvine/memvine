@@ -92,6 +92,17 @@ export class Store {
     return path.join(this.dir, local ? "local" : "memories", `${id}.md`);
   }
 
+  /**
+   * Normalize an incoming path to repo-relative POSIX form for scope matching.
+   * Agents commonly pass an absolute path (e.g. the file they're editing);
+   * scopes are stored repo-relative with forward slashes ("src/auth/**"), so
+   * without this an absolute path matches nothing and recall comes back empty.
+   */
+  relPath(p: string): string {
+    const rel = path.isAbsolute(p) ? path.relative(this.root, p) : p;
+    return rel.split(path.sep).join("/");
+  }
+
   add(opts: {
     body: string;
     kind: MemoryKind;
@@ -170,29 +181,45 @@ export class Store {
         }
       }
     }
+    const forPath = filter?.forPath ? this.relPath(filter.forPath) : undefined;
     return memories
       .filter((m) => !filter?.status || filter.status.includes(m.meta.status))
       .filter((m) => !filter?.kind || m.meta.kind === filter.kind)
       .filter(
         (m) =>
-          !filter?.forPath ||
+          !forPath ||
           m.meta.scope.length === 0 ||
-          m.meta.scope.some((g) => minimatch(filter.forPath!, g)),
+          m.meta.scope.some((g) => minimatch(forPath, g)),
       )
       .sort((a, b) => b.meta.learned_at.localeCompare(a.meta.learned_at));
   }
 
   /** Simple full-text + scope search for recall. */
   search(query: string, forPath?: string): Memory[] {
+    // Scope-filtered candidates: memories for this path, plus repo-wide ones.
+    const candidates = this.list({ status: ["active", "stale"], forPath });
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-    return this.list({ status: ["active", "stale"], forPath })
+    if (terms.length === 0) return candidates;
+    const matched = candidates
       .map((m) => {
-        const haystack = (m.body + " " + m.meta.kind + " " + m.meta.tags.join(" ")).toLowerCase();
+        const haystack = (
+          m.body +
+          " " +
+          m.meta.kind +
+          " " +
+          m.meta.tags.join(" ") +
+          " " +
+          m.meta.scope.join(" ")
+        ).toLowerCase();
         const score = terms.filter((t) => haystack.includes(t)).length;
         return { m, score };
       })
-      .filter((x) => x.score > 0 || terms.length === 0)
+      .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
       .map((x) => x.m);
+    // Never come back empty when relevant memories exist: if the query wording
+    // didn't lexically overlap anything, fall back to the scope-filtered set
+    // (recency-ranked) so the agent still sees what's on record for this path.
+    return matched.length ? matched : candidates;
   }
 }
