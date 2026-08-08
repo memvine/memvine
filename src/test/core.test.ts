@@ -139,6 +139,15 @@ test("compile renders digest with markers and respects budget", () => {
   assert.ok(Buffer.byteLength(digest, "utf8") < 800);
 });
 
+test("compiled digest instructs the agent to recall/remember, even when empty", () => {
+  const store = Store.init(makeRepo());
+  // No memories yet — the usage protocol must still be present so agents are
+  // told to call the tools from the very first session.
+  const digest = buildDigest(store, 12_000);
+  assert.match(digest, /recall/);
+  assert.match(digest, /remember/);
+});
+
 test("local memories stay out of the compiled digest", () => {
   const store = Store.init(makeRepo());
   store.add({ body: "My personal note", kind: "episodic", local: true });

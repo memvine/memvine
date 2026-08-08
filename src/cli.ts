@@ -28,9 +28,21 @@ program
 program
   .command("init")
   .description("Initialize a .memvine store in this git repository")
-  .action(() => {
+  .option(
+    "--no-compile",
+    "don't write the memvine usage block into CLAUDE.md / AGENTS.md",
+  )
+  .action((opts) => {
     const store = Store.init(process.cwd());
     console.log(`Initialized memvine store at ${store.dir}`);
+    if (opts.compile !== false) {
+      for (const f of ["CLAUDE.md", "AGENTS.md"]) {
+        console.log(`Wrote the memvine usage block into ${compileInto(store, f)}`);
+      }
+      console.log(
+        "  ^ tells your agent to recall/remember every task. Re-run `memvine compile` after new memories.",
+      );
+    }
     console.log("Next: add it to your agent as an MCP server:");
     console.log("  claude mcp add memvine -- memvine serve");
   });

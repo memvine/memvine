@@ -65,6 +65,48 @@ start, `remember` stores knowledge after checking for contradictions,
 `revise` updates or retires a memory after re-checking it, and
 `check_stale` flags memories whose code has changed.
 
+## Making your agent actually use it
+
+The tools are there, but MCP tools are *opt-in* — the agent calls `remember`
+only if it decides to, and agents are trained to finish and stop, not to
+journal what they learned. Two levers fix this:
+
+**1. The standing instruction (automatic).** `memvine init` writes a
+memvine block into `CLAUDE.md` and `AGENTS.md` telling the agent to `recall`
+at the start of every task and `remember` when it finishes one or learns
+something durable. These files are loaded into every session, so both Claude
+Code (`CLAUDE.md`) and Codex (`AGENTS.md`) see the instruction. Re-run
+`memvine compile` to refresh the block after new memories land.
+
+**2. A Stop hook (hard enforcement).** An instruction is a nudge; a hook is
+a guarantee. A hook *cannot call an MCP tool itself* — hooks run shell
+commands — but a `Stop` hook can block the agent from finishing and hand it
+a message, which makes it consider storing before it's allowed to stop. Add
+this to `.claude/settings.json` (loop-safe via `stop_hook_active`):
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); echo \"$input\" | grep -q '\"stop_hook_active\": *true' && exit 0; printf '{\"decision\":\"block\",\"reason\":\"Before finishing: if this session produced any durable knowledge (a fix, a gotcha, a decision, a convention, a runbook), call the memvine remember tool to store it, then stop. If nothing durable was learned, just stop.\"}'"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+This is why a hook that ran `memvine serve` or `memvine recall` did nothing
+for storage — only the agent knows *what* to remember, so the hook's job is
+to re-prompt the agent, not to store anything itself. Codex has no equivalent
+Stop hook; there, lever 1 (the `AGENTS.md` instruction) is what you rely on.
+
 ## What a memory looks like
 
 ```markdown

@@ -32,7 +32,13 @@ export function buildDigest(store: Store, budgetBytes: number): string {
   const header =
     "## Project memory (memvine)\n\n" +
     "Learned by coding agents, maintained by [memvine](https://github.com/memvine/memvine). " +
-    "Full store with provenance: `.memvine/`.\n\n";
+    "Full store with provenance: `.memvine/`.\n\n" +
+    "**Use it every task.** At the start of a task, call the memvine `recall` tool " +
+    "for the files or area you're about to touch. When you finish a task or learn " +
+    "something durable — a fix, a gotcha, a decision, a convention, a runbook — call " +
+    "`remember` to store it (skip only if nothing durable was learned). A memory marked " +
+    "`stale` may no longer be true: verify it, then `revise` it. Run `check_stale` at " +
+    "session start.\n\n";
   let out = header;
   let included = 0;
   for (const m of memories) {
