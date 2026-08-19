@@ -31,8 +31,21 @@ is. It's stubbed in `adapters/model.mjs` for you to wire to your local model.
 
 ```bash
 npm run build
-node benchmark/run.mjs
+node benchmark/run.mjs          # retrieval + staleness (this file)
+node benchmark/team-sim.mjs     # collaboration: conflicts, duplicates, PR noise
+MEMVINE_EVAL_MOCK=1 node benchmark/agent-eval.mjs   # task-success wiring (see AGENT-EVAL.md)
 ```
+
+Three harnesses, three axes:
+- **`run.mjs`** — retrieval selection + kind-aware staleness (documented below).
+- **`team-sim.mjs`** — a 20-agent busy-repo simulation: merge conflicts (per-file
+  memories vs one shared notes file), duplicate accumulation, and the PR noise a
+  stale-marking commit creates. Fully deterministic, no deps.
+- **`agent-eval.mjs`** — the task-success axis: same agent under no-memory /
+  static-`AGENTS.md` / memvine, reporting success and context tokens. Runs against
+  any OpenAI-compatible model and emits SWE-bench prediction files for the
+  official grader; `MEMVINE_EVAL_MOCK=1` runs the wiring end-to-end with no model
+  or Docker. See [`AGENT-EVAL.md`](AGENT-EVAL.md).
 
 ## Result (8 cases, no model)
 

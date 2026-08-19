@@ -265,8 +265,11 @@ export class Store {
   }
 
   write(memory: Memory, local: boolean): void {
-    const file = matter.stringify(memory.body + "\n", memory.meta);
-    fs.writeFileSync(this.fileFor(memory.meta.id, local), file);
+    const file = this.fileFor(memory.meta.id, local);
+    // Ensure the target dir exists: git doesn't track the empty memories/ dir,
+    // so a fresh branch checkout can prune it out from under us.
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, matter.stringify(memory.body + "\n", memory.meta));
   }
 
   get(id: string): { memory: Memory; local: boolean } | null {
