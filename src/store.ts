@@ -203,12 +203,35 @@ export class Store {
       .sort((a, b) => b.meta.learned_at.localeCompare(a.meta.learned_at));
   }
 
+  /**
+   * A memory's trust weight, folded into recall ranking so that unverified or
+   * outdated knowledge doesn't surface as authoritative. Higher confidence
+   * ranks above lower; a `stale` memory (its code changed since last confirmed)
+   * is down-ranked but NOT excluded — recall is where the agent is told to
+   * revalidate it. Deterministic and cheap, so recall can explain its order.
+   */
+  private static qualityWeight(m: Memory): number {
+    const byConfidence: Record<string, number> = { high: 1, medium: 0.85, low: 0.6 };
+    const confidence = byConfidence[m.meta.confidence] ?? 0.85;
+    const freshness = m.meta.status === "stale" ? 0.7 : 1;
+    return confidence * freshness;
+  }
+
+  /** Order by trust weight, then recency — used when no lexical signal separates memories. */
+  private static byQuality(memories: Memory[]): Memory[] {
+    return [...memories].sort(
+      (a, b) =>
+        Store.qualityWeight(b) - Store.qualityWeight(a) ||
+        b.meta.learned_at.localeCompare(a.meta.learned_at),
+    );
+  }
+
   /** Simple full-text + scope search for recall. */
   search(query: string, forPath?: string): Memory[] {
     // Scope-filtered candidates: memories for this path, plus repo-wide ones.
     const candidates = this.list({ status: ["active", "stale"], forPath });
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-    if (terms.length === 0) return candidates;
+    if (terms.length === 0) return Store.byQuality(candidates);
     const matched = candidates
       .map((m) => {
         const haystack = (
@@ -224,12 +247,18 @@ export class Store {
         return { m, score };
       })
       .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)
+      // Relevance leads; trust weight scales it so a low-confidence or stale
+      // memory needs clearly more lexical overlap to outrank a trusted one.
+      .sort(
+        (a, b) =>
+          b.score * Store.qualityWeight(b.m) - a.score * Store.qualityWeight(a.m) ||
+          b.m.meta.learned_at.localeCompare(a.m.meta.learned_at),
+      )
       .map((x) => x.m);
     // Never come back empty when relevant memories exist: if the query wording
     // didn't lexically overlap anything, fall back to the scope-filtered set
-    // (recency-ranked) so the agent still sees what's on record for this path.
-    return matched.length ? matched : candidates;
+    // (trust- then recency-ranked) so the agent still sees what's on record.
+    return matched.length ? matched : Store.byQuality(candidates);
   }
 
   /**

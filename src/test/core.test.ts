@@ -167,6 +167,29 @@ test("recall always returns the top hit, even if it alone exceeds the budget", (
   assert.equal(r.omitted, 0);
 });
 
+test("recall ranks higher-confidence memories above equally-relevant low-confidence ones", () => {
+  const store = Store.init(makeRepo());
+  store.add({ body: "delta fact", kind: "semantic", confidence: "low" });
+  store.add({ body: "delta fact", kind: "semantic", confidence: "high" });
+  const ranked = store.search("delta");
+  assert.equal(ranked.length, 2);
+  assert.equal(ranked[0].meta.confidence, "high", "high-confidence surfaces first");
+});
+
+test("recall down-ranks a stale memory below an equally-relevant active one, but still returns it", () => {
+  const store = Store.init(makeRepo());
+  const fresh = store.add({ body: "epsilon fact", kind: "semantic", confidence: "medium" });
+  const going = store.add({ body: "epsilon fact", kind: "semantic", confidence: "medium" });
+  // Force one stale.
+  const s = store.get(going.meta.id)!;
+  s.memory.meta.status = "stale";
+  store.write(s.memory, s.local);
+  const ranked = store.search("epsilon");
+  assert.equal(ranked.length, 2, "stale is down-ranked, not excluded");
+  assert.equal(ranked[0].meta.status, "active");
+  assert.equal(ranked[0].meta.id, fresh.meta.id);
+});
+
 test("add records validated_commit == learned_commit", () => {
   const store = Store.init(makeRepo());
   const m = store.add({ body: "x", kind: "semantic" });
