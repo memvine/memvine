@@ -29,7 +29,11 @@ export function findStale(store: Store): StaleReport[] {
     // Repo-wide memories (empty scope) never auto-stale: no way to tell
     // which changes affect them. Scoped memories are checkable.
     if (memory.meta.scope.length === 0) continue;
-    const changed = changedFilesSince(memory.meta.learned_commit, store.root);
+    // Measure from the last commit at which the memory was CONFIRMED true, not
+    // from where it was first learned — otherwise revalidating a memory after a
+    // refactor wouldn't clear the flag. validated_commit == learned_commit until
+    // the first `revise`.
+    const changed = changedFilesSince(memory.meta.validated_commit, store.root);
     const hits = changed.filter((f) =>
       memory.meta.scope.some((g) => minimatch(f, g)),
     );

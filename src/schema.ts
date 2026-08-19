@@ -40,7 +40,15 @@ export interface MemoryMeta {
   /** Path globs this memory is about, e.g. ["src/auth/**"]. Empty = repo-wide. */
   scope: string[];
   learned_at: string; // ISO timestamp
-  learned_commit: string; // git HEAD short SHA when learned
+  learned_commit: string; // git HEAD short SHA when first learned (immutable provenance)
+  /**
+   * Short SHA at which this memory was last confirmed true — set to
+   * learned_commit at creation, and advanced to HEAD each time an agent
+   * revalidates it (via `revise`). Staleness is measured from HERE, not from
+   * learned_commit, so a memory re-confirmed after a refactor doesn't
+   * immediately re-flag on the same changes.
+   */
+  validated_commit: string;
   agent: string; // which tool wrote it, e.g. "claude-code"
   status: MemoryStatus;
   supersedes?: string; // id of the memory this one replaces

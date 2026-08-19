@@ -13,10 +13,12 @@ import { z } from "zod";
 import { KINDS, MemoryKind } from "./schema.js";
 import { Store } from "./store.js";
 import { findStale, markStale } from "./staleness.js";
+import { headCommit } from "./git.js";
 
-function fmt(memories: ReturnType<Store["list"]>): string {
+function fmt(result: ReturnType<Store["recall"]>): string {
+  const { memories, omitted } = result;
   if (memories.length === 0) return "No memories found.";
-  return memories
+  const body = memories
     .map(
       (m) =>
         `[${m.meta.id}] (${m.meta.kind}, ${m.meta.status}, confidence=${m.meta.confidence}` +
@@ -25,6 +27,9 @@ function fmt(memories: ReturnType<Store["list"]>): string {
         `, learned@${m.meta.learned_commit})\n${m.body}`,
     )
     .join("\n\n---\n\n");
+  return omitted > 0
+    ? `${body}\n\n---\n\n(${omitted} lower-ranked memor${omitted === 1 ? "y" : "ies"} omitted to fit the recall budget — narrow your query or pass a path to see more.)`
+    : body;
 }
 
 export async function serve(store: Store): Promise<void> {
@@ -45,9 +50,19 @@ export async function serve(store: Store): Promise<void> {
         .describe(
           "Repo-relative file path you're working on, to scope results, e.g. 'src/auth/login.ts'",
         ),
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "Max memories to return (default 10). Results are also capped by a token budget, so fewer may come back.",
+        ),
     },
-    async ({ query, path }) => ({
-      content: [{ type: "text", text: fmt(store.search(query, path)) }],
+    async ({ query, path, limit }) => ({
+      content: [
+        { type: "text", text: fmt(store.recall(query, path, { limit })) },
+      ],
     }),
   );
 
@@ -114,10 +129,21 @@ export async function serve(store: Store): Promise<void> {
         found.memory.meta.status = status;
         if (status === "active") delete found.memory.meta.stale_since;
       }
-      // Revalidation refreshes provenance to now.
+      // A revise means the agent re-checked this memory against the current
+      // code, so advance validated_commit to HEAD: staleness is measured from
+      // here, and re-confirming clears the flag until the code changes AGAIN.
+      // learned_commit stays put — it's immutable provenance of first learning.
+      found.memory.meta.validated_commit = headCommit(store.root);
       found.memory.meta.learned_at = new Date().toISOString();
       store.write(found.memory, found.local);
-      return { content: [{ type: "text", text: `Revised ${id}.` }] };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Revised ${id} (revalidated@${found.memory.meta.validated_commit}).`,
+          },
+        ],
+      };
     },
   );
 
@@ -130,12 +156,12 @@ export async function serve(store: Store): Promise<void> {
       const n = markStale(store, reports);
       const text =
         n === 0
-          ? "No newly stale memories."
-          : `Marked ${n} memories stale:\n\n` +
+          ? "No memories need revalidation."
+          : `${n} memor${n === 1 ? "y" : "ies"} need revalidation — their scoped code changed since they were last confirmed:\n\n` +
             reports
               .map(
                 (r) =>
-                  `[${r.memory.meta.id}] changed files: ${r.changedFiles.join(", ")}\n${r.memory.body.slice(0, 200)}`,
+                  `[${r.memory.meta.id}] needs revalidation — changed since ${r.memory.meta.validated_commit}: ${r.changedFiles.join(", ")}\n${r.memory.body.slice(0, 200)}`,
               )
               .join("\n\n");
       return { content: [{ type: "text", text }] };

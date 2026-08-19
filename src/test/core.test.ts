@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { Store } from "../store.js";
 import { findStale, markStale } from "../staleness.js";
 import { buildDigest, compileInto } from "../compile.js";
+import { headCommit } from "../git.js";
 
 function makeRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "memvine-test-"));
@@ -137,6 +138,72 @@ test("compile renders digest with markers and respects budget", () => {
   // Budget: digest never exceeds configured bytes (+small header slack).
   const digest = buildDigest(store, 500);
   assert.ok(Buffer.byteLength(digest, "utf8") < 800);
+});
+
+test("recall caps the number of memories returned", () => {
+  const store = Store.init(makeRepo());
+  for (let i = 0; i < 20; i++) {
+    store.add({ body: `alpha fact number ${i}`, kind: "semantic" });
+  }
+  const r = store.recall("alpha", undefined, { limit: 5 });
+  assert.equal(r.memories.length, 5);
+  assert.equal(r.omitted, 15);
+});
+
+test("recall stops at the byte budget even under the count cap", () => {
+  const store = Store.init(makeRepo());
+  const big = "beta ".repeat(200); // ~1000 bytes each
+  for (let i = 0; i < 10; i++) store.add({ body: big + i, kind: "semantic" });
+  const r = store.recall("beta", undefined, { limit: 10, budgetBytes: 2500 });
+  assert.ok(r.memories.length >= 1 && r.memories.length <= 3, `got ${r.memories.length}`);
+  assert.ok(r.omitted > 0);
+});
+
+test("recall always returns the top hit, even if it alone exceeds the budget", () => {
+  const store = Store.init(makeRepo());
+  store.add({ body: "gamma ".repeat(500), kind: "semantic" });
+  const r = store.recall("gamma", undefined, { budgetBytes: 10 });
+  assert.equal(r.memories.length, 1);
+  assert.equal(r.omitted, 0);
+});
+
+test("add records validated_commit == learned_commit", () => {
+  const store = Store.init(makeRepo());
+  const m = store.add({ body: "x", kind: "semantic" });
+  assert.equal(m.meta.validated_commit, m.meta.learned_commit);
+});
+
+test("validated_commit gates staleness: revalidating at HEAD clears the flag", () => {
+  const repo = makeRepo();
+  const store = Store.init(repo);
+  const m = store.add({
+    body: "Login uses magic links",
+    kind: "semantic",
+    scope: ["src/auth/**"],
+  });
+  const g = (args: string[]) => execFileSync("git", args, { cwd: repo });
+  fs.writeFileSync(path.join(repo, "src/auth/login.ts"), "export const a = 2;\n");
+  g(["add", "-A"]);
+  g(["commit", "-q", "-m", "change auth"]);
+  assert.equal(findStale(store).length, 1, "flags once the scoped evidence changes");
+
+  // Simulate what `revise` does: re-confirm the memory at the current HEAD.
+  const found = store.get(m.meta.id)!;
+  found.memory.meta.validated_commit = headCommit(repo);
+  store.write(found.memory, found.local);
+  assert.equal(findStale(store).length, 0, "clears once re-confirmed against HEAD");
+});
+
+test("older memory files without validated_commit default it to learned_commit", () => {
+  const store = Store.init(makeRepo());
+  fs.writeFileSync(
+    path.join(store.dir, "memories", "mem_legacy1.md"),
+    "---\nid: mem_legacy1\nkind: semantic\ntags: []\nscope: []\n" +
+      "learned_at: 2026-01-01T00:00:00Z\nlearned_commit: abc1234\nagent: cli\n" +
+      "status: active\nconfidence: medium\n---\nlegacy body\n",
+  );
+  const got = store.get("mem_legacy1")!;
+  assert.equal(got.memory.meta.validated_commit, "abc1234");
 });
 
 test("compiled digest instructs the agent to recall/remember, even when empty", () => {

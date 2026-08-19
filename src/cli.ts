@@ -99,7 +99,7 @@ program
 
 program
   .command("stale")
-  .description("Detect memories whose scoped files changed since they were learned")
+  .description("Detect memories whose scoped files changed since they were last confirmed")
   .option("--mark", "mark detected memories as stale (default: report only)")
   .action((opts) => {
     const store = requireStore();
@@ -109,8 +109,8 @@ program
       return;
     }
     for (const r of reports) {
-      console.log(`${r.memory.meta.id}  learned@${r.memory.meta.learned_commit}`);
-      console.log(`  changed: ${r.changedFiles.join(", ")}`);
+      console.log(`${r.memory.meta.id}  needs revalidation (confirmed@${r.memory.meta.validated_commit})`);
+      console.log(`  changed since: ${r.changedFiles.join(", ")}`);
       console.log(`  ${r.memory.body.split("\n")[0].slice(0, 100)}`);
     }
     if (opts.mark) {

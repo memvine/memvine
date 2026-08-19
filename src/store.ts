@@ -30,12 +30,18 @@ export interface StoreConfig {
   commit_mode: "inline" | "branch";
   /** Byte budget for the compiled digest block. Claude Code loads 25KB max. */
   digest_budget_bytes: number;
+  /** Max memories a single `recall` returns, before the token budget applies. */
+  recall_max_memories: number;
+  /** Byte budget for the memory bodies a single `recall` returns. */
+  recall_budget_bytes: number;
 }
 
 const DEFAULT_CONFIG: StoreConfig = {
   version: 1,
   commit_mode: "inline",
   digest_budget_bytes: 12_000,
+  recall_max_memories: 10,
+  recall_budget_bytes: 6_000,
 };
 
 export class Store {
@@ -113,13 +119,15 @@ export class Store {
     supersedes?: string;
     local?: boolean;
   }): Memory {
+    const commit = headCommit(this.root);
     const meta: MemoryMeta = {
       id: newId(),
       kind: opts.kind,
       tags: opts.tags ?? [],
       scope: opts.scope ?? [],
       learned_at: new Date().toISOString(),
-      learned_commit: headCommit(this.root),
+      learned_commit: commit,
+      validated_commit: commit, // last confirmed here == where it was learned
       agent: opts.agent ?? "unknown",
       status: "active",
       confidence: opts.confidence ?? "medium",
@@ -158,6 +166,7 @@ export class Store {
     const parsed = matter(fs.readFileSync(filePath, "utf8"));
     const meta = parsed.data as MemoryMeta;
     meta.tags ??= []; // tolerate pre-tags memory files
+    meta.validated_commit ??= meta.learned_commit; // pre-validated_commit files
     return { meta, body: parsed.content.trim() };
   }
 
@@ -221,5 +230,33 @@ export class Store {
     // didn't lexically overlap anything, fall back to the scope-filtered set
     // (recency-ranked) so the agent still sees what's on record for this path.
     return matched.length ? matched : candidates;
+  }
+
+  /**
+   * Recall for an agent: ranked search, then bounded by BOTH a top-k cap and a
+   * byte budget. top-k alone isn't enough — a handful of long memories can still
+   * blow a context window — so we stop once either limit is hit, dropping the
+   * lowest-ranked first. The highest-ranked memory is always included (even if it
+   * alone exceeds the budget) so a relevant hit is never silently swallowed.
+   */
+  recall(
+    query: string,
+    forPath?: string,
+    opts?: { limit?: number; budgetBytes?: number },
+  ): { memories: Memory[]; omitted: number } {
+    const cfg = this.config();
+    const limit = Math.max(1, opts?.limit ?? cfg.recall_max_memories);
+    const budget = Math.max(1, opts?.budgetBytes ?? cfg.recall_budget_bytes);
+    const ranked = this.search(query, forPath);
+    const chosen: Memory[] = [];
+    let bytes = 0;
+    for (const m of ranked) {
+      if (chosen.length >= limit) break;
+      const cost = Buffer.byteLength(m.body, "utf8");
+      if (chosen.length > 0 && bytes + cost > budget) break;
+      chosen.push(m);
+      bytes += cost;
+    }
+    return { memories: chosen, omitted: ranked.length - chosen.length };
   }
 }
