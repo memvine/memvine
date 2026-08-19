@@ -19,8 +19,8 @@ re-checks it instead of repeating something that stopped being true three
 merges ago.
 
 There is no database, no embedding index, no daemon, no account, and no API
-key. Retrieval works on plain files. On [LongMemEval-V2](https://arxiv.org/html/2605.12493v1),
-file-based memory beat vector RAG by about 30 points.
+key. Retrieval works on plain files: scope-filtered BM25 with a token budget,
+so it stays fast and its results are explainable.
 
 ## Architecture
 
