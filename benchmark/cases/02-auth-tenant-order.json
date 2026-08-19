@@ -1,0 +1,33 @@
+{
+  "name": "auth-tenant-order",
+  "files": {
+    "src/auth/middleware.ts": "export const authMiddleware = (req: any) => { req.accountId = 'acc'; };\n",
+    "src/auth/tenant.ts": "export const resolveTenant = (req: any) => req.accountId + ':tenant';\n",
+    "src/api/routes.ts": "export const routes = ['/health'];\n",
+    "src/logging/logger.ts": "export const log = (m: string) => m;\n"
+  },
+  "memory": {
+    "body": "authMiddleware must run before resolveTenant in the request pipeline, because tenant resolution reads req.accountId, which authMiddleware sets. Reversing them yields an undefined tenant.",
+    "kind": "semantic",
+    "scope": ["src/auth/**"],
+    "confidence": "high"
+  },
+  "task": {
+    "query": "add a new middleware to the auth chain for request tracing",
+    "path": "src/auth/middleware.ts"
+  },
+  "distractors": [
+    { "body": "API routes are registered in routes.ts; keep them alphabetical.", "kind": "semantic", "scope": ["src/api/**"], "confidence": "low" },
+    { "body": "The logger redacts tokens matching /bearer .*/; do not log raw headers.", "kind": "semantic", "scope": ["src/logging/**"], "confidence": "medium" },
+    { "body": "We prefer named exports across the codebase; avoid default exports.", "kind": "semantic", "scope": [], "confidence": "medium" },
+    { "body": "Tried a global auth guard in 2026-03, broke health checks, reverted.", "kind": "episodic", "scope": [], "confidence": "high" }
+  ],
+  "edits": {
+    "directEvidence": {
+      "src/auth/tenant.ts": "export const resolveTenant = (req: any) => (req.accountId ?? 'anon') + ':tenant';\n"
+    },
+    "unrelated": {
+      "src/logging/logger.ts": "export const log = (m: string) => `[app] ${m}`;\n"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "db-migrations",
+  "files": {
+    "src/db/migrate.ts": "export const applyMigrations = () => 'applied';\n",
+    "src/db/schema.ts": "export const tables = ['users', 'payments'];\n",
+    "src/api/handlers.ts": "export const handle = (r: string) => r;\n",
+    "src/user/profile.ts": "export const avatarUrl = (id: string) => `/avatars/${id}`;\n"
+  },
+  "memory": {
+    "body": "To add a database migration: create a timestamped file under db/migrations, run `make migrate-plan` and review the diff, then `make migrate-apply`. Never edit a migration that has already been applied.",
+    "kind": "procedural",
+    "scope": ["src/db/**"],
+    "confidence": "high"
+  },
+  "task": {
+    "query": "create a new database migration to add a column to the users table"
+  },
+  "distractors": [
+    { "body": "User avatars are served from /avatars and cached for 24h.", "kind": "semantic", "scope": ["src/user/**"], "confidence": "medium" },
+    { "body": "HTTP handlers must return within 30s or the gateway times out.", "kind": "semantic", "scope": ["src/api/**"], "confidence": "medium" },
+    { "body": "The staging database is reset every Sunday night; don't rely on its data.", "kind": "semantic", "scope": [], "confidence": "low" },
+    { "body": "Tried an ORM auto-migrate in 2026-02, it dropped a column, reverted to manual migrations.", "kind": "episodic", "scope": [], "confidence": "high" }
+  ],
+  "edits": {
+    "directEvidence": {
+      "src/db/migrate.ts": "export const applyMigrations = () => { /* now two-phase */ return 'applied'; };\n"
+    },
+    "unrelated": {
+      "src/api/handlers.ts": "export const handle = (r: string) => r.trim();\n"
+    }
+  }
+}
