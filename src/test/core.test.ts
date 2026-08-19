@@ -71,6 +71,21 @@ test("cross-scope hatch opens when no on-path memory answers, and needs 2+ match
   assert.ok(!ids.includes(oneTerm.meta.id), "cross-scope with only 1 matching term stays out");
 });
 
+test("with no on-path memory, up to three strong cross-scope lessons are recovered", () => {
+  const store = Store.init(makeRepo());
+  // Nothing scoped to the task's file (src/app/**); the needed lesson lives elsewhere.
+  const a = store.add({ body: "retry backoff policy tuning guide", kind: "semantic", scope: ["src/net/**"], verified: true });
+  const b = store.add({ body: "retry backoff jitter window sizing", kind: "semantic", scope: ["src/queue/**"], verified: true });
+  const c = store.add({ body: "retry backoff ceiling limit rationale", kind: "semantic", scope: ["src/db/**"], verified: true });
+  const oneTerm = store.add({ body: "backoff is only mentioned here once", kind: "semantic", scope: ["src/misc/**"], verified: true });
+  const ids = store.recall("retry backoff", "src/app/main.ts", { limit: 10 }).memories.map((m) => m.meta.id);
+  assert.ok(
+    ids.includes(a.meta.id) && ids.includes(b.meta.id) && ids.includes(c.meta.id),
+    "all three 2-term cross-scope lessons recovered when no on-path memory exists",
+  );
+  assert.ok(!ids.includes(oneTerm.meta.id), "a 1-term cross-scope memory stays out");
+});
+
 test("recall works when the agent passes an absolute path", () => {
   const repo = makeRepo();
   const store = Store.init(repo);
