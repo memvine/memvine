@@ -1,0 +1,31 @@
+{
+  "name": "gateway-dedup",
+  "files": {
+    "src/gateway/handler.ts": "export const handle = (req: any) => req;\n",
+    "src/gateway/filter.ts": "export const strip = (h: any) => h;\n",
+    "src/user/profile.ts": "export const avatarUrl = (id: string) => `/avatars/${id}`;\n"
+  },
+  "memory": {
+    "body": "The API gateway strips the X-Internal header from every inbound request, so downstream services can trust that any X-Internal they see was set internally.",
+    "kind": "semantic",
+    "scope": ["src/gateway/**"],
+    "confidence": "high"
+  },
+  "task": {
+    "query": "handle the X-Internal header in the gateway request filter",
+    "path": "src/gateway/filter.ts"
+  },
+  "distractors": [
+    { "body": "The API gateway strips the X-Internal header from every inbound request, so downstream services can trust that any X-Internal they observe was set internally.", "kind": "semantic", "scope": ["src/gateway/**"], "confidence": "low" },
+    { "body": "User avatars are served from /avatars and cached for 24h.", "kind": "semantic", "scope": ["src/user/**"], "confidence": "medium" },
+    { "body": "Prefer named exports across the codebase.", "kind": "semantic", "scope": [], "confidence": "medium" }
+  ],
+  "edits": {
+    "directEvidence": {
+      "src/gateway/filter.ts": "export const strip = (h: any) => ({ ...h, xInternal: undefined });\n"
+    },
+    "unrelated": {
+      "src/user/profile.ts": "export const avatarUrl = (id: string) => `/avatars/v2/${id}`;\n"
+    }
+  }
+}

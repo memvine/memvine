@@ -1,0 +1,32 @@
+{
+  "name": "crossscope-auth",
+  "expectRetrieval": false,
+  "files": {
+    "src/auth/middleware.ts": "export const authMiddleware = (req: any) => { req.accountId = 'acc'; };\n",
+    "src/api/routes.ts": "export const routes = ['/health'];\n",
+    "src/api/handler.ts": "export const handle = (r: string) => r;\n",
+    "src/logging/logger.ts": "export const log = (m: string) => m;\n"
+  },
+  "memory": {
+    "body": "Every API route must call authMiddleware before reading req.accountId; the middleware is not global, so a new route added without it sees an undefined account.",
+    "kind": "semantic",
+    "scope": ["src/auth/**"],
+    "confidence": "high"
+  },
+  "task": {
+    "query": "add a new /reports API route",
+    "path": "src/api/routes.ts"
+  },
+  "distractors": [
+    { "body": "Routes are registered in routes.ts; keep them alphabetical.", "kind": "semantic", "scope": ["src/api/**"], "confidence": "low" },
+    { "body": "The logger redacts tokens; never log raw headers.", "kind": "semantic", "scope": ["src/logging/**"], "confidence": "medium" }
+  ],
+  "edits": {
+    "directEvidence": {
+      "src/auth/middleware.ts": "export const authMiddleware = (req: any) => { req.accountId = req.header ?? 'acc'; };\n"
+    },
+    "unrelated": {
+      "src/logging/logger.ts": "export const log = (m: string) => `[x] ${m}`;\n"
+    }
+  }
+}

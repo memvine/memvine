@@ -31,6 +31,7 @@ import { Store, findStale } from "../dist/index.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RECALL_K = 5; // top-k the harness asks recall for
+const STALEABLE = new Set(["semantic", "procedural"]); // only these should ever flag
 
 // --- tiny git-backed fixture repo -----------------------------------------
 
@@ -107,26 +108,40 @@ function runCase(c) {
     const contextTokens = estTokens(renderRecall(memories));
 
     // 2. Staleness signal -----------------------------------------------------
-    // Unrelated edit first: the target must stay silent (false positive if not).
+    const staleable = STALEABLE.has(c.memory.kind);
+    // Unrelated edit first: nothing should flag (false positive if it does).
     applyEdit(dir, c.edits.unrelated, "unrelated change");
     const flaggedAfterUnrelated = findStale(store).some(
       (r) => r.memory.meta.id === target.meta.id,
     );
-    // Then the direct-evidence edit: the target MUST flag (true positive if so).
+    // Then the direct-evidence edit. Semantic/procedural MUST flag; episodic and
+    // prospective must NOT — history and future intentions don't go stale.
     applyEdit(dir, c.edits.directEvidence, "change the evidence");
     const flaggedAfterDirect = findStale(store).some(
       (r) => r.memory.meta.id === target.meta.id,
     );
 
+    // Turn the two edits into labelled observations for precision/recall.
+    // label 1 = should flag, 0 = should stay silent.
+    const observations = [
+      { label: staleable ? 1 : 0, predicted: flaggedAfterDirect },
+      { label: 0, predicted: flaggedAfterUnrelated },
+    ];
+    const staleCorrect = observations.every(
+      (o) => o.label === (o.predicted ? 1 : 0),
+    );
+
     return {
       name: c.name,
+      kind: c.memory.kind,
+      expectRetrieval: c.expectRetrieval !== false,
       hitAt3,
       hitAt5,
       rank: rank >= 0 ? rank + 1 : null,
       injectionRate,
       contextTokens,
-      staleTP: flaggedAfterDirect, // should be true
-      staleFP: flaggedAfterUnrelated, // should be false
+      observations,
+      staleCorrect,
     };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -159,40 +174,53 @@ function main() {
   console.log("\nmemvine coding-memory benchmark");
   console.log("=".repeat(72));
   console.log(
-    ["case".padEnd(22), "hit@3", "hit@5", "rank", "inject", "tokens", "stale✓", "stale✗"].join("  "),
+    ["case".padEnd(20), "kind".padEnd(11), "hit@3", "rank", "inject", "tokens", "stale"].join("  "),
   );
   for (const r of results) {
+    const hit = r.expectRetrieval ? String(r.hitAt3) : `${r.hitAt3}*`;
     console.log(
       [
-        r.name.padEnd(22),
-        String(r.hitAt3).padEnd(5),
-        String(r.hitAt5).padEnd(5),
+        r.name.padEnd(20),
+        r.kind.padEnd(11),
+        hit.padEnd(5),
         String(r.rank ?? "—").padEnd(4),
         pct(r.injectionRate).padEnd(6),
         String(r.contextTokens).padEnd(6),
-        (r.staleTP ? "ok" : "MISS").padEnd(6),
-        r.staleFP ? "FALSE+" : "ok",
+        r.staleCorrect ? "ok" : "FAIL",
       ].join("  "),
     );
   }
 
-  // Aggregate — staleness precision/recall over the paired edits.
-  const n = results.length;
-  const tp = results.filter((r) => r.staleTP).length; // direct edits correctly flagged
-  const fn = n - tp; // direct edits missed
-  const fp = results.filter((r) => r.staleFP).length; // unrelated edits wrongly flagged
-  const tn = n - fp;
+  // Retrieval aggregate over cases where the memory IS reachable by scope.
+  const retr = results.filter((r) => r.expectRetrieval);
+  const crossScope = results.filter((r) => !r.expectRetrieval);
+
+  // Staleness precision/recall over every labelled observation (kind-aware).
+  const obs = results.flatMap((r) => r.observations);
+  const tp = obs.filter((o) => o.label === 1 && o.predicted).length;
+  const fn = obs.filter((o) => o.label === 1 && !o.predicted).length;
+  const fp = obs.filter((o) => o.label === 0 && o.predicted).length;
+  const tn = obs.filter((o) => o.label === 0 && !o.predicted).length;
   const precision = tp + fp ? tp / (tp + fp) : 1;
   const recall = tp + fn ? tp / (tp + fn) : 1;
 
+  const mean = (xs) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
+
   console.log("-".repeat(72));
-  console.log(`retrieval recall@3:            ${pct(results.filter((r) => r.hitAt3).length / n)}`);
-  console.log(`retrieval recall@5:            ${pct(results.filter((r) => r.hitAt5).length / n)}`);
-  console.log(`avg wrong-memory injection:    ${pct(results.reduce((s, r) => s + r.injectionRate, 0) / n)}`);
-  console.log(`avg context tokens:            ${Math.round(results.reduce((s, r) => s + r.contextTokens, 0) / n)}`);
+  console.log(`retrieval recall@3:            ${pct(mean(retr.map((r) => (r.hitAt3 ? 1 : 0))))}  (${retr.length} in-scope cases)`);
+  console.log(`retrieval recall@5:            ${pct(mean(retr.map((r) => (r.hitAt5 ? 1 : 0))))}`);
+  console.log(`avg wrong-memory injection:    ${pct(mean(retr.map((r) => r.injectionRate)))}`);
+  console.log(`avg context tokens:            ${Math.round(mean(retr.map((r) => r.contextTokens)))}`);
   console.log(`staleness precision:           ${pct(precision)}  (TP=${tp} FP=${fp})`);
   console.log(`staleness recall:              ${pct(recall)}  (TP=${tp} FN=${fn})`);
-  console.log(`unrelated-edit false-positive: ${pct(fp / n)}  (TN=${tn})`);
+  console.log(`unrelated/history false-pos:   ${pct(fp / (fp + tn || 1))}  (TN=${tn})`);
+  if (crossScope.length) {
+    const missed = crossScope.filter((r) => !r.hitAt5).length;
+    console.log(
+      `cross-scope (known gap):       ${missed}/${crossScope.length} not retrieved, as expected ` +
+        `— lesson relevant but outside the edited file's scope (* in table)`,
+    );
+  }
   console.log("=".repeat(72));
   console.log(
     "\nAxis 3 (task-success with vs without memory) needs a model — see adapters/model.mjs.\n",

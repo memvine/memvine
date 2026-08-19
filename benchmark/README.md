@@ -34,25 +34,37 @@ npm run build
 node benchmark/run.mjs
 ```
 
-## Seed result (3 cases, no model)
+## Result (8 cases, no model)
 
 ```
-retrieval recall@3:            100%
+retrieval recall@3:            100%  (7 in-scope cases)
 retrieval recall@5:            100%
-avg wrong-memory injection:    71%
-avg context tokens:            152
-staleness precision:           100%  (TP=3 FP=0)
-staleness recall:              100%  (TP=3 FN=0)
-unrelated-edit false-positive: 0%
+avg wrong-memory injection:    21%
+avg context tokens:            74
+staleness precision:           100%  (TP=6 FP=0)
+staleness recall:              100%  (TP=6 FN=0)
+unrelated/history false-pos:   0%   (TN=10)
+cross-scope (known gap):       1/1 not retrieved, as expected
 ```
 
-Read this as a baseline, not a victory. **Staleness is already the strong
-axis** — it fires on the evidence edit and stays silent on the unrelated one,
-every time. **Retrieval precision is the weak axis**: 71% injection, because
-the lexical scorer admits any memory that shares a single query term. That's
-the actionable finding — the next retrieval work (BM25, near-duplicate removal,
-a minimum-score floor) should target *precision*, not staleness, and this
-harness is how you'll know if it worked.
+How to read it:
+
+- **Retrieval precision** was the weak axis at first — the original
+  substring-count scorer injected **71%** wrong memory. Scope-aware BM25 with a
+  relevance floor and near-duplicate removal cut that to **21%** while holding
+  the target at rank 1 in every in-scope case, and roughly halved the recalled
+  context. The residual is topically-adjacent repo-wide memory that only
+  semantic similarity would catch — the deferred embedding reranker.
+- **Staleness** is kind-aware and clean: semantic/procedural memories flag on
+  their evidence edit, while **episodic and prospective memories never flag** —
+  history and future intentions don't go stale — so the direct edits on those
+  cases are counted as negatives, and all 10 negatives stayed silent (0 false
+  positives).
+- **Cross-scope is a known gap, surfaced on purpose.** `crossscope-auth` stores
+  a lesson scoped to `src/auth/**` but the task edits `src/api/routes.ts`;
+  recall is scope-first, so it misses (marked `*`). That's the honest limit of
+  path-scoped recall — the case is excluded from the retrieval aggregate and
+  reported on its own line so a real regression can't hide behind it.
 
 ## Adding cases
 
@@ -75,10 +87,21 @@ Drop a JSON file in `cases/`. Shape:
 }
 ```
 
+Optional per-case fields:
+- `"expectRetrieval": false` — the memory is deliberately out of the edited
+  file's scope (a cross-scope lesson). The case is excluded from the retrieval
+  aggregate and reported on the "cross-scope (known gap)" line instead.
+- The memory's `kind` drives staleness expectations: `semantic`/`procedural`
+  must flag on the direct-evidence edit; `episodic`/`prospective` must never
+  flag (their direct edit is scored as a negative).
+
 Mix distractor scopes: some repo-wide (`"scope": []`, so they compete on
 wording and quality) and some in other paths (so scope filtering should drop
 them when `task.path` is set). The first ~20 cases are for debugging the
-*evaluation*; expand to 50–100 before making public claims.
+*evaluation*; expand to 50–100 before making public claims. There are 8 here —
+keep going toward 20, adding more cross-scope and near-duplicate cases and at
+least one where the stored memory is subtly *wrong* (to test that validation
+keeps it out of team recall).
 
 ## Notes
 
