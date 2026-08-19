@@ -28,18 +28,8 @@ file-based memory beat vector RAG by about 30 points.
 
 ## Quickstart
 
-memvine isn't on npm yet (v0.1), so install it from source:
-
 ```bash
-git clone https://github.com/memvine/memvine.git
-cd memvine
-npm install && npm run build
-npm link            # puts the `memvine` command on your PATH
-```
-
-Then, in the repo you want memory for:
-
-```bash
+npm install -g memvine
 cd your-repo
 memvine init
 ```
@@ -50,8 +40,9 @@ Add it to your agent. For Claude Code:
 claude mcp add memvine -- memvine serve
 ```
 
-(Once memvine is published, `npm install -g memvine` will replace the clone
-step and `npx memvine serve` will work as the MCP command.)
+Prefer to run from source (for hacking on memvine)? `git clone`, then
+`npm install && npm run build && npm link` puts the `memvine` command on your
+PATH.
 
 Memories are plain files under `.memvine/memories/`, but they only reach
 another machine once they're committed and pushed — `remember` writes the
@@ -180,8 +171,10 @@ text in your repo.
 
 ## Status
 
-v0.1. The memory schema may change before 1.0. Issues and PRs welcome, see
-[CONTRIBUTING.md](CONTRIBUTING.md).
+v0.2. Retrieval is scope-aware BM25 with a token budget, memories carry a
+verified/validated lifecycle, and staleness is measured from the last
+confirmed commit. The memory schema may still change before 1.0. Issues and
+PRs welcome, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
