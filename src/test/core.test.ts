@@ -246,6 +246,25 @@ test("validated_commit gates staleness: revalidating at HEAD clears the flag", (
   assert.equal(findStale(store).length, 0, "clears once re-confirmed against HEAD");
 });
 
+test("stale scan is per-base: a change between two bases flags only the older memory", () => {
+  const repo = makeRepo();
+  const store = Store.init(repo);
+  const g = (args: string[]) => execFileSync("git", args, { cwd: repo });
+  // Older memory confirmed at the initial commit.
+  const older = store.add({ body: "login uses magic links", kind: "semantic", scope: ["src/auth/**"] });
+  // Change auth and commit — HEAD advances.
+  fs.writeFileSync(path.join(repo, "src/auth/login.ts"), "export const a = 2;\n");
+  g(["add", "-A"]);
+  g(["commit", "-q", "-m", "change auth"]);
+  // Newer memory confirmed at the NEW HEAD (different base commit).
+  const newer = store.add({ body: "auth session ttl is thirty minutes", kind: "semantic", scope: ["src/auth/**"] });
+  // The change lies between older's base and HEAD, but at/after newer's base —
+  // so the memoized-by-base scan must flag only the older one.
+  const stale = findStale(store).map((r) => r.memory.meta.id);
+  assert.ok(stale.includes(older.meta.id), "older base sees the change");
+  assert.ok(!stale.includes(newer.meta.id), "newer base does not");
+});
+
 test("older memory files without validated_commit default it to learned_commit", () => {
   const store = Store.init(makeRepo());
   fs.writeFileSync(
