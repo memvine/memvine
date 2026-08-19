@@ -140,10 +140,16 @@ test("compile renders digest with markers and respects budget", () => {
   assert.ok(Buffer.byteLength(digest, "utf8") < 800);
 });
 
+const TOPICS = [
+  "auth", "cache", "database", "api", "interface", "cron", "queue", "logging",
+  "mailer", "payments", "profiles", "admin", "testing", "docs", "builds",
+  "deploys", "proxy", "cli", "sdk", "webhooks",
+];
+
 test("recall caps the number of memories returned", () => {
   const store = Store.init(makeRepo());
   for (let i = 0; i < 20; i++) {
-    store.add({ body: `alpha fact number ${i}`, kind: "semantic" });
+    store.add({ body: `alpha note about ${TOPICS[i]}`, kind: "semantic" });
   }
   const r = store.recall("alpha", undefined, { limit: 5 });
   assert.equal(r.memories.length, 5);
@@ -153,7 +159,9 @@ test("recall caps the number of memories returned", () => {
 test("recall stops at the byte budget even under the count cap", () => {
   const store = Store.init(makeRepo());
   const big = "beta ".repeat(200); // ~1000 bytes each
-  for (let i = 0; i < 10; i++) store.add({ body: big + i, kind: "semantic" });
+  for (let i = 0; i < 10; i++) {
+    store.add({ body: `${big} distinct-tail-${TOPICS[i]}`, kind: "semantic" });
+  }
   const r = store.recall("beta", undefined, { limit: 10, budgetBytes: 2500 });
   assert.ok(r.memories.length >= 1 && r.memories.length <= 3, `got ${r.memories.length}`);
   assert.ok(r.omitted > 0);
@@ -169,17 +177,17 @@ test("recall always returns the top hit, even if it alone exceeds the budget", (
 
 test("recall ranks higher-confidence memories above equally-relevant low-confidence ones", () => {
   const store = Store.init(makeRepo());
-  store.add({ body: "delta fact", kind: "semantic", confidence: "low" });
-  store.add({ body: "delta fact", kind: "semantic", confidence: "high" });
-  const ranked = store.search("delta");
+  store.add({ body: "delta pattern for retry backoff", kind: "semantic", confidence: "low" });
+  store.add({ body: "delta approach to retry timeouts", kind: "semantic", confidence: "high" });
+  const ranked = store.search("delta retry");
   assert.equal(ranked.length, 2);
   assert.equal(ranked[0].meta.confidence, "high", "high-confidence surfaces first");
 });
 
 test("recall down-ranks a stale memory below an equally-relevant active one, but still returns it", () => {
   const store = Store.init(makeRepo());
-  const fresh = store.add({ body: "epsilon fact", kind: "semantic", confidence: "medium" });
-  const going = store.add({ body: "epsilon fact", kind: "semantic", confidence: "medium" });
+  const fresh = store.add({ body: "epsilon caching layer notes", kind: "semantic", confidence: "medium" });
+  const going = store.add({ body: "epsilon cache invalidation rule", kind: "semantic", confidence: "medium" });
   // Force one stale.
   const s = store.get(going.meta.id)!;
   s.memory.meta.status = "stale";
@@ -188,6 +196,24 @@ test("recall down-ranks a stale memory below an equally-relevant active one, but
   assert.equal(ranked.length, 2, "stale is down-ranked, not excluded");
   assert.equal(ranked[0].meta.status, "active");
   assert.equal(ranked[0].meta.id, fresh.meta.id);
+});
+
+test("recall removes near-duplicate memories, keeping the higher-ranked one", () => {
+  const store = Store.init(makeRepo());
+  const high = store.add({
+    body: "The build cache lives in .turbo and is safe to delete",
+    kind: "semantic",
+    confidence: "high",
+  });
+  // Near-identical body, lower confidence — should be collapsed away.
+  store.add({
+    body: "The build cache lives in .turbo and is safe to delete.",
+    kind: "semantic",
+    confidence: "low",
+  });
+  const ranked = store.search("build cache turbo delete");
+  assert.equal(ranked.length, 1, "near-duplicate collapsed");
+  assert.equal(ranked[0].meta.id, high.meta.id, "kept the higher-ranked copy");
 });
 
 test("add records validated_commit == learned_commit", () => {

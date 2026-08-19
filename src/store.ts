@@ -24,6 +24,74 @@ import { headCommit, isGitRepo, repoRoot } from "./git.js";
 
 export const DIR_NAME = ".memvine";
 
+// --- lexical retrieval (BM25) ---------------------------------------------
+// Recall ranking is deterministic and dependency-free: BM25 over the memory
+// bodies, so a memory needs real term overlap (weighted by term rarity), not a
+// single shared word, to score. Kept explainable — no embeddings, no model.
+
+const STOPWORDS = new Set([
+  "a", "an", "the", "and", "or", "but", "if", "of", "to", "in", "on", "for",
+  "with", "is", "are", "be", "was", "were", "this", "that", "it", "its", "as",
+  "at", "by", "from", "into", "how", "do", "does", "we", "you", "i", "add",
+  "use", "using", "new", "get", "set",
+]);
+
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 1 && !STOPWORDS.has(t));
+}
+
+function memoryText(m: Memory): string {
+  return `${m.body} ${m.meta.kind} ${m.meta.tags.join(" ")} ${m.meta.scope.join(" ")}`;
+}
+
+/** Okapi BM25 over a fixed candidate set. */
+class BM25 {
+  private readonly df = new Map<string, number>();
+  private readonly docTokens: string[][];
+  private readonly avgdl: number;
+  private readonly N: number;
+  constructor(docs: string[], private readonly k1 = 1.5, private readonly b = 0.75) {
+    this.docTokens = docs.map(tokenize);
+    this.N = docs.length;
+    this.avgdl =
+      this.docTokens.reduce((s, d) => s + d.length, 0) / (this.N || 1) || 1;
+    for (const toks of this.docTokens) {
+      for (const t of new Set(toks)) this.df.set(t, (this.df.get(t) ?? 0) + 1);
+    }
+  }
+  private idf(t: string): number {
+    const df = this.df.get(t) ?? 0;
+    return Math.log(1 + (this.N - df + 0.5) / (df + 0.5));
+  }
+  score(docIndex: number, queryTerms: string[]): number {
+    const toks = this.docTokens[docIndex];
+    if (toks.length === 0) return 0;
+    const tf = new Map<string, number>();
+    for (const t of toks) tf.set(t, (tf.get(t) ?? 0) + 1);
+    let s = 0;
+    for (const q of queryTerms) {
+      const f = tf.get(q);
+      if (!f) continue;
+      const denom = f + this.k1 * (1 - this.b + (this.b * toks.length) / this.avgdl);
+      s += (this.idf(q) * (f * (this.k1 + 1))) / denom;
+    }
+    return s;
+  }
+}
+
+/** Jaccard similarity over token sets — for near-duplicate removal. */
+function jaccard(a: string, b: string): number {
+  const A = new Set(tokenize(a));
+  const B = new Set(tokenize(b));
+  if (A.size === 0 || B.size === 0) return 0;
+  let inter = 0;
+  for (const t of A) if (B.has(t)) inter++;
+  return inter / (A.size + B.size - inter);
+}
+
 export interface StoreConfig {
   version: 1;
   /** "inline" = memories ride normal commits/PRs; "branch" = dedicated branch (future). */
@@ -226,39 +294,57 @@ export class Store {
     );
   }
 
-  /** Simple full-text + scope search for recall. */
+  /** Keep >= this fraction of the top BM25 score — drops weak single-term matches. */
+  private static readonly RELEVANCE_FLOOR = 0.35;
+  /** Jaccard above which two memory bodies are treated as near-duplicates. */
+  private static readonly DUP_THRESHOLD = 0.85;
+
+  /**
+   * Recall search: scope-aware BM25 with a relevance floor and near-duplicate
+   * removal. When a path is given, memories SCOPED to that path are the reliable
+   * signal — they're always in scope regardless of wording — while repo-wide
+   * memories ride along only if they lexically match above the floor. Ranking
+   * folds in trust weight so unverified/stale/low-confidence memories need
+   * clearly more relevance to outrank a trusted one. Deterministic → explainable.
+   */
   search(query: string, forPath?: string): Memory[] {
-    // Scope-filtered candidates: memories for this path, plus repo-wide ones.
+    // Candidates are already scope-filtered: path-scoped matches + repo-wide.
     const candidates = this.list({ status: ["active", "stale"], forPath });
-    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const terms = tokenize(query);
     if (terms.length === 0) return Store.byQuality(candidates);
-    const matched = candidates
-      .map((m) => {
-        const haystack = (
-          m.body +
-          " " +
-          m.meta.kind +
-          " " +
-          m.meta.tags.join(" ") +
-          " " +
-          m.meta.scope.join(" ")
-        ).toLowerCase();
-        const score = terms.filter((t) => haystack.includes(t)).length;
-        return { m, score };
-      })
-      .filter((x) => x.score > 0)
-      // Relevance leads; trust weight scales it so a low-confidence or stale
-      // memory needs clearly more lexical overlap to outrank a trusted one.
-      .sort(
-        (a, b) =>
-          b.score * Store.qualityWeight(b.m) - a.score * Store.qualityWeight(a.m) ||
-          b.m.meta.learned_at.localeCompare(a.m.meta.learned_at),
-      )
-      .map((x) => x.m);
-    // Never come back empty when relevant memories exist: if the query wording
-    // didn't lexically overlap anything, fall back to the scope-filtered set
-    // (trust- then recency-ranked) so the agent still sees what's on record.
-    return matched.length ? matched : Store.byQuality(candidates);
+
+    const bm25 = new BM25(candidates.map(memoryText));
+    const scored = candidates.map((m, i) => ({
+      m,
+      rel: bm25.score(i, terms),
+      // A non-empty scope survived the forPath filter only by matching it.
+      scoped: !!forPath && m.meta.scope.length > 0,
+    }));
+
+    const top = Math.max(0, ...scored.map((s) => s.rel));
+    const floor = top * Store.RELEVANCE_FLOOR;
+    // Path-scoped memories are relevant by location; repo-wide ones must earn
+    // their place lexically (and clear the floor relative to the best match).
+    const included = scored.filter(
+      (s) => s.scoped || (s.rel > 0 && s.rel >= floor),
+    );
+    if (included.length === 0) return Store.byQuality(candidates);
+
+    included.sort(
+      (a, b) =>
+        Number(b.scoped) - Number(a.scoped) || // scoped tier leads
+        b.rel * Store.qualityWeight(b.m) - a.rel * Store.qualityWeight(a.m) ||
+        b.m.meta.learned_at.localeCompare(a.m.meta.learned_at),
+    );
+
+    // Near-duplicate removal: keep the higher-ranked of any two near-identical
+    // bodies, so a superseded-but-still-active restatement doesn't double up.
+    const out: Memory[] = [];
+    for (const { m } of included) {
+      if (out.some((k) => jaccard(k.body, m.body) >= Store.DUP_THRESHOLD)) continue;
+      out.push(m);
+    }
+    return out;
   }
 
   /**
