@@ -356,8 +356,10 @@ export class Store {
 
   /** Keep >= this fraction of the top BM25 score — drops weak single-term matches. */
   private static readonly RELEVANCE_FLOOR = 0.35;
-  /** Cross-scope memories need a HIGHER bar than repo-wide ones to be admitted. */
-  private static readonly CROSS_SCOPE_FLOOR = 0.6;
+  /** Exact-path memory counts as "strong" when its best score is >= this fraction of the top. */
+  private static readonly EXACT_STRONG_FRAC = 0.5;
+  /** A cross-scope memory must match at least this many DISTINCT query terms to be admitted. */
+  private static readonly CROSS_SCOPE_MIN_TERMS = 2;
   /** At most this many cross-scope memories ride along, so the escape hatch can't flood recall. */
   private static readonly MAX_CROSS_SCOPE = 2;
   /** Jaccard above which two memory bodies are treated as near-duplicates. */
@@ -369,6 +371,14 @@ export class Store {
     return m.meta.scope.some((g) => minimatch(relPath, g)) ? "exact-path" : "cross-scope";
   }
 
+  /** How many DISTINCT query terms a memory contains — the cross-scope precision gate. */
+  private static distinctMatches(m: Memory, termSet: Set<string>): number {
+    const toks = new Set(tokenize(memoryText(m)));
+    let n = 0;
+    for (const t of termSet) if (toks.has(t)) n++;
+    return n;
+  }
+
   private byQualityScored(memories: Memory[], relPath?: string): Scored[] {
     return Store.byQuality(memories).map((m) => ({
       m,
@@ -378,14 +388,20 @@ export class Store {
   }
 
   /**
-   * Rank memories for recall: scope-aware BM25 with a relevance floor, a capped
-   * cross-scope escape hatch, and near-duplicate removal. When a path is given,
-   * memories SCOPED to it are the reliable signal (always in scope, ranked
-   * first); repo-wide memories ride along above the floor; and a few STRONGLY
-   * matching cross-scope memories are admitted last, so a lesson relevant across
-   * files isn't lost to strict path filtering (SWE-Bench-CL's two Xarray misses)
-   * without reintroducing query-only noise. Every result carries its source so
-   * the caller can show WHY it was returned. Deterministic → explainable.
+   * Rank memories for recall: scope-aware BM25 with a relevance floor, a
+   * CONDITIONAL cross-scope escape hatch, and near-duplicate removal. When a
+   * path is given, memories SCOPED to it are the reliable signal (always in
+   * scope, ranked first) and repo-wide memories ride along above the floor.
+   *
+   * Cross-scope memories (scoped to a DIFFERENT file) are only reached for when
+   * the on-path memory is absent or lexically weak — i.e. the query matches
+   * something elsewhere far better than anything in scope — AND the candidate
+   * matches at least two distinct query terms. An earlier always-on version of
+   * this hatch regressed path-assisted precision on the public SWE-Bench-CL set
+   * (it admitted cross-scope candidates on most queries); gating it on a weak
+   * exact-path signal keeps the clean cases clean while still recovering a
+   * lesson that genuinely lives in another file. Every result carries its source
+   * so the caller can show WHY it was returned. Deterministic → explainable.
    */
   private rank(query: string, forPath?: string): Scored[] {
     const all = this.list({ status: ["active", "stale"] });
@@ -417,12 +433,22 @@ export class Store {
       const repoWide = scored.filter(
         (s) => s.source === "repo-wide" && s.rel > 0 && s.rel >= floor,
       );
-      const cross = scored
-        .filter(
-          (s) => s.source === "cross-scope" && s.rel > 0 && s.rel >= top * Store.CROSS_SCOPE_FLOOR,
-        )
-        .sort((a, b) => b.rel * Store.qualityWeight(b.m) - a.rel * Store.qualityWeight(a.m))
-        .slice(0, Store.MAX_CROSS_SCOPE);
+      // Reach across files only when nothing in scope answers the query well.
+      const bestExactRel = exact.length ? Math.max(...exact.map((e) => e.rel)) : 0;
+      const exactStrong = exact.length > 0 && bestExactRel >= top * Store.EXACT_STRONG_FRAC;
+      let cross: Scored[] = [];
+      if (!exactStrong) {
+        const termSet = new Set(terms);
+        cross = scored
+          .filter(
+            (s) =>
+              s.source === "cross-scope" &&
+              s.rel > 0 &&
+              Store.distinctMatches(s.m, termSet) >= Store.CROSS_SCOPE_MIN_TERMS,
+          )
+          .sort((a, b) => b.rel * Store.qualityWeight(b.m) - a.rel * Store.qualityWeight(a.m))
+          .slice(0, Store.MAX_CROSS_SCOPE);
+      }
       included = [...exact, ...repoWide, ...cross];
     }
     if (included.length === 0) {

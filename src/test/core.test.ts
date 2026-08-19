@@ -52,6 +52,25 @@ test("add, list, tags, and scope filtering", () => {
   assert.equal(store.search("auth").length >= 1, true);
 });
 
+test("cross-scope hatch stays shut when an on-path memory answers the query", () => {
+  const store = Store.init(makeRepo());
+  const onPath = store.add({ body: "retry backoff for cache writes lives in this module", kind: "semantic", scope: ["src/cache/**"], verified: true });
+  const elsewhere = store.add({ body: "retry backoff doubles on each failed network attempt", kind: "semantic", scope: ["src/net/**"], verified: true });
+  const ids = store.recall("retry backoff", "src/cache/handler.ts", { limit: 5 }).memories.map((m) => m.meta.id);
+  assert.ok(ids.includes(onPath.meta.id), "on-path memory is returned");
+  assert.ok(!ids.includes(elsewhere.meta.id), "cross-scope memory NOT pulled in when exact-path answers");
+});
+
+test("cross-scope hatch opens when no on-path memory answers, and needs 2+ matching terms", () => {
+  const store = Store.init(makeRepo());
+  store.add({ body: "cache eviction uses an LRU list", kind: "semantic", scope: ["src/cache/**"], verified: true }); // on-path, unrelated
+  const elsewhere = store.add({ body: "retry backoff doubles on each failed network attempt", kind: "semantic", scope: ["src/net/**"], verified: true });
+  const oneTerm = store.add({ body: "backoff jitter is disabled in tests", kind: "semantic", scope: ["src/testing/**"], verified: true });
+  const ids = store.recall("retry backoff", "src/cache/handler.ts", { limit: 5 }).memories.map((m) => m.meta.id);
+  assert.ok(ids.includes(elsewhere.meta.id), "cross-scope with 2 matching terms is recovered");
+  assert.ok(!ids.includes(oneTerm.meta.id), "cross-scope with only 1 matching term stays out");
+});
+
 test("recall works when the agent passes an absolute path", () => {
   const repo = makeRepo();
   const store = Store.init(repo);
