@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { Store } from "../store.js";
 import { findStale, markStale } from "../staleness.js";
 import { buildDigest, compileInto } from "../compile.js";
+import { headCommit } from "../git.js";
 
 function makeRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "memvine-test-"));
@@ -124,7 +125,7 @@ test("staleness: semantic memory stales when its code changes; episodic never do
 
 test("compile renders digest with markers and respects budget", () => {
   const store = Store.init(makeRepo());
-  store.add({ body: "High-value fact", kind: "semantic", tags: ["build"], confidence: "high" });
+  store.add({ body: "High-value fact", kind: "semantic", tags: ["build"], confidence: "high", verified: true });
   const target = compileInto(store, "CLAUDE.md");
   const content = fs.readFileSync(target, "utf8");
   assert.match(content, /memvine:begin/);
@@ -139,11 +140,172 @@ test("compile renders digest with markers and respects budget", () => {
   assert.ok(Buffer.byteLength(digest, "utf8") < 800);
 });
 
+const TOPICS = [
+  "auth", "cache", "database", "api", "interface", "cron", "queue", "logging",
+  "mailer", "payments", "profiles", "admin", "testing", "docs", "builds",
+  "deploys", "proxy", "cli", "sdk", "webhooks",
+];
+
+test("recall caps the number of memories returned", () => {
+  const store = Store.init(makeRepo());
+  for (let i = 0; i < 20; i++) {
+    store.add({ body: `alpha note about ${TOPICS[i]}`, kind: "semantic" });
+  }
+  const r = store.recall("alpha", undefined, { limit: 5 });
+  assert.equal(r.memories.length, 5);
+  assert.equal(r.omitted, 15);
+});
+
+test("recall stops at the byte budget even under the count cap", () => {
+  const store = Store.init(makeRepo());
+  const big = "beta ".repeat(200); // ~1000 bytes each
+  for (let i = 0; i < 10; i++) {
+    store.add({ body: `${big} distinct-tail-${TOPICS[i]}`, kind: "semantic" });
+  }
+  const r = store.recall("beta", undefined, { limit: 10, budgetBytes: 2500 });
+  assert.ok(r.memories.length >= 1 && r.memories.length <= 3, `got ${r.memories.length}`);
+  assert.ok(r.omitted > 0);
+});
+
+test("recall always returns the top hit, even if it alone exceeds the budget", () => {
+  const store = Store.init(makeRepo());
+  store.add({ body: "gamma ".repeat(500), kind: "semantic" });
+  const r = store.recall("gamma", undefined, { budgetBytes: 10 });
+  assert.equal(r.memories.length, 1);
+  assert.equal(r.omitted, 0);
+});
+
+test("recall ranks higher-confidence memories above equally-relevant low-confidence ones", () => {
+  const store = Store.init(makeRepo());
+  store.add({ body: "delta pattern for retry backoff", kind: "semantic", confidence: "low" });
+  store.add({ body: "delta approach to retry timeouts", kind: "semantic", confidence: "high" });
+  const ranked = store.search("delta retry");
+  assert.equal(ranked.length, 2);
+  assert.equal(ranked[0].meta.confidence, "high", "high-confidence surfaces first");
+});
+
+test("recall down-ranks a stale memory below an equally-relevant active one, but still returns it", () => {
+  const store = Store.init(makeRepo());
+  const fresh = store.add({ body: "epsilon caching layer notes", kind: "semantic", confidence: "medium" });
+  const going = store.add({ body: "epsilon cache invalidation rule", kind: "semantic", confidence: "medium" });
+  // Force one stale.
+  const s = store.get(going.meta.id)!;
+  s.memory.meta.status = "stale";
+  store.write(s.memory, s.local);
+  const ranked = store.search("epsilon");
+  assert.equal(ranked.length, 2, "stale is down-ranked, not excluded");
+  assert.equal(ranked[0].meta.status, "active");
+  assert.equal(ranked[0].meta.id, fresh.meta.id);
+});
+
+test("recall removes near-duplicate memories, keeping the higher-ranked one", () => {
+  const store = Store.init(makeRepo());
+  const high = store.add({
+    body: "The build cache lives in .turbo and is safe to delete",
+    kind: "semantic",
+    confidence: "high",
+  });
+  // Near-identical body, lower confidence — should be collapsed away.
+  store.add({
+    body: "The build cache lives in .turbo and is safe to delete.",
+    kind: "semantic",
+    confidence: "low",
+  });
+  const ranked = store.search("build cache turbo delete");
+  assert.equal(ranked.length, 1, "near-duplicate collapsed");
+  assert.equal(ranked[0].meta.id, high.meta.id, "kept the higher-ranked copy");
+});
+
+test("add records validated_commit == learned_commit", () => {
+  const store = Store.init(makeRepo());
+  const m = store.add({ body: "x", kind: "semantic" });
+  assert.equal(m.meta.validated_commit, m.meta.learned_commit);
+});
+
+test("validated_commit gates staleness: revalidating at HEAD clears the flag", () => {
+  const repo = makeRepo();
+  const store = Store.init(repo);
+  const m = store.add({
+    body: "Login uses magic links",
+    kind: "semantic",
+    scope: ["src/auth/**"],
+  });
+  const g = (args: string[]) => execFileSync("git", args, { cwd: repo });
+  fs.writeFileSync(path.join(repo, "src/auth/login.ts"), "export const a = 2;\n");
+  g(["add", "-A"]);
+  g(["commit", "-q", "-m", "change auth"]);
+  assert.equal(findStale(store).length, 1, "flags once the scoped evidence changes");
+
+  // Simulate what `revise` does: re-confirm the memory at the current HEAD.
+  const found = store.get(m.meta.id)!;
+  found.memory.meta.validated_commit = headCommit(repo);
+  store.write(found.memory, found.local);
+  assert.equal(findStale(store).length, 0, "clears once re-confirmed against HEAD");
+});
+
+test("older memory files without validated_commit default it to learned_commit", () => {
+  const store = Store.init(makeRepo());
+  fs.writeFileSync(
+    path.join(store.dir, "memories", "mem_legacy1.md"),
+    "---\nid: mem_legacy1\nkind: semantic\ntags: []\nscope: []\n" +
+      "learned_at: 2026-01-01T00:00:00Z\nlearned_commit: abc1234\nagent: cli\n" +
+      "status: active\nconfidence: medium\n---\nlegacy body\n",
+  );
+  const got = store.get("mem_legacy1")!;
+  assert.equal(got.memory.meta.validated_commit, "abc1234");
+});
+
+test("compiled digest instructs the agent to recall/remember, even when empty", () => {
+  const store = Store.init(makeRepo());
+  // No memories yet — the usage protocol must still be present so agents are
+  // told to call the tools from the very first session.
+  const digest = buildDigest(store, 12_000);
+  assert.match(digest, /recall/);
+  assert.match(digest, /remember/);
+});
+
 test("local memories stay out of the compiled digest", () => {
   const store = Store.init(makeRepo());
   store.add({ body: "My personal note", kind: "episodic", local: true });
-  store.add({ body: "Shared team fact", kind: "semantic" });
+  store.add({ body: "Shared team fact", kind: "semantic", verified: true });
   const digest = buildDigest(store, 12_000);
   assert.ok(!digest.includes("My personal note"));
   assert.ok(digest.includes("Shared team fact"));
+});
+
+test("validation gate: unverified memories are candidates in local/, verified ones are committed", () => {
+  const store = Store.init(makeRepo());
+  const cand = store.add({ body: "hunch: the flake is a race", kind: "episodic" });
+  const trusted = store.add({ body: "confirmed team fact", kind: "semantic", verified: true, evidence: "PR #7" });
+
+  assert.equal(cand.meta.verified, false);
+  assert.equal(store.get(cand.meta.id)!.local, true, "candidate lands in local/");
+  assert.equal(trusted.meta.verified, true);
+  assert.equal(store.get(trusted.meta.id)!.local, false, "verified lands in committed store");
+  assert.equal(trusted.meta.evidence, "PR #7");
+  // The candidate must NOT appear in the shared digest.
+  assert.ok(!buildDigest(store, 12_000).includes("hunch"));
+});
+
+test("validate() promotes a candidate to the committed store", () => {
+  const store = Store.init(makeRepo());
+  const cand = store.add({ body: "auth uses argon2 hashing", kind: "semantic", scope: ["src/auth/**"] });
+  assert.equal(store.get(cand.meta.id)!.local, true);
+
+  const res = store.validate(cand.meta.id, "read the code + tests green")!;
+  assert.equal(res.promoted, true);
+  assert.equal(res.memory.meta.verified, true);
+  assert.equal(res.memory.meta.evidence, "read the code + tests green");
+  const after = store.get(cand.meta.id)!;
+  assert.equal(after.local, false, "moved out of local/ into committed store");
+  assert.ok(buildDigest(store, 12_000).includes("argon2"), "now appears in the shared digest");
+});
+
+test("recall down-ranks an unverified candidate below an equally-relevant verified memory", () => {
+  const store = Store.init(makeRepo());
+  const trusted = store.add({ body: "zeta pipeline runs nightly", kind: "semantic", verified: true });
+  store.add({ body: "zeta pipeline maybe hourly", kind: "semantic" }); // candidate
+  const ranked = store.search("zeta pipeline");
+  assert.equal(ranked.length, 2);
+  assert.equal(ranked[0].meta.id, trusted.meta.id, "verified surfaces above candidate");
 });

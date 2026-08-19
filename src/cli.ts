@@ -28,9 +28,21 @@ program
 program
   .command("init")
   .description("Initialize a .memvine store in this git repository")
-  .action(() => {
+  .option(
+    "--no-compile",
+    "don't write the memvine usage block into CLAUDE.md / AGENTS.md",
+  )
+  .action((opts) => {
     const store = Store.init(process.cwd());
     console.log(`Initialized memvine store at ${store.dir}`);
+    if (opts.compile !== false) {
+      for (const f of ["CLAUDE.md", "AGENTS.md"]) {
+        console.log(`Wrote the memvine usage block into ${compileInto(store, f)}`);
+      }
+      console.log(
+        "  ^ tells your agent to recall/remember every task. Re-run `memvine compile` after new memories.",
+      );
+    }
     console.log("Next: add it to your agent as an MCP server:");
     console.log("  claude mcp add memvine -- memvine serve");
   });
@@ -47,17 +59,40 @@ program
   .option("-s, --scope <globs...>", "path globs this memory is about")
   .option("-c, --confidence <level>", "high | medium | low", "medium")
   .option("-l, --local", "personal memory (gitignored, not shared)")
+  .option("--verified", "store as verified team knowledge (committed) instead of an unverified candidate")
+  .option("-e, --evidence <text>", "how it was confirmed, e.g. 'tests green at a1b4c9e' (implies --verified)")
   .action((body: string, opts) => {
+    const verified = opts.verified || Boolean(opts.evidence);
     const m = requireStore().add({
       body,
       kind: opts.kind as MemoryKind,
       tags: opts.tags,
       scope: opts.scope,
       confidence: opts.confidence,
+      verified,
+      evidence: opts.evidence,
       local: opts.local,
       agent: "cli",
     });
-    console.log(`Stored ${m.meta.id} (${m.meta.kind}, learned@${m.meta.learned_commit})`);
+    const where = m.meta.verified && !opts.local ? "verified, committed" : "unverified candidate, local";
+    console.log(`Stored ${m.meta.id} (${m.meta.kind}, ${where}, learned@${m.meta.learned_commit})`);
+  });
+
+program
+  .command("validate <id>")
+  .description("Promote an unverified candidate to verified, committed team knowledge")
+  .option("-e, --evidence <text>", "how it was confirmed, e.g. 'PR #123', 'user confirmed'")
+  .action((id: string, opts) => {
+    const res = requireStore().validate(id, opts.evidence);
+    if (!res) {
+      console.error(`No memory with id ${id}.`);
+      process.exit(1);
+    }
+    console.log(
+      res.promoted
+        ? `Validated ${id} — promoted to the committed store. Commit .memvine/ to share it.`
+        : `Validated ${id} — already committed; refreshed evidence.`,
+    );
   });
 
 program
@@ -78,8 +113,9 @@ program
     for (const m of memories) {
       const scope = m.meta.scope.length ? ` scope=${m.meta.scope.join(",")}` : "";
       const tags = m.meta.tags.length ? ` tags=${m.meta.tags.join(",")}` : "";
+      const trust = m.meta.verified ? "verified" : "candidate";
       console.log(
-        `${m.meta.id}  [${m.meta.status}] (${m.meta.kind}, ${m.meta.confidence}${tags}${scope}, learned@${m.meta.learned_commit})`,
+        `${m.meta.id}  [${m.meta.status}/${trust}] (${m.meta.kind}, ${m.meta.confidence}${tags}${scope}, learned@${m.meta.learned_commit})`,
       );
       console.log(`  ${m.body.split("\n")[0].slice(0, 100)}`);
     }
@@ -87,7 +123,7 @@ program
 
 program
   .command("stale")
-  .description("Detect memories whose scoped files changed since they were learned")
+  .description("Detect memories whose scoped files changed since they were last confirmed")
   .option("--mark", "mark detected memories as stale (default: report only)")
   .action((opts) => {
     const store = requireStore();
@@ -97,8 +133,8 @@ program
       return;
     }
     for (const r of reports) {
-      console.log(`${r.memory.meta.id}  learned@${r.memory.meta.learned_commit}`);
-      console.log(`  changed: ${r.changedFiles.join(", ")}`);
+      console.log(`${r.memory.meta.id}  needs revalidation (confirmed@${r.memory.meta.validated_commit})`);
+      console.log(`  changed since: ${r.changedFiles.join(", ")}`);
       console.log(`  ${r.memory.body.split("\n")[0].slice(0, 100)}`);
     }
     if (opts.mark) {

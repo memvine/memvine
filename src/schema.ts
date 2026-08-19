@@ -40,11 +40,29 @@ export interface MemoryMeta {
   /** Path globs this memory is about, e.g. ["src/auth/**"]. Empty = repo-wide. */
   scope: string[];
   learned_at: string; // ISO timestamp
-  learned_commit: string; // git HEAD short SHA when learned
+  learned_commit: string; // git HEAD short SHA when first learned (immutable provenance)
+  /**
+   * Short SHA at which this memory was last confirmed true — set to
+   * learned_commit at creation, and advanced to HEAD each time an agent
+   * revalidates it (via `revise`). Staleness is measured from HERE, not from
+   * learned_commit, so a memory re-confirmed after a refactor doesn't
+   * immediately re-flag on the same changes.
+   */
+  validated_commit: string;
   agent: string; // which tool wrote it, e.g. "claude-code"
   status: MemoryStatus;
   supersedes?: string; // id of the memory this one replaces
   confidence: "high" | "medium" | "low";
+  /**
+   * Whether this memory has been confirmed against real evidence — a test, code
+   * actually read, a PR, or explicit user confirmation. Unverified memories are
+   * treated as *candidates*: they stay in the gitignored local store and are
+   * down-ranked in recall, so raw or guessed knowledge never reaches the team
+   * until an agent validates it. Defaults by location for pre-field files.
+   */
+  verified: boolean;
+  /** Short note on the evidence, e.g. a commit, PR number, test name, or "user confirmed". */
+  evidence?: string;
   /** Set when status becomes stale: the commit at which staleness was detected. */
   stale_since?: string;
 }

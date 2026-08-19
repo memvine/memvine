@@ -1,0 +1,30 @@
+{
+  "name": "queue-episodic",
+  "files": {
+    "src/queue/worker.ts": "export const backend = 'sqs';\nexport const run = () => backend;\n",
+    "src/queue/config.ts": "export const visibilityTimeout = 30;\n",
+    "src/api/handler.ts": "export const handle = (r: string) => r;\n"
+  },
+  "memory": {
+    "body": "Tried switching the queue backend from SQS to Redis in 2026-05; tail latency regressed badly under burst load and we reverted. Don't retry Redis without a burst-load benchmark first.",
+    "kind": "episodic",
+    "scope": ["src/queue/**"],
+    "confidence": "high"
+  },
+  "task": {
+    "query": "change the queue backend in the worker",
+    "path": "src/queue/worker.ts"
+  },
+  "distractors": [
+    { "body": "HTTP handlers must return within 30s or the gateway times out.", "kind": "semantic", "scope": ["src/api/**"], "confidence": "medium" },
+    { "body": "We prefer named exports across the codebase.", "kind": "semantic", "scope": [], "confidence": "medium" }
+  ],
+  "edits": {
+    "directEvidence": {
+      "src/queue/worker.ts": "export const backend = 'sqs-fifo';\nexport const run = () => backend;\n"
+    },
+    "unrelated": {
+      "src/api/handler.ts": "export const handle = (r: string) => r.trim();\n"
+    }
+  }
+}
