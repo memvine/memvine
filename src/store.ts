@@ -186,8 +186,11 @@ export class Store {
     confidence?: MemoryMeta["confidence"];
     supersedes?: string;
     local?: boolean;
+    verified?: boolean;
+    evidence?: string;
   }): Memory {
     const commit = headCommit(this.root);
+    const verified = opts.verified ?? false;
     const meta: MemoryMeta = {
       id: newId(),
       kind: opts.kind,
@@ -199,12 +202,18 @@ export class Store {
       agent: opts.agent ?? "unknown",
       status: "active",
       confidence: opts.confidence ?? "medium",
+      verified,
+      ...(opts.evidence ? { evidence: opts.evidence } : {}),
       ...(opts.supersedes ? { supersedes: opts.supersedes } : {}),
     };
     const errors = validateMeta(meta);
     if (errors.length) throw new Error(errors.join("; "));
     const memory: Memory = { meta, body: opts.body.trim() };
-    this.write(memory, opts.local ?? false);
+    // The gate: only a verified memory (and not an explicitly personal one)
+    // lands in the committed store; unverified candidates stay in gitignored
+    // local/ so raw or guessed knowledge never reaches the team by accident.
+    const local = opts.local ?? !verified;
+    this.write(memory, local);
     if (opts.supersedes) {
       const old = this.get(opts.supersedes);
       if (old) {
@@ -213,6 +222,23 @@ export class Store {
       }
     }
     return memory;
+  }
+
+  /**
+   * Promote a memory to validated, committed team knowledge after an agent has
+   * re-checked it against real evidence: sets verified, records evidence and the
+   * confirming commit, and moves the file from local/ into the committed store.
+   */
+  validate(id: string, evidence?: string): { memory: Memory; promoted: boolean } | null {
+    const found = this.get(id);
+    if (!found) return null;
+    found.memory.meta.verified = true;
+    found.memory.meta.validated_commit = headCommit(this.root);
+    if (evidence) found.memory.meta.evidence = evidence;
+    const promoted = found.local;
+    if (promoted) fs.rmSync(this.fileFor(id, true)); // remove the local copy
+    this.write(found.memory, false); // write into the committed store
+    return { memory: found.memory, promoted };
   }
 
   write(memory: Memory, local: boolean): void {
@@ -224,17 +250,20 @@ export class Store {
     for (const local of [false, true]) {
       const p = this.fileFor(id, local);
       if (fs.existsSync(p)) {
-        return { memory: this.read(p), local };
+        return { memory: this.read(p, !local), local };
       }
     }
     return null;
   }
 
-  private read(filePath: string): Memory {
+  private read(filePath: string, committed: boolean): Memory {
     const parsed = matter(fs.readFileSync(filePath, "utf8"));
     const meta = parsed.data as MemoryMeta;
     meta.tags ??= []; // tolerate pre-tags memory files
     meta.validated_commit ??= meta.learned_commit; // pre-validated_commit files
+    // Pre-verified-field files: a memory already in the committed store was, by
+    // definition, shared/trusted; one in local/ is a personal or unvalidated note.
+    meta.verified ??= committed;
     return { meta, body: parsed.content.trim() };
   }
 
@@ -245,14 +274,16 @@ export class Store {
     forPath?: string;
     includeLocal?: boolean;
   }): Memory[] {
-    const dirs = [path.join(this.dir, "memories")];
-    if (filter?.includeLocal !== false) dirs.push(path.join(this.dir, "local"));
+    const dirs = [{ path: path.join(this.dir, "memories"), committed: true }];
+    if (filter?.includeLocal !== false) {
+      dirs.push({ path: path.join(this.dir, "local"), committed: false });
+    }
     const memories: Memory[] = [];
-    for (const dir of dirs) {
+    for (const { path: dir, committed } of dirs) {
       if (!fs.existsSync(dir)) continue;
       for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".md"))) {
         try {
-          memories.push(this.read(path.join(dir, f)));
+          memories.push(this.read(path.join(dir, f), committed));
         } catch {
           // Unparseable file: skip rather than crash; `memvine doctor` (future) reports these.
         }
@@ -282,7 +313,10 @@ export class Store {
     const byConfidence: Record<string, number> = { high: 1, medium: 0.85, low: 0.6 };
     const confidence = byConfidence[m.meta.confidence] ?? 0.85;
     const freshness = m.meta.status === "stale" ? 0.7 : 1;
-    return confidence * freshness;
+    // Unverified candidates (still in local/, not yet confirmed) rank below
+    // validated knowledge, but aren't excluded — you can still recall your own.
+    const trust = m.meta.verified === false ? 0.75 : 1;
+    return confidence * freshness * trust;
   }
 
   /** Order by trust weight, then recency — used when no lexical signal separates memories. */

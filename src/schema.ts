@@ -53,6 +53,16 @@ export interface MemoryMeta {
   status: MemoryStatus;
   supersedes?: string; // id of the memory this one replaces
   confidence: "high" | "medium" | "low";
+  /**
+   * Whether this memory has been confirmed against real evidence — a test, code
+   * actually read, a PR, or explicit user confirmation. Unverified memories are
+   * treated as *candidates*: they stay in the gitignored local store and are
+   * down-ranked in recall, so raw or guessed knowledge never reaches the team
+   * until an agent validates it. Defaults by location for pre-field files.
+   */
+  verified: boolean;
+  /** Short note on the evidence, e.g. a commit, PR number, test name, or "user confirmed". */
+  evidence?: string;
   /** Set when status becomes stale: the commit at which staleness was detected. */
   stale_since?: string;
 }

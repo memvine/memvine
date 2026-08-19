@@ -24,6 +24,9 @@ function renderMemory(m: Memory): string {
 export function buildDigest(store: Store, budgetBytes: number): string {
   const memories = store
     .list({ status: ["active"], includeLocal: false })
+    // Only verified team knowledge belongs in the shared digest — candidates
+    // live in local/ and are excluded already; this is the belt-and-braces.
+    .filter((m) => m.meta.verified)
     .sort(
       (a, b) =>
         CONFIDENCE_RANK[a.meta.confidence] - CONFIDENCE_RANK[b.meta.confidence] ||

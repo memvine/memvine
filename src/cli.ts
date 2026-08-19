@@ -59,17 +59,40 @@ program
   .option("-s, --scope <globs...>", "path globs this memory is about")
   .option("-c, --confidence <level>", "high | medium | low", "medium")
   .option("-l, --local", "personal memory (gitignored, not shared)")
+  .option("--verified", "store as verified team knowledge (committed) instead of an unverified candidate")
+  .option("-e, --evidence <text>", "how it was confirmed, e.g. 'tests green at a1b4c9e' (implies --verified)")
   .action((body: string, opts) => {
+    const verified = opts.verified || Boolean(opts.evidence);
     const m = requireStore().add({
       body,
       kind: opts.kind as MemoryKind,
       tags: opts.tags,
       scope: opts.scope,
       confidence: opts.confidence,
+      verified,
+      evidence: opts.evidence,
       local: opts.local,
       agent: "cli",
     });
-    console.log(`Stored ${m.meta.id} (${m.meta.kind}, learned@${m.meta.learned_commit})`);
+    const where = m.meta.verified && !opts.local ? "verified, committed" : "unverified candidate, local";
+    console.log(`Stored ${m.meta.id} (${m.meta.kind}, ${where}, learned@${m.meta.learned_commit})`);
+  });
+
+program
+  .command("validate <id>")
+  .description("Promote an unverified candidate to verified, committed team knowledge")
+  .option("-e, --evidence <text>", "how it was confirmed, e.g. 'PR #123', 'user confirmed'")
+  .action((id: string, opts) => {
+    const res = requireStore().validate(id, opts.evidence);
+    if (!res) {
+      console.error(`No memory with id ${id}.`);
+      process.exit(1);
+    }
+    console.log(
+      res.promoted
+        ? `Validated ${id} — promoted to the committed store. Commit .memvine/ to share it.`
+        : `Validated ${id} — already committed; refreshed evidence.`,
+    );
   });
 
 program
@@ -90,8 +113,9 @@ program
     for (const m of memories) {
       const scope = m.meta.scope.length ? ` scope=${m.meta.scope.join(",")}` : "";
       const tags = m.meta.tags.length ? ` tags=${m.meta.tags.join(",")}` : "";
+      const trust = m.meta.verified ? "verified" : "candidate";
       console.log(
-        `${m.meta.id}  [${m.meta.status}] (${m.meta.kind}, ${m.meta.confidence}${tags}${scope}, learned@${m.meta.learned_commit})`,
+        `${m.meta.id}  [${m.meta.status}/${trust}] (${m.meta.kind}, ${m.meta.confidence}${tags}${scope}, learned@${m.meta.learned_commit})`,
       );
       console.log(`  ${m.body.split("\n")[0].slice(0, 100)}`);
     }

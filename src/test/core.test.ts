@@ -125,7 +125,7 @@ test("staleness: semantic memory stales when its code changes; episodic never do
 
 test("compile renders digest with markers and respects budget", () => {
   const store = Store.init(makeRepo());
-  store.add({ body: "High-value fact", kind: "semantic", tags: ["build"], confidence: "high" });
+  store.add({ body: "High-value fact", kind: "semantic", tags: ["build"], confidence: "high", verified: true });
   const target = compileInto(store, "CLAUDE.md");
   const content = fs.readFileSync(target, "utf8");
   assert.match(content, /memvine:begin/);
@@ -267,8 +267,45 @@ test("compiled digest instructs the agent to recall/remember, even when empty", 
 test("local memories stay out of the compiled digest", () => {
   const store = Store.init(makeRepo());
   store.add({ body: "My personal note", kind: "episodic", local: true });
-  store.add({ body: "Shared team fact", kind: "semantic" });
+  store.add({ body: "Shared team fact", kind: "semantic", verified: true });
   const digest = buildDigest(store, 12_000);
   assert.ok(!digest.includes("My personal note"));
   assert.ok(digest.includes("Shared team fact"));
+});
+
+test("validation gate: unverified memories are candidates in local/, verified ones are committed", () => {
+  const store = Store.init(makeRepo());
+  const cand = store.add({ body: "hunch: the flake is a race", kind: "episodic" });
+  const trusted = store.add({ body: "confirmed team fact", kind: "semantic", verified: true, evidence: "PR #7" });
+
+  assert.equal(cand.meta.verified, false);
+  assert.equal(store.get(cand.meta.id)!.local, true, "candidate lands in local/");
+  assert.equal(trusted.meta.verified, true);
+  assert.equal(store.get(trusted.meta.id)!.local, false, "verified lands in committed store");
+  assert.equal(trusted.meta.evidence, "PR #7");
+  // The candidate must NOT appear in the shared digest.
+  assert.ok(!buildDigest(store, 12_000).includes("hunch"));
+});
+
+test("validate() promotes a candidate to the committed store", () => {
+  const store = Store.init(makeRepo());
+  const cand = store.add({ body: "auth uses argon2 hashing", kind: "semantic", scope: ["src/auth/**"] });
+  assert.equal(store.get(cand.meta.id)!.local, true);
+
+  const res = store.validate(cand.meta.id, "read the code + tests green")!;
+  assert.equal(res.promoted, true);
+  assert.equal(res.memory.meta.verified, true);
+  assert.equal(res.memory.meta.evidence, "read the code + tests green");
+  const after = store.get(cand.meta.id)!;
+  assert.equal(after.local, false, "moved out of local/ into committed store");
+  assert.ok(buildDigest(store, 12_000).includes("argon2"), "now appears in the shared digest");
+});
+
+test("recall down-ranks an unverified candidate below an equally-relevant verified memory", () => {
+  const store = Store.init(makeRepo());
+  const trusted = store.add({ body: "zeta pipeline runs nightly", kind: "semantic", verified: true });
+  store.add({ body: "zeta pipeline maybe hourly", kind: "semantic" }); // candidate
+  const ranked = store.search("zeta pipeline");
+  assert.equal(ranked.length, 2);
+  assert.equal(ranked[0].meta.id, trusted.meta.id, "verified surfaces above candidate");
 });
