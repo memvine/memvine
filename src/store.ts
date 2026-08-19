@@ -82,6 +82,29 @@ class BM25 {
   }
 }
 
+/**
+ * Why a memory was returned by recall — surfaced to the caller so retrieval is
+ * explainable. `exact-path` = scoped to the file you're on; `repo-wide` = a
+ * project-wide fact that lexically matched; `cross-scope` = admitted by the
+ * capped escape hatch (scoped to a different file but a strong lexical match);
+ * `lexical` = query-only mode, no path given.
+ */
+export type MemorySource = "exact-path" | "repo-wide" | "cross-scope" | "lexical";
+
+/** Recall tier order: exact-path leads, cross-scope trails. */
+const TIER: Record<MemorySource, number> = {
+  "exact-path": 0,
+  "repo-wide": 1,
+  lexical: 1,
+  "cross-scope": 2,
+};
+
+interface Scored {
+  m: Memory;
+  rel: number;
+  source: MemorySource;
+}
+
 /** Jaccard similarity over token sets — for near-duplicate removal. */
 function jaccard(a: string, b: string): number {
   const A = new Set(tokenize(a));
@@ -242,8 +265,11 @@ export class Store {
   }
 
   write(memory: Memory, local: boolean): void {
-    const file = matter.stringify(memory.body + "\n", memory.meta);
-    fs.writeFileSync(this.fileFor(memory.meta.id, local), file);
+    const file = this.fileFor(memory.meta.id, local);
+    // Ensure the target dir exists: git doesn't track the empty memories/ dir,
+    // so a fresh branch checkout can prune it out from under us.
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, matter.stringify(memory.body + "\n", memory.meta));
   }
 
   get(id: string): { memory: Memory; local: boolean } | null {
@@ -330,55 +356,102 @@ export class Store {
 
   /** Keep >= this fraction of the top BM25 score — drops weak single-term matches. */
   private static readonly RELEVANCE_FLOOR = 0.35;
+  /** Cross-scope memories need a HIGHER bar than repo-wide ones to be admitted. */
+  private static readonly CROSS_SCOPE_FLOOR = 0.6;
+  /** At most this many cross-scope memories ride along, so the escape hatch can't flood recall. */
+  private static readonly MAX_CROSS_SCOPE = 2;
   /** Jaccard above which two memory bodies are treated as near-duplicates. */
   private static readonly DUP_THRESHOLD = 0.85;
 
-  /**
-   * Recall search: scope-aware BM25 with a relevance floor and near-duplicate
-   * removal. When a path is given, memories SCOPED to that path are the reliable
-   * signal — they're always in scope regardless of wording — while repo-wide
-   * memories ride along only if they lexically match above the floor. Ranking
-   * folds in trust weight so unverified/stale/low-confidence memories need
-   * clearly more relevance to outrank a trusted one. Deterministic → explainable.
-   */
-  search(query: string, forPath?: string): Memory[] {
-    // Candidates are already scope-filtered: path-scoped matches + repo-wide.
-    const candidates = this.list({ status: ["active", "stale"], forPath });
-    const terms = tokenize(query);
-    if (terms.length === 0) return Store.byQuality(candidates);
+  private classify(m: Memory, relPath?: string): MemorySource {
+    if (!relPath) return "lexical";
+    if (m.meta.scope.length === 0) return "repo-wide";
+    return m.meta.scope.some((g) => minimatch(relPath, g)) ? "exact-path" : "cross-scope";
+  }
 
-    const bm25 = new BM25(candidates.map(memoryText));
-    const scored = candidates.map((m, i) => ({
+  private byQualityScored(memories: Memory[], relPath?: string): Scored[] {
+    return Store.byQuality(memories).map((m) => ({
+      m,
+      rel: 0,
+      source: this.classify(m, relPath),
+    }));
+  }
+
+  /**
+   * Rank memories for recall: scope-aware BM25 with a relevance floor, a capped
+   * cross-scope escape hatch, and near-duplicate removal. When a path is given,
+   * memories SCOPED to it are the reliable signal (always in scope, ranked
+   * first); repo-wide memories ride along above the floor; and a few STRONGLY
+   * matching cross-scope memories are admitted last, so a lesson relevant across
+   * files isn't lost to strict path filtering (SWE-Bench-CL's two Xarray misses)
+   * without reintroducing query-only noise. Every result carries its source so
+   * the caller can show WHY it was returned. Deterministic → explainable.
+   */
+  private rank(query: string, forPath?: string): Scored[] {
+    const all = this.list({ status: ["active", "stale"] });
+    const relPath = forPath ? this.relPath(forPath) : undefined;
+    const terms = tokenize(query);
+    if (terms.length === 0) {
+      // No query terms: fall back to the scope-relevant set, trust-ranked.
+      const base = relPath
+        ? all.filter((m) => this.classify(m, relPath) !== "cross-scope")
+        : all;
+      return this.byQualityScored(base, relPath);
+    }
+
+    const bm25 = new BM25(all.map(memoryText));
+    const scored: Scored[] = all.map((m, i) => ({
       m,
       rel: bm25.score(i, terms),
-      // A non-empty scope survived the forPath filter only by matching it.
-      scoped: !!forPath && m.meta.scope.length > 0,
+      source: this.classify(m, relPath),
     }));
-
     const top = Math.max(0, ...scored.map((s) => s.rel));
     const floor = top * Store.RELEVANCE_FLOOR;
-    // Path-scoped memories are relevant by location; repo-wide ones must earn
-    // their place lexically (and clear the floor relative to the best match).
-    const included = scored.filter(
-      (s) => s.scoped || (s.rel > 0 && s.rel >= floor),
-    );
-    if (included.length === 0) return Store.byQuality(candidates);
+
+    let included: Scored[];
+    if (!relPath) {
+      // Query-only: pure lexical, floor-gated.
+      included = scored.filter((s) => s.rel > 0 && s.rel >= floor);
+    } else {
+      const exact = scored.filter((s) => s.source === "exact-path");
+      const repoWide = scored.filter(
+        (s) => s.source === "repo-wide" && s.rel > 0 && s.rel >= floor,
+      );
+      const cross = scored
+        .filter(
+          (s) => s.source === "cross-scope" && s.rel > 0 && s.rel >= top * Store.CROSS_SCOPE_FLOOR,
+        )
+        .sort((a, b) => b.rel * Store.qualityWeight(b.m) - a.rel * Store.qualityWeight(a.m))
+        .slice(0, Store.MAX_CROSS_SCOPE);
+      included = [...exact, ...repoWide, ...cross];
+    }
+    if (included.length === 0) {
+      const base = relPath
+        ? all.filter((m) => this.classify(m, relPath) !== "cross-scope")
+        : all;
+      return this.byQualityScored(base, relPath);
+    }
 
     included.sort(
       (a, b) =>
-        Number(b.scoped) - Number(a.scoped) || // scoped tier leads
+        TIER[a.source] - TIER[b.source] || // exact-path < repo-wide < cross-scope
         b.rel * Store.qualityWeight(b.m) - a.rel * Store.qualityWeight(a.m) ||
         b.m.meta.learned_at.localeCompare(a.m.meta.learned_at),
     );
 
     // Near-duplicate removal: keep the higher-ranked of any two near-identical
     // bodies, so a superseded-but-still-active restatement doesn't double up.
-    const out: Memory[] = [];
-    for (const { m } of included) {
-      if (out.some((k) => jaccard(k.body, m.body) >= Store.DUP_THRESHOLD)) continue;
-      out.push(m);
+    const out: Scored[] = [];
+    for (const s of included) {
+      if (out.some((k) => jaccard(k.m.body, s.m.body) >= Store.DUP_THRESHOLD)) continue;
+      out.push(s);
     }
     return out;
+  }
+
+  /** Ranked memories for recall (see rank). Kept for callers that don't need sources. */
+  search(query: string, forPath?: string): Memory[] {
+    return this.rank(query, forPath).map((s) => s.m);
   }
 
   /**
@@ -387,25 +460,28 @@ export class Store {
    * blow a context window — so we stop once either limit is hit, dropping the
    * lowest-ranked first. The highest-ranked memory is always included (even if it
    * alone exceeds the budget) so a relevant hit is never silently swallowed.
+   * `sources` maps each returned id to why it matched (exact-path/cross-scope/…).
    */
   recall(
     query: string,
     forPath?: string,
     opts?: { limit?: number; budgetBytes?: number },
-  ): { memories: Memory[]; omitted: number } {
+  ): { memories: Memory[]; omitted: number; sources: Record<string, MemorySource> } {
     const cfg = this.config();
     const limit = Math.max(1, opts?.limit ?? cfg.recall_max_memories);
     const budget = Math.max(1, opts?.budgetBytes ?? cfg.recall_budget_bytes);
-    const ranked = this.search(query, forPath);
+    const ranked = this.rank(query, forPath);
     const chosen: Memory[] = [];
+    const sources: Record<string, MemorySource> = {};
     let bytes = 0;
-    for (const m of ranked) {
+    for (const { m, source } of ranked) {
       if (chosen.length >= limit) break;
       const cost = Buffer.byteLength(m.body, "utf8");
       if (chosen.length > 0 && bytes + cost > budget) break;
       chosen.push(m);
+      sources[m.meta.id] = source;
       bytes += cost;
     }
-    return { memories: chosen, omitted: ranked.length - chosen.length };
+    return { memories: chosen, omitted: ranked.length - chosen.length, sources };
   }
 }

@@ -23,7 +23,7 @@ program
   .description(
     "Git-native memory for coding agents — what your agent learns lives in your repo, travels with the clone, and expires when the code changes.",
   )
-  .version("0.1.0");
+  .version("0.2.0");
 
 program
   .command("init")

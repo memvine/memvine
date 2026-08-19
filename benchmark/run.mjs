@@ -98,9 +98,10 @@ function runCase(c) {
     const target = store.add({ ...c.memory, agent: "bench" });
 
     // 1. Retrieval selection --------------------------------------------------
-    const { memories } = store.recall(c.task.query, c.task.path, { limit: RECALL_K });
+    const { memories, sources } = store.recall(c.task.query, c.task.path, { limit: RECALL_K });
     const returnedIds = memories.map((m) => m.meta.id);
     const rank = returnedIds.indexOf(target.meta.id); // -1 if missed
+    const targetSource = sources[target.meta.id]; // why the target matched, if it did
     const hitAt3 = rank >= 0 && rank < 3;
     const hitAt5 = rank >= 0 && rank < 5;
     const injected = returnedIds.filter((id) => distractorIds.has(id)).length;
@@ -138,6 +139,7 @@ function runCase(c) {
       hitAt3,
       hitAt5,
       rank: rank >= 0 ? rank + 1 : null,
+      targetSource,
       injectionRate,
       contextTokens,
       observations,
@@ -220,6 +222,10 @@ function main() {
       `cross-scope (known gap):       ${missed}/${crossScope.length} not retrieved, as expected ` +
         `— lesson relevant but outside the edited file's scope (* in table)`,
     );
+  }
+  const rescued = retr.filter((r) => r.hitAt5 && r.targetSource === "cross-scope").length;
+  if (rescued) {
+    console.log(`hits rescued cross-scope:      ${rescued}  (escape hatch recovered a different-file lesson)`);
   }
   console.log("=".repeat(72));
   console.log(

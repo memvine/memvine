@@ -31,40 +31,57 @@ is. It's stubbed in `adapters/model.mjs` for you to wire to your local model.
 
 ```bash
 npm run build
-node benchmark/run.mjs
+node benchmark/run.mjs          # retrieval + staleness (this file)
+node benchmark/team-sim.mjs     # collaboration: conflicts, duplicates, PR noise
+MEMVINE_EVAL_MOCK=1 node benchmark/agent-eval.mjs   # task-success wiring (see AGENT-EVAL.md)
 ```
+
+Three harnesses, three axes:
+- **`run.mjs`** — retrieval selection + kind-aware staleness (documented below).
+- **`team-sim.mjs`** — a 20-agent busy-repo simulation: merge conflicts (per-file
+  memories vs one shared notes file), duplicate accumulation, and the PR noise a
+  stale-marking commit creates. Fully deterministic, no deps.
+- **`agent-eval.mjs`** — the task-success axis: same agent under no-memory /
+  static-`AGENTS.md` / memvine, reporting success and context tokens. Runs against
+  any OpenAI-compatible model and emits SWE-bench prediction files for the
+  official grader; `MEMVINE_EVAL_MOCK=1` runs the wiring end-to-end with no model
+  or Docker. See [`AGENT-EVAL.md`](AGENT-EVAL.md).
 
 ## Result (8 cases, no model)
 
 ```
-retrieval recall@3:            100%  (7 in-scope cases)
+retrieval recall@3:            100%  (8 in-scope cases)
 retrieval recall@5:            100%
-avg wrong-memory injection:    21%
-avg context tokens:            74
+avg wrong-memory injection:    25%
+avg context tokens:            76
 staleness precision:           100%  (TP=6 FP=0)
 staleness recall:              100%  (TP=6 FN=0)
 unrelated/history false-pos:   0%   (TN=10)
-cross-scope (known gap):       1/1 not retrieved, as expected
+hits rescued cross-scope:      1
 ```
 
 How to read it:
 
 - **Retrieval precision** was the weak axis at first — the original
   substring-count scorer injected **71%** wrong memory. Scope-aware BM25 with a
-  relevance floor and near-duplicate removal cut that to **21%** while holding
-  the target at rank 1 in every in-scope case, and roughly halved the recalled
-  context. The residual is topically-adjacent repo-wide memory that only
-  semantic similarity would catch — the deferred embedding reranker.
+  relevance floor and near-duplicate removal cut that to ~**25%** while holding
+  the target at rank 1–2 in every case, and roughly halved the recalled
+  context. The residual is topically-adjacent memory that only semantic
+  similarity would catch — the deferred embedding reranker.
 - **Staleness** is kind-aware and clean: semantic/procedural memories flag on
   their evidence edit, while **episodic and prospective memories never flag** —
   history and future intentions don't go stale — so the direct edits on those
   cases are counted as negatives, and all 10 negatives stayed silent (0 false
   positives).
-- **Cross-scope is a known gap, surfaced on purpose.** `crossscope-auth` stores
-  a lesson scoped to `src/auth/**` but the task edits `src/api/routes.ts`;
-  recall is scope-first, so it misses (marked `*`). That's the honest limit of
-  path-scoped recall — the case is excluded from the retrieval aggregate and
-  reported on its own line so a real regression can't hide behind it.
+- **Cross-scope recall is now recovered by a capped escape hatch.**
+  `crossscope-auth` stores a lesson scoped to `src/auth/**` while the task edits
+  `src/api/routes.ts`. Recall stays scope-first (exact-path memories lead), but
+  a small number of *strongly* matching cross-scope memories are admitted after
+  them, tagged `cross-scope`, so a lesson relevant across files isn't lost —
+  this reproduces and fixes the two Xarray misses from the SWE-Bench-CL run. The
+  clean in-path cases stayed at 0% injection, so the hatch is additive, not a
+  precision regression. Each recalled memory reports its `via=` source
+  (exact-path / repo-wide / cross-scope) so retrieval stays explainable.
 
 ## Adding cases
 

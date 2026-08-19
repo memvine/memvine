@@ -1,38 +1,55 @@
 /**
- * Model adapter for the one benchmark axis that needs an LLM: does a fresh
- * agent complete the task better WITH memvine's recalled memory than without,
- * and than with a static AGENTS.md holding the same fact?
+ * Model adapter for the coding-agent eval. Two modes:
  *
- * The deterministic harness (run.mjs) does not import this — retrieval and
- * staleness need no model. Wire this up only when you want the task-success
- * axis, e.g. against your local mlx model.
+ * - Real: talks to any OpenAI-compatible /v1/chat/completions endpoint, so it
+ *   works with a local mlx-lm server (`mlx_lm.server`), vLLM, Ollama's OpenAI
+ *   shim, or a hosted API. Configure via env:
+ *     MEMVINE_MODEL_BASE_URL   e.g. http://localhost:8080
+ *     MEMVINE_MODEL_NAME       e.g. mlx-community/Qwen3-8B-4bit
+ *     MEMVINE_MODEL_KEY        optional bearer token
  *
- * Implement `generate` and `judge`, then extend run.mjs to, per case, run four
- * conditions over the SAME task prompt and compare judgments:
- *   - no-memory:   task prompt only
- *   - static-doc:  task prompt + the fact as a plain AGENTS.md line
- *   - memvine:     task prompt + rendered recall() output
- *   - (optional)   memvine with a competing memory system holding the same fact
- *
- * Keep temperature 0 and use the SAME model for generate and judge, as your
- * MemoryArena smoke test did, so the comparison is apples-to-apples.
+ * - Mock (MEMVINE_EVAL_MOCK=1): no network. The "agent" emits a patch that
+ *   echoes the context it was given, so the mock grader can verify whether the
+ *   needed knowledge actually reached the model. This exercises the full runner
+ *   wiring — conditions, seeding, recall, prediction files — without a GPU.
  */
+const MOCK = process.env.MEMVINE_EVAL_MOCK === "1";
+export const mock = MOCK;
 
-/** @typedef {{ prompt: string }} GenInput */
-
-/** Return the model's answer text for a prompt. */
-export async function generate(_input /* : GenInput */) {
-  throw new Error(
-    "model adapter not configured — implement generate() against your local model (e.g. mlx-community/Qwen3-8B-4bit)",
-  );
+export async function generate({ system, prompt }) {
+  if (MOCK) {
+    // The mock agent "writes a patch" that carries forward whatever it was told,
+    // so grading can detect whether the relevant memory was in context.
+    return `diff --git a/mock b/mock\n@@ mock @@\n# system: ${system}\n# context-seen:\n${prompt}`;
+  }
+  const base = process.env.MEMVINE_MODEL_BASE_URL;
+  const model = process.env.MEMVINE_MODEL_NAME;
+  if (!base || !model) {
+    throw new Error(
+      "model adapter not configured — set MEMVINE_MODEL_BASE_URL and MEMVINE_MODEL_NAME " +
+        "(any OpenAI-compatible endpoint), or run with MEMVINE_EVAL_MOCK=1",
+    );
+  }
+  const res = await fetch(`${base.replace(/\/$/, "")}/v1/chat/completions`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(process.env.MEMVINE_MODEL_KEY
+        ? { authorization: `Bearer ${process.env.MEMVINE_MODEL_KEY}` }
+        : {}),
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`model HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
+  }
+  const j = await res.json();
+  return j.choices?.[0]?.message?.content ?? "";
 }
-
-/**
- * Judge whether `answer` satisfies the task's reference expectation.
- * Return true/false. Use the same model at temperature 0.
- */
-export async function judge(_task, _answer) {
-  throw new Error("model adapter not configured — implement judge()");
-}
-
-export const configured = false;

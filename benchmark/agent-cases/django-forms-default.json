@@ -1,0 +1,22 @@
+{
+  "instance_id": "django__django-11433",
+  "repo": "django/django",
+  "issue": "Form fields with required=False drop the model default when the widget returns an empty value. A cleaned empty value should fall back to the field's configured default instead of None.",
+  "firstFile": "django/forms/fields.py",
+  "dependencyMemories": [
+    {
+      "body": "Form field defaults are resolved in BoundField.value(), not in Field.clean(); to change default fallback behavior, patch value resolution in BoundField.value(), not the field cleaners.",
+      "kind": "semantic",
+      "scope": ["django/forms/**"],
+      "confidence": "high",
+      "evidence": "PR #10982"
+    }
+  ],
+  "distractorMemories": [
+    { "body": "The ORM query cache is keyed on the SQL string; invalidate it on schema changes.", "kind": "semantic", "scope": ["django/db/**"], "confidence": "medium" },
+    { "body": "Template autoescaping is toggled per-block, not globally.", "kind": "semantic", "scope": ["django/template/**"], "confidence": "medium" },
+    { "body": "Middleware ordering matters: SessionMiddleware must precede AuthenticationMiddleware.", "kind": "semantic", "scope": ["django/contrib/**"], "confidence": "high" },
+    { "body": "Prefer select_related for FK access in list views to avoid N+1 queries.", "kind": "semantic", "scope": [], "confidence": "low" }
+  ],
+  "mock": { "keyFacts": ["BoundField.value()"] }
+}

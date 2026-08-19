@@ -19,6 +19,21 @@ export interface StaleReport {
 
 export function findStale(store: Store): StaleReport[] {
   const reports: StaleReport[] = [];
+  // The `git diff` is the expensive part of the scan. Memoize the changed-file
+  // list by base commit: every memory confirmed at the same commit shares one
+  // git call instead of running its own. At 1,000 memories learned at a handful
+  // of commits this turns ~1,000 subprocess diffs into a handful. (Net-tree-diff
+  // semantics mean cost still scales with the number of DISTINCT base commits,
+  // not with the memory count.)
+  const changedByBase = new Map<string, string[]>();
+  const changedSince = (base: string): string[] => {
+    let changed = changedByBase.get(base);
+    if (changed === undefined) {
+      changed = changedFilesSince(base, store.root);
+      changedByBase.set(base, changed);
+    }
+    return changed;
+  };
   for (const memory of store.list({ status: ["active"] })) {
     // Per-kind lifecycle, modeled on human memory: episodic memories are
     // historical facts ("we tried X and it failed") — they stay true no
@@ -33,7 +48,7 @@ export function findStale(store: Store): StaleReport[] {
     // from where it was first learned — otherwise revalidating a memory after a
     // refactor wouldn't clear the flag. validated_commit == learned_commit until
     // the first `revise`.
-    const changed = changedFilesSince(memory.meta.validated_commit, store.root);
+    const changed = changedSince(memory.meta.validated_commit);
     const hits = changed.filter((f) =>
       memory.meta.scope.some((g) => minimatch(f, g)),
     );

@@ -65,8 +65,11 @@ test("recall works when the agent passes an absolute path", () => {
   // Absolute path must resolve to the same scope match as the repo-relative one.
   assert.equal(store.search("magic links", absolute).length, 1);
   assert.equal(store.search("magic links", "src/auth/login.ts").length, 1);
-  // ...and a path outside the scope still excludes the scoped memory.
-  assert.equal(store.search("magic links", path.join(store.root, "src/billing/pay.ts")).length, 0);
+  const otherFile = path.join(store.root, "src/billing/pay.ts");
+  // A path outside the scope, with a query that shares nothing, returns nothing.
+  assert.equal(store.search("kubernetes deploy pipeline", otherFile).length, 0);
+  // But a STRONG lexical match is rescued across scope (the cross-scope escape hatch).
+  assert.equal(store.search("magic links", otherFile).length, 1);
 });
 
 test("recall falls back to scoped memories when the query wording doesn't overlap", () => {
@@ -241,6 +244,25 @@ test("validated_commit gates staleness: revalidating at HEAD clears the flag", (
   found.memory.meta.validated_commit = headCommit(repo);
   store.write(found.memory, found.local);
   assert.equal(findStale(store).length, 0, "clears once re-confirmed against HEAD");
+});
+
+test("stale scan is per-base: a change between two bases flags only the older memory", () => {
+  const repo = makeRepo();
+  const store = Store.init(repo);
+  const g = (args: string[]) => execFileSync("git", args, { cwd: repo });
+  // Older memory confirmed at the initial commit.
+  const older = store.add({ body: "login uses magic links", kind: "semantic", scope: ["src/auth/**"] });
+  // Change auth and commit — HEAD advances.
+  fs.writeFileSync(path.join(repo, "src/auth/login.ts"), "export const a = 2;\n");
+  g(["add", "-A"]);
+  g(["commit", "-q", "-m", "change auth"]);
+  // Newer memory confirmed at the NEW HEAD (different base commit).
+  const newer = store.add({ body: "auth session ttl is thirty minutes", kind: "semantic", scope: ["src/auth/**"] });
+  // The change lies between older's base and HEAD, but at/after newer's base —
+  // so the memoized-by-base scan must flag only the older one.
+  const stale = findStale(store).map((r) => r.memory.meta.id);
+  assert.ok(stale.includes(older.meta.id), "older base sees the change");
+  assert.ok(!stale.includes(newer.meta.id), "newer base does not");
 });
 
 test("older memory files without validated_commit default it to learned_commit", () => {

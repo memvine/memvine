@@ -1,6 +1,5 @@
 {
   "name": "crossscope-auth",
-  "expectRetrieval": false,
   "files": {
     "src/auth/middleware.ts": "export const authMiddleware = (req: any) => { req.accountId = 'acc'; };\n",
     "src/api/routes.ts": "export const routes = ['/health'];\n",
