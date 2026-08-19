@@ -65,8 +65,11 @@ test("recall works when the agent passes an absolute path", () => {
   // Absolute path must resolve to the same scope match as the repo-relative one.
   assert.equal(store.search("magic links", absolute).length, 1);
   assert.equal(store.search("magic links", "src/auth/login.ts").length, 1);
-  // ...and a path outside the scope still excludes the scoped memory.
-  assert.equal(store.search("magic links", path.join(store.root, "src/billing/pay.ts")).length, 0);
+  const otherFile = path.join(store.root, "src/billing/pay.ts");
+  // A path outside the scope, with a query that shares nothing, returns nothing.
+  assert.equal(store.search("kubernetes deploy pipeline", otherFile).length, 0);
+  // But a STRONG lexical match is rescued across scope (the cross-scope escape hatch).
+  assert.equal(store.search("magic links", otherFile).length, 1);
 });
 
 test("recall falls back to scoped memories when the query wording doesn't overlap", () => {

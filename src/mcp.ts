@@ -16,14 +16,16 @@ import { findStale, markStale } from "./staleness.js";
 import { headCommit } from "./git.js";
 
 function fmt(result: ReturnType<Store["recall"]>): string {
-  const { memories, omitted } = result;
+  const { memories, omitted, sources } = result;
   if (memories.length === 0) return "No memories found.";
   const body = memories
     .map(
       (m) =>
         `[${m.meta.id}] (${m.meta.kind}, ${m.meta.status}, confidence=${m.meta.confidence}` +
+        (m.meta.verified ? "" : ", UNVERIFIED candidate") +
         (m.meta.tags.length ? `, tags=${m.meta.tags.join(",")}` : "") +
         (m.meta.scope.length ? `, scope=${m.meta.scope.join(",")}` : "") +
+        `, via=${sources[m.meta.id]}` +
         `, learned@${m.meta.learned_commit})\n${m.body}`,
     )
     .join("\n\n---\n\n");
