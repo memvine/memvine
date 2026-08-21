@@ -35,7 +35,7 @@ function fmt(result: ReturnType<Store["recall"]>): string {
 }
 
 export async function serve(store: Store): Promise<void> {
-  const server = new McpServer({ name: "memvine", version: "0.2.0" });
+  const server = new McpServer({ name: "memvine", version: "0.2.1" });
 
   server.tool(
     "recall",

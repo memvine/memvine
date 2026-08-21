@@ -356,10 +356,14 @@ export class Store {
 
   /** Keep >= this fraction of the top BM25 score — drops weak single-term matches. */
   private static readonly RELEVANCE_FLOOR = 0.35;
-  /** Cross-scope memories need a HIGHER bar than repo-wide ones to be admitted. */
-  private static readonly CROSS_SCOPE_FLOOR = 0.6;
-  /** At most this many cross-scope memories ride along, so the escape hatch can't flood recall. */
-  private static readonly MAX_CROSS_SCOPE = 2;
+  /** A cross-scope memory must match at least this many DISTINCT query terms to be admitted. */
+  private static readonly CROSS_SCOPE_MIN_TERMS = 2;
+  /** No on-path memory at all → allow up to this many cross-scope candidates (above the normal floor). */
+  private static readonly MAX_CROSS_NO_PATH = 3;
+  /** On-path memory exists but is weak → allow this many cross-scope candidates... */
+  private static readonly MAX_CROSS_WEAK_PATH = 1;
+  /** ...and require each to clear this fraction of the top BM25 score. */
+  private static readonly CROSS_STRONG_FLOOR = 0.65;
   /** Jaccard above which two memory bodies are treated as near-duplicates. */
   private static readonly DUP_THRESHOLD = 0.85;
 
@@ -367,6 +371,14 @@ export class Store {
     if (!relPath) return "lexical";
     if (m.meta.scope.length === 0) return "repo-wide";
     return m.meta.scope.some((g) => minimatch(relPath, g)) ? "exact-path" : "cross-scope";
+  }
+
+  /** How many DISTINCT query terms a memory contains — the cross-scope precision gate. */
+  private static distinctMatches(m: Memory, termSet: Set<string>): number {
+    const toks = new Set(tokenize(memoryText(m)));
+    let n = 0;
+    for (const t of termSet) if (toks.has(t)) n++;
+    return n;
   }
 
   private byQualityScored(memories: Memory[], relPath?: string): Scored[] {
@@ -378,14 +390,22 @@ export class Store {
   }
 
   /**
-   * Rank memories for recall: scope-aware BM25 with a relevance floor, a capped
-   * cross-scope escape hatch, and near-duplicate removal. When a path is given,
-   * memories SCOPED to it are the reliable signal (always in scope, ranked
-   * first); repo-wide memories ride along above the floor; and a few STRONGLY
-   * matching cross-scope memories are admitted last, so a lesson relevant across
-   * files isn't lost to strict path filtering (SWE-Bench-CL's two Xarray misses)
-   * without reintroducing query-only noise. Every result carries its source so
-   * the caller can show WHY it was returned. Deterministic → explainable.
+   * Rank memories for recall: scope-aware BM25 with a relevance floor, a
+   * CONDITIONAL cross-scope escape hatch, and near-duplicate removal. When a
+   * path is given, memories SCOPED to it are the reliable signal (always in
+   * scope, ranked first) and repo-wide memories ride along above the floor.
+   *
+   * Cross-scope memories (scoped to a DIFFERENT file) come in through a gated
+   * hatch, keyed on how well the ON-PATH memory answers the query, measured by
+   * DISTINCT query-term matches. Every cross-scope candidate must itself match
+   * >=2 distinct terms, and then:
+   *   - no on-path memory at all  → up to 3 candidates above the relevance floor;
+   *   - on-path memory matches <2 terms → 1 candidate, needing >=65% of top BM25;
+   *   - on-path memory matches >=2 terms → hatch closed (it answers the query).
+   * An earlier always-on version regressed path-assisted precision on the public
+   * SWE-Bench-CL set; this gating keeps clean cases clean while recovering a
+   * lesson that genuinely lives in another file. Every result carries its source
+   * so the caller can show WHY it was returned. Deterministic → explainable.
    */
   private rank(query: string, forPath?: string): Scored[] {
     const all = this.list({ status: ["active", "stale"] });
@@ -417,12 +437,39 @@ export class Store {
       const repoWide = scored.filter(
         (s) => s.source === "repo-wide" && s.rel > 0 && s.rel >= floor,
       );
-      const cross = scored
+      // Cross-scope escape hatch, gated on how well the ON-PATH memory answers the
+      // query — measured by DISTINCT query-term matches, not relative BM25 score.
+      // Every cross-scope candidate must itself match >=2 distinct terms.
+      const termSet = new Set(terms);
+      const candidates = scored
         .filter(
-          (s) => s.source === "cross-scope" && s.rel > 0 && s.rel >= top * Store.CROSS_SCOPE_FLOOR,
+          (s) =>
+            s.source === "cross-scope" &&
+            s.rel > 0 &&
+            Store.distinctMatches(s.m, termSet) >= Store.CROSS_SCOPE_MIN_TERMS,
         )
-        .sort((a, b) => b.rel * Store.qualityWeight(b.m) - a.rel * Store.qualityWeight(a.m))
-        .slice(0, Store.MAX_CROSS_SCOPE);
+        .sort((a, b) => b.rel * Store.qualityWeight(b.m) - a.rel * Store.qualityWeight(a.m));
+      const bestExactTerms = Math.max(
+        0,
+        ...exact.map((e) => Store.distinctMatches(e.m, termSet)),
+      );
+      let cross: Scored[];
+      if (exact.length === 0) {
+        // No on-path memory at all: let up to three cross-file lessons in, above
+        // the normal relevance floor — the needed one may be the third.
+        cross = candidates
+          .filter((s) => s.rel >= floor)
+          .slice(0, Store.MAX_CROSS_NO_PATH);
+      } else if (bestExactTerms < Store.CROSS_SCOPE_MIN_TERMS) {
+        // On-path memory exists but is weak (matches <2 terms): admit a single,
+        // strongly-matching cross-file lesson only.
+        cross = candidates
+          .filter((s) => s.rel >= top * Store.CROSS_STRONG_FLOOR)
+          .slice(0, Store.MAX_CROSS_WEAK_PATH);
+      } else {
+        // On-path memory matches >=2 terms — it answers the query. Hatch closed.
+        cross = [];
+      }
       included = [...exact, ...repoWide, ...cross];
     }
     if (included.length === 0) {

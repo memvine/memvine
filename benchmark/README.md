@@ -73,15 +73,18 @@ How to read it:
   history and future intentions don't go stale — so the direct edits on those
   cases are counted as negatives, and all 10 negatives stayed silent (0 false
   positives).
-- **Cross-scope recall is now recovered by a capped escape hatch.**
+- **Cross-scope recall uses a conditional escape hatch.**
   `crossscope-auth` stores a lesson scoped to `src/auth/**` while the task edits
-  `src/api/routes.ts`. Recall stays scope-first (exact-path memories lead), but
-  a small number of *strongly* matching cross-scope memories are admitted after
-  them, tagged `cross-scope`, so a lesson relevant across files isn't lost —
-  this reproduces and fixes the two Xarray misses from the SWE-Bench-CL run. The
-  clean in-path cases stayed at 0% injection, so the hatch is additive, not a
-  precision regression. Each recalled memory reports its `via=` source
-  (exact-path / repo-wide / cross-scope) so retrieval stays explainable.
+  `src/api/routes.ts`. Recall stays scope-first (exact-path memories lead); a
+  cross-scope memory is reached for only when no on-path memory answers the
+  query well AND it matches ≥2 distinct query terms, capped at two. This
+  recovers the synthetic case here (`via=cross-scope`, `hits rescued cross-scope`).
+  **On the independent public SWE-Bench-CL set this is not yet proven:** an
+  earlier always-on version of this hatch missed the two Xarray cross-file cases
+  *and* raised path-assisted non-gold injection to ~52%; the conditional policy
+  above is the correction, but the real-set numbers must be re-measured with the
+  external harness before any "fixes the Xarray cases" claim is made. Each
+  recalled memory reports its `via=` source so retrieval stays explainable.
 
 ## Adding cases
 
