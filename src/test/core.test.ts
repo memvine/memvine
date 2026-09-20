@@ -123,7 +123,7 @@ test("recall falls back to scoped memories when the query wording doesn't overla
 test("supersede retires the old memory", () => {
   const store = Store.init(makeRepo());
   const old = store.add({ body: "API uses REST", kind: "semantic" });
-  store.add({ body: "API migrated to gRPC", kind: "semantic", supersedes: old.meta.id });
+  store.add({ body: "API migrated to gRPC", kind: "semantic", supersedes: old.meta.id, verified: true });
   const retired = store.get(old.meta.id);
   assert.equal(retired?.memory.meta.status, "superseded");
   assert.equal(store.list({ status: ["active"] }).length, 1);
@@ -204,12 +204,13 @@ test("recall stops at the byte budget even under the count cap", () => {
   assert.ok(r.omitted > 0);
 });
 
-test("recall always returns the top hit, even if it alone exceeds the budget", () => {
+test("recall omits an oversized hit rather than exceeding the budget", () => {
   const store = Store.init(makeRepo());
   store.add({ body: "gamma ".repeat(500), kind: "semantic" });
   const r = store.recall("gamma", undefined, { budgetBytes: 10 });
-  assert.equal(r.memories.length, 1);
-  assert.equal(r.omitted, 0);
+  assert.equal(r.memories.length, 0);
+  assert.equal(r.omitted, 1);
+  assert.ok(Buffer.byteLength(r.text) <= 10);
 });
 
 test("recall ranks higher-confidence memories above equally-relevant low-confidence ones", () => {

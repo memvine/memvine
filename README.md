@@ -5,21 +5,18 @@ repo, travels with the clone, and expires when the code changes.
 
 ## Why
 
-Coding agents forget. Claude Code's auto memory stays on one machine and
-loads only the first 200 lines of its index at session start. Windsurf keeps
-memories per-workspace and its own docs tell you not to rely on them. The
-hosted memory layers sync your team's knowledge through a vendor's cloud, on
-a subscription.
+Coding agents need a way to reuse discoveries across tasks and teammates,
+while noticing when the code behind a remembered fact changes.
 
 memvine stores each memory as a markdown file in `.memvine/`, inside the
-repo. `git push` shares it with your team. `git clone` onboards a new
+repo. Commit the files, then `git push` shares them with your team. `git clone` onboards a new
 machine. Every memory records the commit it was learned at, so when the code
 it describes changes, memvine flags the memory stale and your agent
 re-checks it instead of repeating something that stopped being true three
 merges ago.
 
 There is no database, no embedding index, no daemon, no account, and no API
-key. Retrieval works on plain files: scope-filtered BM25 with a token budget,
+key. Retrieval works on plain files: scope-filtered BM25 with a byte budget,
 so it stays fast and its results are explainable.
 
 ## Architecture
@@ -28,21 +25,43 @@ so it stays fast and its results are explainable.
 
 ## Quickstart
 
-```bash
-npm install -g memvine
-cd your-repo
-memvine init
-```
-
-Add it to your agent. For Claude Code:
+The usable CLI release is pending; npm 0.0.1 was a placeholder. For now,
+install from source with Node 22+ and Git (npm 10 works):
 
 ```bash
-claude mcp add memvine -- memvine serve
+git clone https://github.com/memvine/memvine.git
+cd memvine
+npm ci
+npm run build
+npm link
+cd /absolute/path/to/your-repo
+memvine init --codex
+memvine doctor
 ```
 
-Prefer to run from source (for hacking on memvine)? `git clone`, then
-`npm install && npm run build && npm link` puts the `memvine` command on your
-PATH.
+The local checks currently run on Node 22.22.0/macOS. CI is configured for
+Node 22.0.0, current 22 and 24 on macOS/Linux; require green CI before release.
+Node 18/20 and Windows are not release-tested targets.
+
+`memvine init --codex` creates the store, agent instructions and a project-local
+`.codex/config.toml` entry automatically. Open the repository as a trusted project
+in Codex, restart the client, and start a fresh task. Ask: **“Call Memvine recall
+for this project.”** Verify an actual tool result. Codex controls project trust and
+client restarts; Memvine does not bypass them.
+
+Setup locates the running Node executable and Memvine installation, so users do
+not need to copy paths or install the standalone Codex CLI. It preserves existing
+configuration/comments, does nothing on identical repeated setup, and reports
+conflicting or disabled Memvine entries without overwriting them. Configuration
+contains machine-specific paths: rerun setup in each clone/worktree; review the
+existing entry if you move the installation. Avoid committing those absolute paths
+as team defaults. Use a persistent source/global install, not an ephemeral npx
+cache, for this version of setup.
+
+Plain `memvine init` creates only the store and instructions. For Claude Code,
+from the target repository, use `claude mcp add memvine -- memvine serve`.
+See the [official Codex MCP configuration reference](https://developers.openai.com/codex/mcp)
+for project trust, manual overrides and managed-environment constraints.
 
 Memories are plain files under `.memvine/memories/`, but they only reach
 another machine once they're committed and pushed — `remember` writes the
@@ -51,52 +70,34 @@ and memory comes up empty, check that `.memvine/memories/` was committed on
 the machine that learned them (`git status` in `.memvine/`). Personal notes
 under `.memvine/local/` are gitignored by design and never travel.
 
-Your agent gets four tools: `recall` fetches relevant memories at task
-start, `remember` stores knowledge after checking for contradictions,
-`revise` updates or retires a memory after re-checking it, and
-`check_stale` flags memories whose code has changed.
+Your agent gets six tools:
+
+| Tool | Purpose |
+|---|---|
+| `recall` | Retrieve relevant memories with status and a bounded response |
+| `read_memory` | Read a known memory ID in bounded pages using `nextOffset` |
+| `remember` | Save a local candidate or explicitly verified shared memory |
+| `validate` | Reconfirm a memory and explicitly promote it to shared storage |
+| `revise` | Correct or archive an existing memory |
+| `check_stale` | Persist newly detected stale status |
 
 ## Making your agent actually use it
 
-The tools are there, but MCP tools are *opt-in* — the agent calls `remember`
-only if it decides to, and agents are trained to finish and stop, not to
-journal what they learned. Two levers fix this:
+`memvine init` writes managed blocks into `AGENTS.md` and `CLAUDE.md`.
+The MCP server also supplies capture instructions: recall at task start;
+save reusable discoveries with scope and evidence as they happen; avoid
+duplicates, secrets and routine progress; report failed writes.
 
-**1. The standing instruction (automatic).** `memvine init` writes a
-memvine block into `CLAUDE.md` and `AGENTS.md` telling the agent to `recall`
-at the start of every task and `remember` when it finishes one or learns
-something durable. These files are loaded into every session, so both Claude
-Code (`CLAUDE.md`) and Codex (`AGENTS.md`) see the instruction. Re-run
-`memvine compile` to refresh the block after new memories land.
+Instructions guide the agent; they do not guarantee a tool call or a correct
+memory. Verify actual files with `memvine list` and Git. A useful first check
+is to have one task inspect and save a real project convention, then ask a
+fresh task to recall it. The automated MCP test exercises tool transport and
+storage; it does not prove an agent will independently choose to remember.
 
-**2. A Stop hook (hard enforcement).** An instruction is a nudge; a hook is
-a guarantee. A hook *cannot call an MCP tool itself* — hooks run shell
-commands — but a `Stop` hook can block the agent from finishing and hand it
-a message, which makes it consider storing before it's allowed to stop. Add
-this to `.claude/settings.json` (loop-safe via `stop_hook_active`):
-
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "input=$(cat); echo \"$input\" | grep -q '\"stop_hook_active\": *true' && exit 0; printf '{\"decision\":\"block\",\"reason\":\"Before finishing: if this session produced any durable knowledge (a fix, a gotcha, a decision, a convention, a runbook), call the memvine remember tool to store it, then stop. If nothing durable was learned, just stop.\"}'"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-This is why a hook that ran `memvine serve` or `memvine recall` did nothing
-for storage — only the agent knows *what* to remember, so the hook's job is
-to re-prompt the agent, not to store anything itself. Codex has no equivalent
-Stop hook; there, lever 1 (the `AGENTS.md` instruction) is what you rely on.
+When a BM25 query misses, retry using identifiers or file paths from the code.
+Query-only searches without matching terms return no results. Path-assisted
+recall can still return scoped facts without lexical overlap. Oversized entries
+are omitted; use IDs from `memvine list` with `read_memory` to page their bodies.
 
 ## What a memory looks like
 
@@ -108,6 +109,9 @@ tags: [test, auth]
 scope: [src/auth/**]
 learned_at: 2026-07-22T21:14:00Z
 learned_commit: a1b4c9e
+validated_commit: a1b4c9e
+verified: true
+evidence: "Confirmed by running the auth integration suite"
 agent: claude-code
 status: active
 confidence: high
@@ -117,7 +121,7 @@ first (`make vault-dev`), otherwise they fail with connection refused —
 this is NOT a flaky test.
 ```
 
-Commit it and every teammate's agent knows it too. Refactor `src/auth/`
+Commit and push it so teammates can retrieve it. Refactor `src/auth/`
 and memvine marks it stale for re-checking.
 
 ## Memory types
@@ -148,7 +152,10 @@ no matter what the code does now.
 | Command | Does |
 |---|---|
 | `memvine init` | Create the `.memvine/` store |
+| `memvine init --codex` | Initialize and register the project’s Codex MCP server |
 | `memvine add "..." -k semantic -t test auth -s "src/auth/**"` | Add a memory by hand |
+| `memvine validate <id> --evidence "checked code"` | Reconfirm and promote a local memory to shared storage |
+| `memvine doctor` | Report store/config problems, local-only data and uncommitted shared changes |
 | `memvine list` | List memories (`--all` includes retired ones) |
 | `memvine stale` | Report memories whose scoped files changed (`--mark` to flag them) |
 | `memvine compile` | Render top memories into CLAUDE.md / AGENTS.md |
@@ -161,8 +168,35 @@ re-validation run in the calling agent, steered by the MCP tool
 descriptions. The agent that is already running pays for its own thinking.
 memvine's code is git commands and file operations.
 
-**Staleness is a git query.** `git diff learned_commit..HEAD` against each
+**Staleness is a git query.** `git diff validated_commit..HEAD` against each
 memory's scope, cheap enough to run at every session start.
+
+Recall and search check scoped semantic/procedural memories against their
+`validated_commit` automatically. Changed-code memories are returned as
+`stale` and down-ranked, without rewriting their stored files. A newly compiled
+digest excludes those memories until revalidation. You do not need to run
+`stale --mark` first; that command remains available to persist stale status.
+Existing `CLAUDE.md` / `AGENTS.md` digests are snapshots: rerun `memvine compile`
+to refresh them after code changes. A changed scope means the memory needs
+checking, not that its content is necessarily false. Untracked, staged and
+unstaged changes are included. Missing validation history (for example a shallow
+clone) produces an unknown-freshness warning and excludes the fact from digests.
+Fetch the missing commits or revalidate against a known commit.
+
+Validation records HEAD, preserves `learned_at`/`learned_commit`, and updates
+`validated_at`/`validated_commit`. Scoped dirty files still trigger a warning
+immediately after validation: commit the checked code and revalidate to obtain
+a stable Git baseline. Unscoped memories cannot be automatically checked.
+Verification is asserted by the caller, not independently proven by Memvine.
+Explicitly validating a personal local note promotes it; keep it local by using
+`revise` instead. An unverified replacement never retires shared knowledge.
+
+The recall byte budget covers rendered text including metadata, not the MCP
+JSON envelope or the library's raw memory objects. Very small budgets may clip
+even the diagnostic text. Digest budgets cover the digest body; HTML markers
+and surrounding user instructions are outside that budget. `doctor` reports
+malformed entries that recall skips. Atomic writes protect individual files;
+multi-file promotion is recoverable but not a concurrent transaction.
 
 **Shared and local are separate.** `.memvine/memories/` is committed and
 reviewed in PRs like the code it describes. `.memvine/local/` is gitignored
@@ -171,10 +205,24 @@ text in your repo.
 
 ## Status
 
-v0.2. Retrieval is scope-aware BM25 with a token budget, memories carry a
+v0.2. Retrieval is scope-aware BM25 with a byte budget, memories carry a
 verified/validated lifecycle, and staleness is measured from the last
 confirmed commit. The memory schema may still change before 1.0. Issues and
-PRs welcome, see [CONTRIBUTING.md](CONTRIBUTING.md).
+PRs welcome, see [CONTRIBUTING.md](https://github.com/memvine/memvine/blob/main/CONTRIBUTING.md).
+
+## Development checks
+
+```bash
+npm test
+npm run benchmark
+npm run test:package
+```
+
+The package smoke test packs the checkout and installs production dependencies
+in a temporary directory, then exercises CLI and MCP. Synthetic benchmark
+regressions fail the command. These authored fixtures and the mock agent adapter
+are not evidence of improved real-world coding success; real agent evaluations
+and capture/reuse pilot sessions remain release/marketing work.
 
 ## License
 

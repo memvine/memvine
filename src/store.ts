@@ -10,6 +10,7 @@
  * No database. No index. Git is the sync, history, and blame.
  */
 import * as fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import * as path from "node:path";
 import matter from "gray-matter";
 import { minimatch } from "minimatch";
@@ -21,6 +22,8 @@ import {
   validateMeta,
 } from "./schema.js";
 import { headCommit, isGitRepo, repoRoot } from "./git.js";
+import { withFreshness } from "./staleness.js";
+import { clipBytes, renderRecall } from "./render.js";
 
 export const DIR_NAME = ".memvine";
 
@@ -123,7 +126,7 @@ export interface StoreConfig {
   digest_budget_bytes: number;
   /** Max memories a single `recall` returns, before the token budget applies. */
   recall_max_memories: number;
-  /** Byte budget for the memory bodies a single `recall` returns. */
+  /** Byte budget for the rendered text a single `recall` returns. */
   recall_budget_bytes: number;
 }
 
@@ -142,6 +145,33 @@ export class Store {
   constructor(root: string) {
     this.root = root;
     this.dir = path.join(root, DIR_NAME);
+    this.assertDirectory(this.dir);
+  }
+
+  private assertDirectory(directory: string): void {
+    try {
+      const stat = fs.lstatSync(directory);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`Not a safe memory directory: ${directory}`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+
+  diagnostics(): string[] {
+    const issues: string[] = [];
+    try { this.config(); } catch (error) { issues.push(String(error)); }
+    for (const name of ["memories", "local"]) {
+      const dir = path.join(this.dir, name);
+      try {
+        this.assertDirectory(dir);
+        if (!fs.existsSync(dir)) continue;
+        for (const file of fs.readdirSync(dir).filter(f => f.endsWith(".md"))) {
+          try { this.read(path.join(dir, file), name === "memories"); }
+          catch (error) { issues.push(`${name}/${file}: ${String(error)}`); }
+        }
+      } catch (error) { issues.push(String(error)); }
+    }
+    return issues;
   }
 
   /** Locate an existing store at or above cwd. */
@@ -159,6 +189,8 @@ export class Store {
       );
     }
     const store = new Store(repoRoot(cwd));
+    store.assertDirectory(path.join(store.dir, "memories"));
+    store.assertDirectory(path.join(store.dir, "local"));
     fs.mkdirSync(path.join(store.dir, "memories"), { recursive: true });
     fs.mkdirSync(path.join(store.dir, "local"), { recursive: true });
     const cfgPath = path.join(store.dir, "config.json");
@@ -173,20 +205,26 @@ export class Store {
   }
 
   config(): StoreConfig {
-    try {
-      return {
-        ...DEFAULT_CONFIG,
-        ...JSON.parse(
-          fs.readFileSync(path.join(this.dir, "config.json"), "utf8"),
-        ),
-      };
-    } catch {
-      return DEFAULT_CONFIG;
+    const file = path.join(this.dir, "config.json");
+    if (!fs.existsSync(file)) return { ...DEFAULT_CONFIG };
+    if (fs.lstatSync(file).isSymbolicLink()) throw new Error("Config must not be a symlink");
+    const value = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid memvine config");
+    const config = { ...DEFAULT_CONFIG, ...value };
+    if (config.version !== 1 || !["inline", "branch"].includes(config.commit_mode)) throw new Error("Unsupported memvine config");
+    for (const field of ["digest_budget_bytes", "recall_max_memories", "recall_budget_bytes"] as const) {
+      if (!Number.isSafeInteger(config[field]) || config[field] < 1) throw new Error(`Invalid config ${field}`);
     }
+    return config;
   }
 
   private fileFor(id: string, local: boolean): string {
-    return path.join(this.dir, local ? "local" : "memories", `${id}.md`);
+    if (!/^mem_[a-z0-9]{4,}$/.test(id)) throw new Error("Invalid memory id");
+    this.assertDirectory(this.dir);
+    const directory = path.join(this.dir, local ? "local" : "memories");
+    this.assertDirectory(directory);
+    if (fs.existsSync(directory) && fs.lstatSync(directory).isSymbolicLink()) throw new Error("Memory directory must not be a symlink");
+    return path.join(directory, `${id}.md`);
   }
 
   /**
@@ -235,15 +273,9 @@ export class Store {
     // The gate: only a verified memory (and not an explicitly personal one)
     // lands in the committed store; unverified candidates stay in gitignored
     // local/ so raw or guessed knowledge never reaches the team by accident.
-    const local = opts.local ?? !verified;
+    const local = !verified || opts.local === true;
     this.write(memory, local);
-    if (opts.supersedes) {
-      const old = this.get(opts.supersedes);
-      if (old) {
-        old.memory.meta.status = "superseded";
-        this.write(old.memory, old.local);
-      }
-    }
+    if (!local) this.retirePredecessor(memory);
     return memory;
   }
 
@@ -252,24 +284,49 @@ export class Store {
    * re-checked it against real evidence: sets verified, records evidence and the
    * confirming commit, and moves the file from local/ into the committed store.
    */
+  private retirePredecessor(memory: Memory): void {
+    const predecessor = memory.meta.supersedes;
+    if (!memory.meta.verified || !predecessor || predecessor === memory.meta.id) return;
+    const old = this.get(predecessor);
+    if (old && old.memory.meta.status !== "superseded") {
+      old.memory.meta.status = "superseded";
+      this.write(old.memory, old.local);
+    }
+  }
+
   validate(id: string, evidence?: string): { memory: Memory; promoted: boolean } | null {
     const found = this.get(id);
     if (!found) return null;
     found.memory.meta.verified = true;
     found.memory.meta.validated_commit = headCommit(this.root);
+    found.memory.meta.validated_at = new Date().toISOString();
+    found.memory.meta.status = "active";
+    delete found.memory.meta.stale_since;
     if (evidence) found.memory.meta.evidence = evidence;
     const promoted = found.local;
-    if (promoted) fs.rmSync(this.fileFor(id, true)); // remove the local copy
-    this.write(found.memory, false); // write into the committed store
+    // Publish first. If publication or retirement fails, preserve the local
+    // candidate so retrying validation can complete the operation safely.
+    this.write(found.memory, false);
+    this.retirePredecessor(found.memory);
+    const localFile = this.fileFor(id, true);
+    if (fs.existsSync(localFile)) fs.rmSync(localFile);
     return { memory: found.memory, promoted };
   }
 
   write(memory: Memory, local: boolean): void {
+    const errors = validateMeta(memory.meta);
+    if (errors.length) throw new Error(errors.join("; "));
+    if (!local && !memory.meta.verified) throw new Error("Unverified memories must remain local");
     const file = this.fileFor(memory.meta.id, local);
-    // Ensure the target dir exists: git doesn't track the empty memories/ dir,
-    // so a fresh branch checkout can prune it out from under us.
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, matter.stringify(memory.body + "\n", memory.meta));
+    if (fs.existsSync(file) && fs.lstatSync(file).isSymbolicLink()) throw new Error("Memory file must not be a symlink");
+    const temporary = `${file}.${randomUUID()}.tmp`;
+    try {
+      fs.writeFileSync(temporary, matter.stringify(memory.body + "\n", memory.meta), { flag: "wx" });
+      fs.renameSync(temporary, file);
+    } finally {
+      if (fs.existsSync(temporary)) fs.rmSync(temporary);
+    }
   }
 
   get(id: string): { memory: Memory; local: boolean } | null {
@@ -283,13 +340,22 @@ export class Store {
   }
 
   private read(filePath: string, committed: boolean): Memory {
+    if (fs.lstatSync(filePath).isSymbolicLink()) throw new Error("Memory file must not be a symlink");
     const parsed = matter(fs.readFileSync(filePath, "utf8"));
-    const meta = parsed.data as MemoryMeta;
+    // gray-matter caches parsed objects; never mutate its shared metadata.
+    const meta = structuredClone(parsed.data) as MemoryMeta;
+    for (const key of ["learned_at", "validated_at"] as const) {
+      const value: unknown = meta[key];
+      if (value instanceof Date && Number.isFinite(value.getTime())) meta[key] = value.toISOString();
+    }
     meta.tags ??= []; // tolerate pre-tags memory files
     meta.validated_commit ??= meta.learned_commit; // pre-validated_commit files
     // Pre-verified-field files: a memory already in the committed store was, by
     // definition, shared/trusted; one in local/ is a personal or unvalidated note.
     meta.verified ??= committed;
+    const errors = validateMeta(meta);
+    if (errors.length) throw new Error(`${filePath}: ${errors.join("; ")}`);
+    if (path.basename(filePath) !== `${meta.id}.md`) throw new Error("Memory filename and id differ");
     return { meta, body: parsed.content.trim() };
   }
 
@@ -306,12 +372,13 @@ export class Store {
     }
     const memories: Memory[] = [];
     for (const { path: dir, committed } of dirs) {
+      this.assertDirectory(dir);
       if (!fs.existsSync(dir)) continue;
       for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".md"))) {
         try {
           memories.push(this.read(path.join(dir, f), committed));
         } catch {
-          // Unparseable file: skip rather than crash; `memvine doctor` (future) reports these.
+          // Unparseable file: skip rather than crash; `memvine doctor` reports these.
         }
       }
     }
@@ -408,7 +475,7 @@ export class Store {
    * so the caller can show WHY it was returned. Deterministic → explainable.
    */
   private rank(query: string, forPath?: string): Scored[] {
-    const all = this.list({ status: ["active", "stale"] });
+    const all = withFreshness(this.root, this.list({ status: ["active", "stale"] }));
     const relPath = forPath ? this.relPath(forPath) : undefined;
     const terms = tokenize(query);
     if (terms.length === 0) {
@@ -473,6 +540,7 @@ export class Store {
       included = [...exact, ...repoWide, ...cross];
     }
     if (included.length === 0) {
+      if (!relPath) return []; // A query without any matches should abstain.
       const base = relPath
         ? all.filter((m) => this.classify(m, relPath) !== "cross-scope")
         : all;
@@ -505,30 +573,33 @@ export class Store {
    * Recall for an agent: ranked search, then bounded by BOTH a top-k cap and a
    * byte budget. top-k alone isn't enough — a handful of long memories can still
    * blow a context window — so we stop once either limit is hit, dropping the
-   * lowest-ranked first. The highest-ranked memory is always included (even if it
-   * alone exceeds the budget) so a relevant hit is never silently swallowed.
+   * lowest-ranked first. Oversized memories are omitted rather than bypassing the budget. The
+   * formatted response includes an omission count; read_memory supports paging.
    * `sources` maps each returned id to why it matched (exact-path/cross-scope/…).
    */
   recall(
     query: string,
     forPath?: string,
     opts?: { limit?: number; budgetBytes?: number },
-  ): { memories: Memory[]; omitted: number; sources: Record<string, MemorySource> } {
+  ): { memories: Memory[]; omitted: number; sources: Record<string, MemorySource>; text: string } {
     const cfg = this.config();
     const limit = Math.max(1, opts?.limit ?? cfg.recall_max_memories);
     const budget = Math.max(1, opts?.budgetBytes ?? cfg.recall_budget_bytes);
+    if (!Number.isSafeInteger(limit) || !Number.isSafeInteger(budget)) throw new Error("Recall limits must be finite integers");
     const ranked = this.rank(query, forPath);
     const chosen: Memory[] = [];
     const sources: Record<string, MemorySource> = {};
-    let bytes = 0;
     for (const { m, source } of ranked) {
       if (chosen.length >= limit) break;
-      const cost = Buffer.byteLength(m.body, "utf8");
-      if (chosen.length > 0 && bytes + cost > budget) break;
+      const candidateSources = { ...sources, [m.meta.id]: source };
+      const candidate = [...chosen, m];
+      if (Buffer.byteLength(renderRecall(candidate, candidateSources, ranked.length - candidate.length)) > budget) continue;
       chosen.push(m);
       sources[m.meta.id] = source;
-      bytes += cost;
     }
-    return { memories: chosen, omitted: ranked.length - chosen.length, sources };
+    const omitted = ranked.length - chosen.length;
+    const text = renderRecall(chosen, sources, omitted);
+    return { memories: chosen, omitted, sources, text: clipBytes(text, budget) };
+
   }
 }

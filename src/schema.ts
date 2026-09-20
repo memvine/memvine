@@ -40,15 +40,16 @@ export interface MemoryMeta {
   /** Path globs this memory is about, e.g. ["src/auth/**"]. Empty = repo-wide. */
   scope: string[];
   learned_at: string; // ISO timestamp
-  learned_commit: string; // git HEAD short SHA when first learned (immutable provenance)
+  learned_commit: string; // git HEAD SHA when first learned (immutable provenance)
   /**
-   * Short SHA at which this memory was last confirmed true — set to
+   * SHA at which this memory was last confirmed true — set to
    * learned_commit at creation, and advanced to HEAD each time an agent
    * revalidates it (via `revise`). Staleness is measured from HERE, not from
    * learned_commit, so a memory re-confirmed after a refactor doesn't
    * immediately re-flag on the same changes.
    */
   validated_commit: string;
+  validated_at?: string;
   agent: string; // which tool wrote it, e.g. "claude-code"
   status: MemoryStatus;
   supersedes?: string; // id of the memory this one replaces
@@ -68,6 +69,8 @@ export interface MemoryMeta {
 }
 
 export interface Memory {
+  /** Derived at read time; never persisted as proof of freshness. */
+  freshness?: "changed" | "unknown";
   meta: MemoryMeta;
   /** The memory content itself: plain markdown. */
   body: string;
@@ -100,7 +103,22 @@ export function validateMeta(meta: Partial<MemoryMeta>): string[] {
   if (!meta.kind || !KINDS.includes(meta.kind)) {
     errors.push(`invalid kind: ${meta.kind}`);
   }
-  if (!meta.learned_commit) errors.push("missing learned_commit");
-  if (!meta.learned_at) errors.push("missing learned_at");
+  for (const key of ["learned_commit", "validated_commit"] as const) {
+    if (typeof meta[key] !== "string" || !/^[a-f0-9]{7,40}$/.test(meta[key]!)) errors.push(`invalid ${key}`);
+  }
+  for (const key of ["learned_at", "validated_at"] as const) {
+    if ((key === "learned_at" || meta[key] !== undefined) &&
+        (typeof meta[key] !== "string" || !Number.isFinite(Date.parse(meta[key]!)))) errors.push(`invalid ${key}`);
+  }
+  for (const key of ["scope", "tags"] as const) {
+    if (!Array.isArray(meta[key]) || !meta[key]!.every(value => typeof value === "string")) errors.push(`invalid ${key}`);
+  }
+  if (!["active", "stale", "superseded", "archived"].includes(meta.status ?? "")) errors.push("invalid status");
+  if (!["high", "medium", "low"].includes(meta.confidence ?? "")) errors.push("invalid confidence");
+  if (typeof meta.verified !== "boolean") errors.push("invalid verified");
+  if (typeof meta.agent !== "string") errors.push("invalid agent");
+  if (meta.supersedes !== undefined && !/^mem_[a-z0-9]{4,}$/.test(meta.supersedes)) errors.push("invalid supersedes");
+  if (meta.evidence !== undefined && typeof meta.evidence !== "string") errors.push("invalid evidence");
+  if (meta.stale_since !== undefined && (typeof meta.stale_since !== "string" || !/^[a-f0-9]{7,40}$/.test(meta.stale_since))) errors.push("invalid stale_since");
   return errors;
 }

@@ -8,16 +8,22 @@
  * expected to revalidate (confirm → active, wrong → supersede or archive).
  */
 import { minimatch } from "minimatch";
-import { changedFilesSince, headCommit } from "./git.js";
+import { inspectChangesSince, headCommit, ChangeScan } from "./git.js";
 import { Memory, STALEABLE_KINDS } from "./schema.js";
-import { Store } from "./store.js";
+import type { Store } from "./store.js";
 
 export interface StaleReport {
   memory: Memory;
   changedFiles: string[];
+  unknown?: boolean;
 }
 
 export function findStale(store: Store): StaleReport[] {
+  return findStaleMemories(store.root, store.list({ status: ["active"] }));
+}
+
+/** Shared detector for persisted scans and read-time freshness snapshots. */
+function findStaleMemories(root: string, memories: Memory[]): StaleReport[] {
   const reports: StaleReport[] = [];
   // The `git diff` is the expensive part of the scan. Memoize the changed-file
   // list by base commit: every memory confirmed at the same commit shares one
@@ -25,16 +31,17 @@ export function findStale(store: Store): StaleReport[] {
   // of commits this turns ~1,000 subprocess diffs into a handful. (Net-tree-diff
   // semantics mean cost still scales with the number of DISTINCT base commits,
   // not with the memory count.)
-  const changedByBase = new Map<string, string[]>();
-  const changedSince = (base: string): string[] => {
+  const changedByBase = new Map<string, ChangeScan>();
+  const changedSince = (base: string): ChangeScan => {
     let changed = changedByBase.get(base);
     if (changed === undefined) {
-      changed = changedFilesSince(base, store.root);
+      changed = inspectChangesSince(base, root);
       changedByBase.set(base, changed);
     }
     return changed;
   };
-  for (const memory of store.list({ status: ["active"] })) {
+  for (const memory of memories) {
+    if (!["active", "stale"].includes(memory.meta.status)) continue;
     // Per-kind lifecycle, modeled on human memory: episodic memories are
     // historical facts ("we tried X and it failed") — they stay true no
     // matter how the code changes, so they never auto-stale. Prospective
@@ -49,14 +56,29 @@ export function findStale(store: Store): StaleReport[] {
     // refactor wouldn't clear the flag. validated_commit == learned_commit until
     // the first `revise`.
     const changed = changedSince(memory.meta.validated_commit);
-    const hits = changed.filter((f) =>
-      memory.meta.scope.some((g) => minimatch(f, g)),
+    const hits = changed.files.filter((f) =>
+      memory.meta.scope.some((g) => minimatch(f, g, { dot: true })),
     );
-    if (hits.length > 0) {
-      reports.push({ memory, changedFiles: hits });
+    if (hits.length > 0 || changed.unknown) {
+      reports.push({ memory, changedFiles: hits, unknown: changed.unknown });
     }
   }
   return reports;
+}
+
+/**
+ * Derive effective status for this read without changing stored metadata.
+ * Explicitly stale entries remain stale; active scoped facts are checked
+ * against their validation commit before ranking or digest selection.
+ */
+export function withFreshness(root: string, memories: Memory[]): Memory[] {
+  const stale = new Map(findStaleMemories(root, memories).map(r => [r.memory.meta.id, r]));
+  return memories.map(memory => {
+    const report = stale.get(memory.meta.id);
+    return report
+      ? { ...memory, meta: { ...memory.meta, status: "stale" as const }, freshness: report.unknown ? "unknown" as const : "changed" as const }
+      : memory;
+  });
 }
 
 /** Mark the given memories stale (idempotent). Returns count marked. */

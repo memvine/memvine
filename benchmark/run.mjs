@@ -223,6 +223,10 @@ function main() {
         `— lesson relevant but outside the edited file's scope (* in table)`,
     );
   }
+  if (retr.some(r => !r.hitAt3) || results.some(r => !r.staleCorrect)) {
+    console.error("Synthetic regression: expected retrieval or freshness result failed.");
+    process.exitCode = 1;
+  }
   const rescued = retr.filter((r) => r.hitAt5 && r.targetSource === "cross-scope").length;
   if (rescued) {
     console.log(`hits rescued cross-scope:      ${rescued}  (escape hatch recovered a different-file lesson)`);

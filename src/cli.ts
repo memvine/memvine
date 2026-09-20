@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /** memvine CLI: init / add / list / stale / compile / serve */
+import { configureCodex } from "./codex.js";
 import { Command } from "commander";
 import { Store } from "./store.js";
 import { findStale, markStale } from "./staleness.js";
 import { compileInto } from "./compile.js";
 import { serve } from "./mcp.js";
+import { git } from "./git.js";
 import { KINDS, MemoryKind } from "./schema.js";
 
 const program = new Command();
@@ -28,6 +30,7 @@ program
 program
   .command("init")
   .description("Initialize a .memvine store in this git repository")
+  .option("--codex", "also register Memvine in this project’s Codex MCP configuration")
   .option(
     "--no-compile",
     "don't write the memvine usage block into CLAUDE.md / AGENTS.md",
@@ -43,8 +46,21 @@ program
         "  ^ tells your agent to recall/remember every task. Re-run `memvine compile` after new memories.",
       );
     }
-    console.log("Next: add it to your agent as an MCP server:");
-    console.log("  claude mcp add memvine -- memvine serve");
+    if (opts.codex) {
+      try {
+        const result = configureCodex(store.root);
+        console.log(`${result.created ? "Configured" : "Already configured"} Codex: ${result.file}`);
+        console.log("Open this repository as a trusted project in Codex, restart the client, and start a fresh task.");
+        console.log("Ask: Call Memvine recall for this project. Verify an actual tool result.");
+        console.log("Configuration contains machine-specific paths; do not copy it unchanged to another clone or machine.");
+      } catch (error) {
+        console.error(`Store initialized, but Codex setup failed: ${(error as Error).message}`);
+        process.exitCode = 1;
+      }
+    } else {
+      console.log("Connect Codex: memvine init --codex");
+      console.log("Connect Claude Code: claude mcp add memvine -- memvine serve");
+    }
   });
 
 program
@@ -74,13 +90,13 @@ program
       local: opts.local,
       agent: "cli",
     });
-    const where = m.meta.verified && !opts.local ? "verified, committed" : "unverified candidate, local";
+    const where = m.meta.verified && !opts.local ? "verified, shared file; not automatically committed" : "local memory";
     console.log(`Stored ${m.meta.id} (${m.meta.kind}, ${where}, learned@${m.meta.learned_commit})`);
   });
 
 program
   .command("validate <id>")
-  .description("Promote an unverified candidate to verified, committed team knowledge")
+  .description("Promote an unverified candidate to verified, shared file; not automatically committed team knowledge")
   .option("-e, --evidence <text>", "how it was confirmed, e.g. 'PR #123', 'user confirmed'")
   .action((id: string, opts) => {
     const res = requireStore().validate(id, opts.evidence);
@@ -91,7 +107,7 @@ program
     console.log(
       res.promoted
         ? `Validated ${id} — promoted to the committed store. Commit .memvine/ to share it.`
-        : `Validated ${id} — already committed; refreshed evidence.`,
+        : `Validated ${id} — already shared; refreshed evidence.`,
     );
   });
 
@@ -129,12 +145,12 @@ program
     const store = requireStore();
     const reports = findStale(store);
     if (reports.length === 0) {
-      console.log("All scoped memories are fresh.");
+      console.log("No newly stale scoped memories detected.");
       return;
     }
     for (const r of reports) {
       console.log(`${r.memory.meta.id}  needs revalidation (confirmed@${r.memory.meta.validated_commit})`);
-      console.log(`  changed since: ${r.changedFiles.join(", ")}`);
+      console.log(`  changed since: ${r.changedFiles.join(", ")}${r.unknown ? " (freshness unknown: Git history unavailable)" : ""}`);
       console.log(`  ${r.memory.body.split("\n")[0].slice(0, 100)}`);
     }
     if (opts.mark) {
@@ -160,6 +176,25 @@ program
   .description("Run the memvine MCP server (stdio) for your coding agent")
   .action(async () => {
     await serve(requireStore());
+  });
+
+program
+  .command("doctor")
+  .description("Diagnose store data, Git sharing, and unavailable freshness history")
+  .action(() => {
+    const store = requireStore();
+    console.log(`Repository: ${store.root}\nStore: ${store.dir}`);
+    const issues = store.diagnostics();
+    for (const issue of issues) console.log(`ERROR: ${issue}`);
+    const all = store.list();
+    const shared = store.list({ includeLocal: false });
+    console.log(`${shared.length} shared; ${all.length - shared.length} local (personal or unverified).`);
+    const unknown = findStale(store).filter(r => r.unknown);
+    if (unknown.length) console.log(`WARNING: ${unknown.length} scoped memories have unavailable Git history. Fetch the validation commits, then recheck.`);
+    const pending = git(["status", "--porcelain", "--", ".memvine/memories", ".memvine/config.json"], store.root);
+    if (pending) console.log("WARNING: shared memory/config changes are not committed. Review and commit them to share through Git.");
+    console.log("MCP uses this repository. Start serve from here; init does not configure an MCP client.");
+    if (issues.length) process.exitCode = 1;
   });
 
 program.parse();
