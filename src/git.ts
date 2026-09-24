@@ -55,3 +55,46 @@ export function inspectChangesSince(commit: string, cwd: string): ChangeScan {
 export function changedFilesSince(commit: string, cwd: string): string[] {
   return inspectChangesSince(commit, cwd).files;
 }
+
+/** A file's content at a commit, or null if it did not exist there / git failed. */
+export function fileAt(commit: string, file: string, cwd: string): string | null {
+  if (!/^[a-f0-9]{7,40}$/.test(commit)) return null;
+  try {
+    return execFileSync("git", ["show", `${commit}:${file}`], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  } catch { return null; }
+}
+
+export interface FileDiff {
+  /** 0-based [start, end) line ranges of the OLD file that were replaced or deleted; an insertion is an empty range at its position. */
+  oldRanges: [number, number][];
+  /** Text of every added or removed line. */
+  changedLines: string[];
+}
+
+/** Line-level diff of one file from `commit` to the working tree (committed + staged + unstaged). Null if git failed. */
+export function diffFile(commit: string, file: string, cwd: string): FileDiff | null {
+  let out: string;
+  try {
+    out = execFileSync("git", ["diff", "-U0", "--no-renames", commit, "--", file], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  } catch { return null; }
+  const oldRanges: [number, number][] = [];
+  const changedLines: string[] = [];
+  for (const line of out.split("\n")) {
+    const h = /^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/.exec(line);
+    if (h) {
+      const start = Number(h[1]), count = h[2] === undefined ? 1 : Number(h[2]);
+      // For count 0 git reports the line BEFORE the insertion point.
+      oldRanges.push(count === 0 ? [start, start] : [start - 1, start - 1 + count]);
+    } else if ((line.startsWith("+") && !line.startsWith("+++")) || (line.startsWith("-") && !line.startsWith("---"))) {
+      changedLines.push(line.slice(1));
+    }
+  }
+  return { oldRanges, changedLines };
+}
+
+/** Git blob id of a working-tree file, or null if it can't be hashed (missing, unreadable). */
+export function hashFile(file: string, cwd: string): string | null {
+  try {
+    return execFileSync("git", ["hash-object", "--", file], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim() || null;
+  } catch { return null; }
+}

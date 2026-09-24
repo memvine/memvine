@@ -152,13 +152,20 @@ test('fresh repository reports unknown and still sees staged paths', t => {
   assert.equal(scan.unknown, true); assert.ok(scan.files.includes('new.ts'));
 });
 
-test('validation preserves learning provenance and dirty code remains suspect', t => {
+test('validation preserves learning provenance; confirmation against dirty code holds only for that content', t => {
   const { store, root, git } = fixture(t);
   const m = store.add({ body: 'password login', kind: 'semantic', scope: ['auth.ts'], verified: true });
   fs.writeFileSync(path.join(root, 'auth.ts'), 'changed');
+  assert.equal(store.recall('password').memories[0].meta.status, 'stale', 'unconfirmed after an edit');
   store.validate(m.meta.id, 'checked working tree');
-  assert.equal(store.recall('password').memories[0].meta.status, 'stale');
+  assert.equal(store.recall('password').memories[0].meta.status, 'active', 'confirmed against this exact content');
+  fs.writeFileSync(path.join(root, 'auth.ts'), 'changed again');
+  assert.equal(store.recall('password').memories[0].meta.status, 'stale', 'content moved on after confirmation');
+  git('checkout', '--', 'auth.ts');
+  assert.equal(store.recall('password').memories[0].meta.status, 'stale', 'discarding the confirmed edit is also suspect');
+  fs.writeFileSync(path.join(root, 'auth.ts'), 'changed');
   git('add', 'auth.ts'); git('commit', '-qm', 'checked change');
+  assert.equal(store.recall('password').memories[0].meta.status, 'active', 'committing the confirmed content keeps it fresh');
   const confirmed = store.validate(m.meta.id, 'checked commit')!.memory;
   assert.equal(confirmed.meta.learned_at, m.meta.learned_at);
   assert.equal(confirmed.meta.learned_commit, m.meta.learned_commit);

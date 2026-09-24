@@ -66,6 +66,13 @@ export interface MemoryMeta {
   evidence?: string;
   /** Set when status becomes stale: the commit at which staleness was detected. */
   stale_since?: string;
+  /**
+   * Content hashes (git blob ids) of scoped files that had UNCOMMITTED changes when
+   * the memory was learned or last confirmed. validated_commit alone would call
+   * such a memory stale the moment it is written; a file still matching its hash
+   * is unchanged since confirmation, committed or not.
+   */
+  validated_snapshot?: Record<string, string>;
 }
 
 export interface Memory {
@@ -120,5 +127,7 @@ export function validateMeta(meta: Partial<MemoryMeta>): string[] {
   if (meta.supersedes !== undefined && !/^mem_[a-z0-9]{4,}$/.test(meta.supersedes)) errors.push("invalid supersedes");
   if (meta.evidence !== undefined && typeof meta.evidence !== "string") errors.push("invalid evidence");
   if (meta.stale_since !== undefined && (typeof meta.stale_since !== "string" || !/^[a-f0-9]{7,40}$/.test(meta.stale_since))) errors.push("invalid stale_since");
+  if (meta.validated_snapshot !== undefined && (typeof meta.validated_snapshot !== "object" || meta.validated_snapshot === null || Array.isArray(meta.validated_snapshot) ||
+      !Object.values(meta.validated_snapshot).every((h) => typeof h === "string" && /^[a-f0-9]{40,64}$/.test(h)))) errors.push("invalid validated_snapshot");
   return errors;
 }

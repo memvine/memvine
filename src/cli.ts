@@ -4,10 +4,11 @@ import { configureCodex } from "./codex.js";
 import { Command } from "commander";
 import { Store } from "./store.js";
 import { findStale, markStale } from "./staleness.js";
-import { compileInto } from "./compile.js";
+import { compileInto, digestParts } from "./compile.js";
 import { serve } from "./mcp.js";
 import { git } from "./git.js";
 import { KINDS, MemoryKind } from "./schema.js";
+import { renderRecall } from "./render.js";
 
 const program = new Command();
 
@@ -25,7 +26,7 @@ program
   .description(
     "Git-native memory for coding agents — what your agent learns lives in your repo, travels with the clone, and expires when the code changes.",
   )
-  .version("0.2.1");
+  .version("0.3.0");
 
 program
   .command("init")
@@ -71,25 +72,37 @@ program
     "episodic (what happened) | semantic (what is true) | procedural (how to) | prospective (do later)",
     "semantic",
   )
-  .option("-t, --tags <tags...>", "freeform domain labels, e.g. test auth")
-  .option("-s, --scope <globs...>", "path globs this memory is about")
+  .option("-t, --tags <tags...>", "freeform domain labels, e.g. test auth (or comma-separated: \"test,-r flag\")")
+  .option("-s, --scope <globs...>", "path globs this memory is about (space- or comma-separated)")
   .option("-c, --confidence <level>", "high | medium | low", "medium")
   .option("-l, --local", "personal memory (gitignored, not shared)")
   .option("--verified", "store as verified team knowledge (committed) instead of an unverified candidate")
   .option("-e, --evidence <text>", "how it was confirmed, e.g. 'tests green at a1b4c9e' (implies --verified)")
+  .option("--supersedes <id>", "id of the memory this one replaces (it is retired)")
   .action((body: string, opts) => {
     const verified = opts.verified || Boolean(opts.evidence);
-    const m = requireStore().add({
+    const store = requireStore();
+    if (opts.supersedes && !store.get(opts.supersedes)) {
+      console.error(`No memory with id ${opts.supersedes} to supersede.`);
+      process.exit(1);
+    }
+    const m = store.add({
       body,
       kind: opts.kind as MemoryKind,
-      tags: opts.tags,
-      scope: opts.scope,
+      // Commas also separate values: a later space-separated value starting with "-"
+      // would be parsed as an option, so "-t 'build,-r flag'" is the safe spelling.
+      tags: splitList(opts.tags),
+      scope: splitList(opts.scope),
       confidence: opts.confidence,
       verified,
       evidence: opts.evidence,
       local: opts.local,
+      supersedes: opts.supersedes,
       agent: "cli",
     });
+    // add() only auto-retires the predecessor of VERIFIED memories; an explicit
+    // --supersedes from the CLI is the caller saying the old one is replaced.
+    if (opts.supersedes) store.retire(opts.supersedes, "superseded");
     const where = m.meta.verified && !opts.local ? "verified, shared file; not automatically committed" : "local memory";
     console.log(`Stored ${m.meta.id} (${m.meta.kind}, ${where}, learned@${m.meta.learned_commit})`);
   });
@@ -109,6 +122,38 @@ program
         ? `Validated ${id} — promoted to the committed store. Commit .memvine/ to share it.`
         : `Validated ${id} — already shared; refreshed evidence.`,
     );
+  });
+
+program
+  .command("retire <ids...>")
+  .description("Archive memories that no longer apply — a finished next step, a fixed bug, a contradicted fact")
+  .action((ids: string[]) => {
+    const store = requireStore();
+    let failed = 0;
+    for (const id of ids) {
+      if (store.retire(id, "archived")) console.log(`Retired ${id}`);
+      else { console.error(`No memory with id ${id}.`); failed++; }
+    }
+    if (failed) process.exit(1);
+  });
+
+program
+  .command("recall <query>")
+  .description("Recall memories relevant to a query — what the MCP recall tool returns, for hooks and scripts")
+  .option("-p, --path <path>", "repo-relative file path to scope results")
+  .option("-n, --limit <n>", "max memories to return", (v: string) => parseInt(v, 10))
+  .option("--scoped-only", "only memories whose scope matches --path (drops repo-wide and lexical matches)")
+  .option("-x, --exclude <ids>", "comma-separated memory ids to skip (already shown this session)")
+  .action((query: string, opts) => {
+    const store = requireStore();
+    const exclude = String(opts.exclude ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const res = store.recall(query, opts.path, { limit: opts.limit, exclude });
+    let text = res.text;
+    if (opts.scopedOnly) {
+      const keep = res.memories.filter((m) => ["exact-path", "cross-scope"].includes(res.sources[m.meta.id]));
+      text = keep.length ? renderRecall(keep, res.sources, 0) : "No memories found.";
+    }
+    console.log(text);
   });
 
 program
@@ -172,6 +217,18 @@ program
   });
 
 program
+  .command("digest")
+  .description("Print a session briefing of the store — every memory in full while the budget allows, the rest as titles — for SessionStart hooks")
+  .option("-b, --budget <bytes>", "byte budget", (v: string) => parseInt(v, 10))
+  .option("--json", "print {text, fullIds, titledIds} so a hook can exclude shown memories from later recalls")
+  .action((opts) => {
+    const store = requireStore();
+    const res = digestParts(store, opts.budget ?? store.config().digest_budget_bytes, { includeStale: true, mode: "session" });
+    if (opts.json) console.log(JSON.stringify(res));
+    else if (res.text) console.log(res.text);
+  });
+
+program
   .command("serve")
   .description("Run the memvine MCP server (stdio) for your coding agent")
   .action(async () => {
@@ -198,3 +255,7 @@ program
   });
 
 program.parse();
+
+function splitList(values?: string[]): string[] | undefined {
+  return values?.flatMap((v) => v.split(",")).map((v) => v.trim()).filter(Boolean);
+}
