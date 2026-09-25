@@ -6,7 +6,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { Store } from "../store.js";
-import { findStale, markStale } from "../staleness.js";
+import { anchorsOf, findStale, markStale } from "../staleness.js";
 import { buildDigest, compileInto } from "../compile.js";
 import { headCommit } from "../git.js";
 
@@ -365,4 +365,93 @@ test("recall down-ranks an unverified candidate below an equally-relevant verifi
   const ranked = store.search("zeta pipeline");
   assert.equal(ranked.length, 2);
   assert.equal(ranked[0].meta.id, trusted.meta.id, "verified surfaces above candidate");
+});
+
+test("session digest shows every memory of a single-scope store, next steps first, within budget", () => {
+  const store = Store.init(makeRepo());
+  const ids: string[] = [];
+  for (let i = 0; i < 20; i++) {
+    ids.push(store.add({ body: `Fact ${i} about the renderer: detail ${"x".repeat(60)}`, kind: i % 3 ? "episodic" : "semantic", scope: ["src/main.py"], verified: true }).meta.id);
+  }
+  const todo = store.add({ body: "Next: handle the -w width flag", kind: "prospective", scope: ["src/main.py"], verified: true });
+  const full = buildDigest(store, 12_000, { includeStale: true, mode: "session" });
+  for (let i = 0; i < 20; i++) assert.ok(full.includes(`Fact ${i} about`), `memory ${i} present`);
+  assert.ok(full.indexOf(todo.body) < full.indexOf("Fact 0 about"), "prospective first");
+  // Tight budget: full text degrades to titles, and whatever is left is counted, never silent.
+  const tight = buildDigest(store, 1_200, { includeStale: true, mode: "session" });
+  assert.ok(Buffer.byteLength(tight) <= 1_200);
+  assert.match(tight, /titles only|more not shown/);
+  // recall caps at top-k; exclude surfaces the ones not yet seen.
+  const first = store.recall("renderer", "src/main.py", { limit: 5 }).memories.map((m) => m.meta.id);
+  const second = store.recall("renderer", "src/main.py", { limit: 5, exclude: first }).memories.map((m) => m.meta.id);
+  assert.equal(second.length, 5);
+  assert.ok(second.every((id) => !first.includes(id)));
+});
+
+test("session digest keeps stale memories, labelled; the committed digest still drops them", () => {
+  const store = Store.init(makeRepo());
+  const m = store.add({ body: "Width defaults to 80", kind: "semantic", scope: ["src/main.py"], verified: true });
+  const got = store.get(m.meta.id)!;
+  got.memory.meta.status = "stale";
+  store.write(got.memory, false);
+  assert.match(buildDigest(store, 12_000, { includeStale: true, mode: "session" }), /stale: its code changed.*Width defaults to 80/);
+  assert.ok(!buildDigest(store, 12_000).includes("Width defaults to 80"));
+});
+
+test("staleness is anchored to the code a memory names, not the whole file", () => {
+  const repo = makeRepo();
+  const g = (...args: string[]) => execFileSync("git", args, { cwd: repo });
+  const file = path.join(repo, "src/calc.py");
+  fs.writeFileSync(file, [
+    "def parse_expr(s):", "    return s.strip()", "",
+    "def fmt_number(v):", "    return str(v)", "",
+    "def main():", "    print(fmt_number(parse_expr('1')))", "",
+  ].join("\n"));
+  g("add", "-A"); g("commit", "-qm", "calc");
+  const store = Store.init(repo);
+  const parse = store.add({ body: "`parse_expr()` strips whitespace before tokenizing.", kind: "semantic", scope: ["src/calc.py"], verified: true });
+  const fmt = store.add({ body: "fmt_number(v) prints integers without a decimal point.", kind: "semantic", scope: ["src/calc.py"], verified: true });
+  const vague = store.add({ body: "The calculator prints one line per input.", kind: "semantic", scope: ["src/calc.py"], verified: true });
+  g("add", "-A"); g("commit", "-qm", "memories");
+  // Change only the body of fmt_number.
+  fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("return str(v)", "return str(int(v)) if v == int(v) else str(v)"));
+  const stale = new Set(findStale(store).map((r) => r.memory.meta.id));
+  assert.ok(stale.has(fmt.meta.id), "the memory naming the edited function is stale");
+  assert.ok(!stale.has(parse.meta.id), "a memory about an untouched function stays fresh");
+  assert.ok(stale.has(vague.meta.id), "a memory naming no code keeps file-level staleness");
+});
+
+test("retire and supersede take memories out of recall and the digest", () => {
+  const store = Store.init(makeRepo());
+  const todo = store.add({ body: "Next: add the avg() function", kind: "prospective", verified: true });
+  const oldStatus = store.add({ body: "Status: 64/73 pass; failing avg", kind: "episodic", tags: ["status"], verified: true });
+  const newStatus = store.add({ body: "Status: 70/73 pass; failing tau", kind: "episodic", tags: ["status"], verified: true, supersedes: oldStatus.meta.id });
+  assert.ok(store.retire(todo.meta.id, "archived"));
+  assert.equal(store.retire("mem_missing0", "archived"), false);
+  const d = buildDigest(store, 12_000, { includeStale: true, mode: "session" });
+  assert.ok(!d.includes("add the avg()"), "retired to-do gone");
+  assert.ok(!d.includes("64/73"), "superseded status gone");
+  assert.ok(d.indexOf(newStatus.body) < d.indexOf("Treat") + 200, "status note shown first");
+  assert.equal(store.recall("avg", undefined).memories.length, 0);
+});
+
+test("session digest includes unverified candidates, labelled; the committed digest does not", () => {
+  const store = Store.init(makeRepo());
+  store.add({ body: "Maybe round() is half-up", kind: "semantic" });
+  assert.match(buildDigest(store, 12_000, { includeStale: true, mode: "session" }), /unconfirmed.*half-up/);
+  assert.ok(!buildDigest(store, 12_000).includes("half-up"));
+});
+
+test("anchors skip keywords and everyday words", () => {
+  assert.deepEqual(anchorsOf("Use `math.fmod(left, right)` and `parse_term()`").sort(), ["fmod", "parse_term"]);
+});
+
+test("a memory written about uncommitted edits is not born stale", () => {
+  const repo = makeRepo();
+  const store = Store.init(repo);
+  fs.writeFileSync(path.join(repo, "src/auth/login.ts"), "export const a = 2; // retryLogin() now retries\n");
+  const m = store.add({ body: "`retryLogin()` retries twice", kind: "semantic", scope: ["src/auth/login.ts"], verified: true });
+  assert.ok(m.meta.validated_snapshot?.["src/auth/login.ts"], "snapshot recorded for the dirty scoped file");
+  assert.ok(!findStale(store).some((r) => r.memory.meta.id === m.meta.id), "fresh right after writing");
+  assert.equal(buildDigest(store, 12_000).includes("retries twice"), true, "and included in the committed digest");
 });

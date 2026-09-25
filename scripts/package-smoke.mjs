@@ -17,7 +17,9 @@ try {
   fs.writeFileSync(path.join(root, 'package.json'), '{"private":true}');
   run('npm', ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', path.join(root, packed.filename)]);
   const cli = path.join(root, 'node_modules/memvine/dist/cli.js');
-  assert.match(run(process.execPath, [cli, '--version']), /0\.2\.1/);
+  // The CLI and MCP server hard-code their version; it must match what npm publishes.
+  const { version } = JSON.parse(fs.readFileSync(path.join(source, 'package.json'), 'utf8'));
+  assert.equal(run(process.execPath, [cli, '--version']).trim(), version);
   assert.match(run(process.execPath, [cli, '--help']), /doctor/);
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
   run('git', ['init', '-q'], repo);

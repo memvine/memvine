@@ -153,7 +153,10 @@ no matter what the code does now.
 |---|---|
 | `memvine init` | Create the `.memvine/` store |
 | `memvine init --codex` | Initialize and register the project’s Codex MCP server |
-| `memvine add "..." -k semantic -t test auth -s "src/auth/**"` | Add a memory by hand |
+| `memvine add "..." -k semantic -t test,auth -s "src/auth/**"` | Add a memory by hand (`--supersedes <id>` replaces an older one) |
+| `memvine retire <id...>` | Archive memories that no longer apply (a finished next step, a fixed bug) |
+| `memvine recall "<query>" -p <path>` | What the MCP `recall` tool returns; `--exclude <ids>` skips memories already shown |
+| `memvine digest` | Session briefing of the whole store for a SessionStart hook: full text while the budget allows, then titles; next steps first, stale and unconfirmed ones labelled (`--json` also lists shown ids) |
 | `memvine validate <id> --evidence "checked code"` | Reconfirm and promote a local memory to shared storage |
 | `memvine doctor` | Report store/config problems, local-only data and uncommitted shared changes |
 | `memvine list` | List memories (`--all` includes retired ones) |
@@ -169,7 +172,11 @@ descriptions. The agent that is already running pays for its own thinking.
 memvine's code is git commands and file operations.
 
 **Staleness is a git query.** `git diff validated_commit..HEAD` against each
-memory's scope, cheap enough to run at every session start.
+memory's scope, cheap enough to run at every session start. When a memory names
+code — a `backticked` identifier, a `call()`, a snake_case or camelCase name —
+only a change inside those identifiers' blocks (or a changed line mentioning
+them) makes it stale, so editing one function no longer flags every memory about
+the same file. A memory that names no code keeps file-level staleness.
 
 Recall and search check scoped semantic/procedural memories against their
 `validated_commit` automatically. Changed-code memories are returned as
@@ -184,9 +191,11 @@ clone) produces an unknown-freshness warning and excludes the fact from digests.
 Fetch the missing commits or revalidate against a known commit.
 
 Validation records HEAD, preserves `learned_at`/`learned_commit`, and updates
-`validated_at`/`validated_commit`. Scoped dirty files still trigger a warning
-immediately after validation: commit the checked code and revalidate to obtain
-a stable Git baseline. Unscoped memories cannot be automatically checked.
+`validated_at`/`validated_commit`. When scoped files have uncommitted changes at
+learn or validation time, their content hashes are recorded too
+(`validated_snapshot`): the memory stays fresh while those files still match —
+including after the checked edit is committed — and becomes suspect if they
+change again or the edit is discarded. Unscoped memories cannot be automatically checked.
 Verification is asserted by the caller, not independently proven by Memvine.
 Explicitly validating a personal local note promotes it; keep it local by using
 `revise` instead. An unverified replacement never retires shared knowledge.
@@ -205,9 +214,10 @@ text in your repo.
 
 ## Status
 
-v0.2. Retrieval is scope-aware BM25 with a byte budget, memories carry a
-verified/validated lifecycle, and staleness is measured from the last
-confirmed commit. The memory schema may still change before 1.0. Issues and
+v0.3. Retrieval is scope-aware BM25 with a byte budget, memories carry a
+verified/validated lifecycle, staleness is measured from the last confirmed
+commit and anchored to the code a memory names, and `digest` briefs a new
+session on the whole store. The memory schema may still change before 1.0. Issues and
 PRs welcome, see [CONTRIBUTING.md](https://github.com/memvine/memvine/blob/main/CONTRIBUTING.md).
 
 ## Development checks

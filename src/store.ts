@@ -22,7 +22,7 @@ import {
   validateMeta,
 } from "./schema.js";
 import { headCommit, isGitRepo, repoRoot } from "./git.js";
-import { withFreshness } from "./staleness.js";
+import { setSnapshot, snapshotScope, withFreshness } from "./staleness.js";
 import { clipBytes, renderRecall } from "./render.js";
 
 export const DIR_NAME = ".memvine";
@@ -269,6 +269,8 @@ export class Store {
     };
     const errors = validateMeta(meta);
     if (errors.length) throw new Error(errors.join("; "));
+    const snapshot = snapshotScope(this.root, meta.scope);
+    if (snapshot) meta.validated_snapshot = snapshot;
     const memory: Memory = { meta, body: opts.body.trim() };
     // The gate: only a verified memory (and not an explicitly personal one)
     // lands in the committed store; unverified candidates stay in gitignored
@@ -294,11 +296,23 @@ export class Store {
     }
   }
 
+  /** Take a memory out of recall and digests without deleting it (history stays in git). */
+  retire(id: string, status: "archived" | "superseded"): boolean {
+    const found = this.get(id);
+    if (!found) return false;
+    if (found.memory.meta.status !== status) {
+      found.memory.meta.status = status;
+      this.write(found.memory, found.local);
+    }
+    return true;
+  }
+
   validate(id: string, evidence?: string): { memory: Memory; promoted: boolean } | null {
     const found = this.get(id);
     if (!found) return null;
     found.memory.meta.verified = true;
     found.memory.meta.validated_commit = headCommit(this.root);
+    setSnapshot(this.root, found.memory);
     found.memory.meta.validated_at = new Date().toISOString();
     found.memory.meta.status = "active";
     delete found.memory.meta.stale_since;
@@ -580,13 +594,16 @@ export class Store {
   recall(
     query: string,
     forPath?: string,
-    opts?: { limit?: number; budgetBytes?: number },
+    opts?: { limit?: number; budgetBytes?: number; exclude?: Iterable<string> },
   ): { memories: Memory[]; omitted: number; sources: Record<string, MemorySource>; text: string } {
     const cfg = this.config();
     const limit = Math.max(1, opts?.limit ?? cfg.recall_max_memories);
     const budget = Math.max(1, opts?.budgetBytes ?? cfg.recall_budget_bytes);
     if (!Number.isSafeInteger(limit) || !Number.isSafeInteger(budget)) throw new Error("Recall limits must be finite integers");
-    const ranked = this.rank(query, forPath);
+    // `exclude`: ids the caller has already shown this session, so a repeat
+    // recall surfaces what the agent has NOT seen instead of the same top-k.
+    const skip = new Set(opts?.exclude ?? []);
+    const ranked = this.rank(query, forPath).filter((s) => !skip.has(s.m.meta.id));
     const chosen: Memory[] = [];
     const sources: Record<string, MemorySource> = {};
     for (const { m, source } of ranked) {
