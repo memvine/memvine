@@ -13,7 +13,7 @@ import re
 import secrets
 import time
 from collections import defaultdict, deque
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -75,7 +75,7 @@ async def _new_session(conn, user_id: UUID, org_id: UUID) -> str:
     token = SESSION_PREFIX + secrets.token_urlsafe(32)
     await conn.execute(
         "INSERT INTO user_sessions (user_id, org_id, token_hash, expires_at) VALUES (%s, %s, %s, %s)",
-        (user_id, org_id, hash_key(token), datetime.now(timezone.utc) + timedelta(days=settings.session_days)))
+        (user_id, org_id, hash_key(token), datetime.now(UTC) + timedelta(days=settings.session_days)))
     return token
 
 
@@ -370,7 +370,7 @@ async def create_invite(body: InviteCreate, request: Request, admin: Admin = Dep
             "INSERT INTO invites (org_id, token_hash, email, role, created_by, expires_at) VALUES (%s, %s, %s, %s, %s, %s) "
             "RETURNING id, email, role, created_at, expires_at",
             (admin.org_id, hash_key(token), email, body.role, admin.actor,
-             datetime.now(timezone.utc) + timedelta(days=INVITE_DAYS)))).fetchone()
+             datetime.now(UTC) + timedelta(days=INVITE_DAYS)))).fetchone()
     request.state.audit_target = f"{email or 'anyone with the link'} as {body.role}"
     return {**row, "token": token}
 
