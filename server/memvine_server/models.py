@@ -489,3 +489,18 @@ class KeyOut(BaseModel):
     last_used_at: datetime | None
     last_used_ip: str | None = None
     revoked_at: datetime | None
+    # The User-Agent of the key's last call (memvine-claude-code/0.7.1, memvine-sdk-ts/0.1.0, ...).
+    last_user_agent: str | None = None
+    # The signed-in person who created the key; None for keys made by an organization key or before 0005.
+    created_by_email: str | None = None
+
+
+class KeyConnection(BaseModel):
+    """Whether an agent has used a key yet: the console's "Check connection" step polls this."""
+    key_id: UUID
+    first_call_at: datetime | None
+    first_session_at: datetime | None   # first conversation sent (POST /v1/sessions/{id}/events)
+    first_recall_at: datetime | None    # first recall or session brief
+    last_used_at: datetime | None       # any call, MCP included (MCP calls are not in the request log)
+    last_user_agent: str | None
+    calls: int

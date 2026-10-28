@@ -2,10 +2,10 @@
 // One transcript in, many facts out, within the request; under it, the three steps that connect an
 // agent (key, install, backfill) and the sample-data offer (docs/memory-graph-plan.md, workstream 3).
 import Link from "next/link";
-import { Check, Plug } from "lucide-react";
+import { ArrowRight, Check, Plug } from "lucide-react";
 import { PasteBox } from "./PasteBox";
 import { LoadSampleButton } from "./SampleData";
-import { Card, CardHeader, cx } from "./ui";
+import { button, Card, CardHeader, cx } from "./ui";
 
 export interface SetupStep { done: boolean; label: string; href: string; detail?: string }
 
@@ -43,7 +43,8 @@ export function EmptyProject({ connect, tending }: { connect: SetupStep[]; tendi
       <PasteBox mode="first-run" />
       <div className="grid gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <Card>
-          <CardHeader icon={Plug} title="Connect your agent" description="So memory grows from real sessions, not only what you paste." />
+          <CardHeader icon={Plug} title="Connect your agent" description="So memory grows from real sessions, not only what you paste."
+                      action={<Link href="/connect" className={button("primary", "sm")}>Start <ArrowRight aria-hidden /></Link>} />
           <SetupSteps steps={connect} />
         </Card>
         <Card>

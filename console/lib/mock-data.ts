@@ -69,8 +69,8 @@ function usageSeries(days: number, ingestBase: number, recallBase: number, seed:
 
 const supportAgent: ProjectData = {
   keys: [
-    { id: "key_01", name: "production", masked: "mv_sk_••••7f2a", createdAt: "2026-09-02T10:05:00Z", lastUsedAt: "2026-10-25T08:41:00Z", revokedAt: null },
-    { id: "key_02", name: "staging", masked: "mv_sk_••••c91e", createdAt: "2026-09-12T15:20:00Z", lastUsedAt: "2026-10-24T19:02:00Z", revokedAt: null },
+    { id: "key_01", name: "production", masked: "mv_sk_••••7f2a", createdAt: "2026-09-02T10:05:00Z", lastUsedAt: "2026-10-25T08:41:00Z", revokedAt: null, lastUserAgent: "memvine-sdk-ts/0.1.0" },
+    { id: "key_02", name: "staging", masked: "mv_sk_••••c91e", createdAt: "2026-09-12T15:20:00Z", lastUsedAt: "2026-10-24T19:02:00Z", revokedAt: null, lastUserAgent: "memvine-claude-code/0.6.4" },
     { id: "key_03", name: "old laptop", masked: "mv_sk_••••0b44", createdAt: "2026-09-03T08:00:00Z", lastUsedAt: "2026-09-20T11:00:00Z", revokedAt: "2026-09-21T09:00:00Z" },
   ],
   episodes: [
@@ -267,8 +267,8 @@ const DEV = "maria@example.com";
 
 const codingTeam: ProjectData = {
   keys: [
-    { id: "key_11", name: "team plugin", masked: "mv_sk_••••a3d0", createdAt: "2026-10-01T09:35:00Z", lastUsedAt: "2026-10-26T07:12:00Z", revokedAt: null },
-    { id: "key_12", name: "ci", masked: "mv_sk_••••5be1", createdAt: "2026-10-08T12:00:00Z", lastUsedAt: "2026-10-25T21:40:00Z", lastUsedIp: "10.20.4.18", revokedAt: null },
+    { id: "key_11", name: "team plugin", masked: "mv_sk_••••a3d0", createdAt: "2026-10-01T09:35:00Z", lastUsedAt: "2026-10-26T07:12:00Z", revokedAt: null, lastUserAgent: "memvine-claude-code/0.7.1" },
+    { id: "key_12", name: "ci", masked: "mv_sk_••••5be1", createdAt: "2026-10-08T12:00:00Z", lastUsedAt: "2026-10-25T21:40:00Z", lastUsedIp: "10.20.4.18", revokedAt: null, lastUserAgent: "memvine-sdk-python/0.1.0" },
   ],
   episodes: [
     {

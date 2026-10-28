@@ -129,7 +129,7 @@ export const mockApi: MemvineApi = {
     const secret = `mv_sk_${randomBytes(24).toString("base64url")}`;
     const key: ApiKey = {
       id: `key_${randomBytes(4).toString("hex")}`, name, masked: `mv_sk_••••${secret.slice(-4)}`,
-      createdAt: new Date().toISOString(), lastUsedAt: null, revokedAt: null,
+      createdAt: new Date().toISOString(), lastUsedAt: null, revokedAt: null, createdByEmail: "you@company.com",
     };
     projectData(project).keys.push(key);
     return { key, secret };
@@ -137,6 +137,16 @@ export const mockApi: MemvineApi = {
   async revokeKey(project, id) {
     const key = projectData(project).keys.find((k) => k.id === id);
     if (key && !key.revokedAt) key.revokedAt = new Date().toISOString();
+  },
+  async keyConnection(project, id) {
+    const key = projectData(project).keys.find((k) => k.id === id);
+    if (!key) return null;
+    // A demo of the connect page's check: a new key "connects" 15 seconds after it is made, as if
+    // the plugin had sent its first session; a seeded key that was used reads as connected.
+    const since = key.lastUsedAt ?? (Date.now() - Date.parse(key.createdAt) > 15_000 ? new Date(Date.parse(key.createdAt) + 15_000).toISOString() : null);
+    if (!since) return { firstCallAt: null, firstSessionAt: null, firstRecallAt: null, lastUsedAt: null, lastUserAgent: null, calls: 0 };
+    return { firstCallAt: since, firstSessionAt: since, firstRecallAt: since, lastUsedAt: key.lastUsedAt ?? since,
+             lastUserAgent: key.lastUserAgent ?? "memvine-claude-code/0.7.1", calls: 2 };
   },
 
   async listMemories(project, filter: MemoryFilter = {}) {

@@ -66,6 +66,23 @@ export interface ApiKey {
   /** The address the key was last used from. */
   lastUsedIp?: string | null;
   revokedAt: string | null;
+  /** The User-Agent of the key's last call: memvine-claude-code/0.7.1, memvine-codex/0.7.1, memvine-sdk-ts/0.1.0... */
+  lastUserAgent?: string | null;
+  /** The signed-in person who created the key; null for keys made by an organization key. */
+  createdByEmail?: string | null;
+}
+
+/** Whether an agent has used a key yet (GET /v1/projects/{slug}/keys/{id}/connection). */
+export interface KeyConnection {
+  firstCallAt: string | null;
+  /** First conversation sent (a plugin's or SDK session). */
+  firstSessionAt: string | null;
+  /** First recall or session brief. */
+  firstRecallAt: string | null;
+  /** Any call, MCP included. */
+  lastUsedAt: string | null;
+  lastUserAgent: string | null;
+  calls: number;
 }
 
 export type MemoryKind = "episodic" | "semantic" | "procedural" | "prospective" | "preference";
@@ -497,6 +514,8 @@ export interface MemvineApi {
   listKeys(project: string): Promise<ApiKey[]>;
   createKey(project: string, name: string): Promise<{ key: ApiKey; secret: string }>;
   revokeKey(project: string, id: string): Promise<void>;
+  /** Null for a key that is not in the project (or a server without the route). */
+  keyConnection(project: string, id: string): Promise<KeyConnection | null>;
   listMemories(project: string, filter?: MemoryFilter): Promise<MemoryItem[]>;
   listThreads(project: string, filter?: ThreadFilter): Promise<ThreadSummary[]>;
   getThread(project: string, id: string): Promise<ThreadDetail | null>;

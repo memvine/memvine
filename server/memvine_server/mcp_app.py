@@ -25,7 +25,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from . import sessions as session_ops
 from .access import audiences_for
-from .auth import PROJECT_PREFIX, hash_key
+from .auth import PROJECT_PREFIX, hash_key, user_agent
 from .billing import CapReached
 from .db import request_project
 from .models import RecallInclude, RecallRequest
@@ -160,10 +160,13 @@ def build_asgi():
 
 async def _resolve_project(headers: list[tuple[bytes, bytes]]) -> UUID | None:
     token = ""
+    agent = None
     for name, value in headers:
         if name.lower() == b"authorization":
             scheme, _, token = value.decode().partition(" ")
             token = token.strip() if scheme.lower() == "bearer" else ""
+        elif name.lower() == b"user-agent":
+            agent = user_agent(value.decode(errors="replace"))
     if not token.startswith(PROJECT_PREFIX):
         return None
     async with _runtime["pool"].connection() as conn:
@@ -174,7 +177,8 @@ async def _resolve_project(headers: list[tuple[bytes, bytes]]) -> UUID | None:
         ).fetchone()
         if not row or row["revoked_at"]:
             return None
-        await conn.execute("UPDATE api_keys SET last_used_at = now() WHERE key_hash = %s", (hash_key(token),))
+        await conn.execute("UPDATE api_keys SET last_used_at = now(), last_user_agent = COALESCE(%s, last_user_agent) "
+                           "WHERE key_hash = %s", (agent, hash_key(token)))
     return row["project_id"]
 
 

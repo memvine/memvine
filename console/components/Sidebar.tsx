@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   Activity, BookMarked, Brain, ChartColumn, ChevronsUpDown, Cog, FileText, FolderKanban, KeyRound,
-  House, LogOut, Menu, MessageCircleQuestion, MessagesSquare, Plug, Settings, Users, Waypoints, X,
+  House, LogOut, Menu, MessageCircleQuestion, MessagesSquare, Plug, PlugZap, Settings, Users, Waypoints, X,
 } from "lucide-react";
 import { switchProject } from "@/app/actions";
 import type { Project } from "@/lib/types";
@@ -22,6 +22,7 @@ const NAV: { group: string; items: { href: string; label: string; icon: Icon }[]
     { href: "/sources", label: "Sources", icon: FileText },
   ] },
   { group: "Connect", items: [
+    { href: "/connect", label: "Connect your agent", icon: PlugZap },
     { href: "/integrations", label: "Integrations", icon: Plug },
     { href: "/audiences", label: "Audiences", icon: Users },
   ] },
