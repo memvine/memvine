@@ -107,6 +107,11 @@ export function ProjectRow({ project, current, lastActivity, created, canManage 
             Recall threshold
             <input name="minRelevance" type="number" min="0" max="1" step="0.01" defaultValue={project.recallMinRelevance ?? ""} placeholder="default" aria-label="Recall relevance threshold" className={`${inputClass} w-24`} />
           </label>
+          <label className="flex items-center gap-1.5 text-[12.5px] text-text-2" title="Among comparably relevant memories, facts and gotchas said recently rank higher; their weight halves toward a floor every this many days. Decisions, rules and preferences never decay. 0 turns it off; empty uses the server default (90).">
+            Recency half-life
+            <input name="halfLife" type="number" min="0" max="36500" step="1" defaultValue={project.recallHalfLifeDays ?? ""} placeholder="90" aria-label="Recall recency half-life in days" className={`${inputClass} w-20`} />
+            days
+          </label>
           <button type="submit" disabled={editing} className={button("primary")}>{editing ? "Saving…" : "Save"}</button>
           <button type="button" className={button("ghost")} onClick={() => setMode("view")}>Cancel</button>
           {editState.error && <div className="w-full"><FormError>{editState.error}</FormError></div>}

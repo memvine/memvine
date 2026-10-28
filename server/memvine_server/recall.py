@@ -2,7 +2,8 @@
 
 Ranking order of precedence: relevance (vector + keyword, fused by reciprocal
 rank), then current over superseded, then observed/stated over an agent's own
-claims. The output is a dated briefing an agent can read as is, plus the items
+claims, then recency for facts and gotchas (recency_factor) and a person's
+confirmation (KEPT_BOOST). The output is a dated briefing an agent can read as is, plus the items
 with ids so it can cite or fetch evidence.
 
 Nothing is served unless something is relevant enough (see recall() for what counts as a hit):
@@ -65,6 +66,19 @@ MMR_LAMBDA_BROAD = 0.6
 MIN_SIMILARITY = 0.30
 ASSERTION_WEIGHT = {"observed": 1.0, "stated": 1.0, "inferred": 0.8, "claimed": 0.5}
 STATUS_WEIGHT = {"active": 1.0, "superseded": 0.6, "stale": 0.7}
+# Recency: among comparably relevant memories, a fact or gotcha said recently ranks above one last said
+# long ago. Its score is multiplied by RECENCY_FLOOR + (1 - RECENCY_FLOOR) * 0.5 ** (age / half-life),
+# age in days since it was last said (the later of recorded_at and its newest evidence episode). The
+# floor keeps an old fact that is clearly the best match on top. Decisions, rules and preferences never
+# decay: they hold until superseded. The half-life is the project's recall_half_life_days, else
+# settings.recall_half_life_days (90); 0 turns recency off. Ranking only: the relevance gate and the
+# trim margin use raw relevance, and a history question (include_history, as_of) gets no recency.
+RECENCY_FLOOR = 0.6
+DECAYING_CATEGORIES = frozenset({"fact", "gotcha"})
+DECAYING_KINDS = frozenset({"semantic", "episodic"})  # without a category: plain facts and events
+# A memory a person confirmed (review 'kept': Keep in the console, or written by a person) ranks a little
+# higher than an equally relevant one nobody looked at.
+KEPT_BOOST = 1.1
 # Contradiction pairs listed first: among this many top-ranked facts, at most this many pairs.
 CONFLICT_SCAN = 12
 # Expired: an item that said when it stops being true ("the scratch org expires on 28 Oct", stored as
@@ -198,8 +212,9 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     embedding = (await embedder.embed([req.query]))[0]
     project_visible = audiences is None or "project" in audiences
     project = await (await conn.execute(
-        "SELECT recall_min_relevance FROM projects WHERE id = %s", (project_id,))).fetchone()
+        "SELECT recall_min_relevance, recall_half_life_days FROM projects WHERE id = %s", (project_id,))).fetchone()
     min_relevance = min_relevance_for(project, embedder)
+    half_life = 0.0 if include_history else half_life_for(project)
     threads = []
     if project_visible:
         threads = await relevant_threads(conn, project_id, req.query, embedding, session_id=req.session_id, as_of=req.as_of,
@@ -249,9 +264,14 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
         return float(rows[mid].get("similarity") or 0) + (KEYWORD_BONUS if mid in keyword_hit else 0.0)
 
     excluded = set(req.exclude)
+    last_said = await last_said_at(conn, [mid for mid, r in rows.items() if decays(r)]) if half_life > 0 else {}
+    now = datetime.now(UTC)
     # A memory that would count as a hit is never filtered out as too dissimilar to show.
     floor = min(MIN_SIMILARITY, min_relevance)
     ranked_ids = []
+    # The score before recency and the kept boost: the trim's always-kept first item is chosen by it,
+    # so recency reorders what the margin keeps but never brings in what it would not.
+    base_score: dict[UUID, float] = {}
     for mid, score in scores.items():
         r = rows[mid]
         if mid in excluded:
@@ -259,6 +279,12 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
         if mid not in keyword_hit and (r.get("similarity") or 0) < floor:
             continue
         score *= ASSERTION_WEIGHT.get(r["assertion"], 0.8) * STATUS_WEIGHT.get(r["status"], 0.7)
+        base_score[mid] = score
+        if mid in last_said:
+            said = max(r["recorded_at"], last_said[mid] or r["recorded_at"])
+            score *= recency_factor((now - said).total_seconds() / 86400, half_life)
+        if r.get("review") == "kept":
+            score *= KEPT_BOOST
         ranked_ids.append((score, mid))
     candidates = [mid for mid in rows if mid not in excluded]
     top_relevance = round(max(relevance(mid) for mid in candidates), 4) if candidates else None
@@ -294,7 +320,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     # supersede partners); pages by similarity only within the same margin. Broad questions keep breadth.
     best = max((relevance(mid) for _, mid in ranked_ids), default=None)
     if not broad:
-        ranked_ids = trim_to_margin(ranked_ids, rows, relevance)
+        first = max(ranked_ids, key=lambda t: (base_score[t[1]], rows[t[1]]["recorded_at"]))[1] if ranked_ids else None
+        ranked_ids = trim_to_margin(ranked_ids, rows, relevance, first=first)
         similar = [thread_similarity(t) for t in threads if not thread_is_hit(t)]
         best_any = max([*([best] if best is not None else []), *similar], default=0.0)
         threads = [t for t in threads if thread_is_hit(t) or thread_similarity(t) >= best_any - RELEVANCE_MARGIN]
@@ -513,14 +540,52 @@ def min_relevance_for(project, embedder: Embedder) -> float:
     return getattr(embedder, "min_relevance", DEFAULT_MIN_RELEVANCE)
 
 
-def trim_to_margin(ranked: list[tuple[float, UUID]], rows: dict, relevance, margin: float = RELEVANCE_MARGIN) -> list[tuple[float, UUID]]:
-    """The ranked items within `margin` of the best relevance, in rank order. The first-ranked and
-    the most relevant item always stay, and so does every item that contradicts, supersedes or is
-    superseded by a kept one: a pair is shown together or not at all."""
+def half_life_for(project) -> float:
+    """The project's recency half-life in days, else the server's; 0 means no recency weighting."""
+    if project and project.get("recall_half_life_days") is not None:
+        return float(project["recall_half_life_days"])
+    return float(settings.recall_half_life_days or 0)
+
+
+def decays(row) -> bool:
+    """Whether recency weighs on a memory: facts and gotchas (and, without a category, plain facts and
+    events) do; decisions, rules, preferences and standing rules hold until superseded."""
+    if row.get("standing"):
+        return False
+    category = row.get("category")
+    return category in DECAYING_CATEGORIES if category else row.get("kind") in DECAYING_KINDS
+
+
+def recency_factor(age_days: float, half_life_days: float, floor: float = RECENCY_FLOOR) -> float:
+    """1.0 for something said now, halving toward `floor` every `half_life_days`; 1.0 when off."""
+    if half_life_days <= 0:
+        return 1.0
+    return floor + (1 - floor) * 0.5 ** (max(age_days, 0.0) / half_life_days)
+
+
+async def last_said_at(conn, memory_ids: list[UUID]) -> dict[UUID, datetime | None]:
+    """When each memory was last said: its newest evidence episode (a restatement adds evidence),
+    None when it has none. Every given id is a key."""
+    out: dict[UUID, datetime | None] = dict.fromkeys(memory_ids)
+    if memory_ids:
+        for r in await (await conn.execute(
+                "SELECT v.memory_id, max(e.occurred_at) AS at FROM evidence v "
+                "JOIN episodes e ON e.project_id = v.project_id AND e.id = v.episode_id "
+                "WHERE v.memory_id = ANY(%s) GROUP BY v.memory_id", (memory_ids,))).fetchall():
+            out[r["memory_id"]] = r["at"]
+    return out
+
+
+def trim_to_margin(ranked: list[tuple[float, UUID]], rows: dict, relevance, margin: float = RELEVANCE_MARGIN,
+                   first: UUID | None = None) -> list[tuple[float, UUID]]:
+    """The ranked items within `margin` of the best relevance, in rank order. The first-ranked (or
+    `first`: the first by the score before recency) and the most relevant item always stay, and so
+    does every item that contradicts, supersedes or is superseded by a kept one: a pair is shown
+    together or not at all."""
     if not ranked:
         return ranked
     best = max(relevance(mid) for _, mid in ranked)
-    keep = {ranked[0][1], max(ranked, key=lambda t: relevance(t[1]))[1]}
+    keep = {first if first is not None else ranked[0][1], max(ranked, key=lambda t: relevance(t[1]))[1]}
     keep |= {mid for _, mid in ranked if relevance(mid) >= best - margin}
     present = {mid for _, mid in ranked}
     todo = list(keep)
