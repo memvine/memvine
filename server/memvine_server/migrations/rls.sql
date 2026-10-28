@@ -30,7 +30,8 @@ BEGIN
     FOREACH t IN ARRAY ARRAY['api_keys', 'episodes', 'memory_items', 'evidence', 'sessions',
                              'session_events', 'jobs', 'request_log', 'identities', 'audiences', 'passages',
                              'usage_events', 'audit_events', 'session_code', 'memory_anchors', 'code_files',
-                             'threads', 'thread_sources', 'thread_links', 'memory_links', 'feedback_cases'] LOOP
+                             'threads', 'thread_sources', 'thread_links', 'memory_links', 'feedback_cases',
+                             'project_categories'] LOOP
         CONTINUE WHEN to_regclass(format('public.%I', t)) IS NULL;  -- a later migration adds it
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('DROP POLICY IF EXISTS project_scope ON %I', t);

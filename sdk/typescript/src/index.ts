@@ -20,6 +20,9 @@ export class MemvineError extends Error {
   }
 }
 
+/** The built-in knowledge categories; a project may add up to five of its own (any other slug). */
+export type Category = "decision" | "rule" | "gotcha" | "fact" | "preference" | (string & {});
+
 export interface Episode {
   id: string;
   content: string;
@@ -48,7 +51,8 @@ export interface Memory {
   conflicts_with: string[];
   standing: boolean;
   stale_reason?: string | null;
-  category?: "decision" | "rule" | "gotcha" | "fact" | "preference" | null;
+  /** A built-in category, or the slug of one of the project's own categories. */
+  category?: Category | null;
   why?: string | null;
   thread_id?: string | null;
   scope?: "project" | "thread" | null;
@@ -157,7 +161,8 @@ export interface RememberOptions {
   assertion?: Memory["assertion"];
   audience?: string;
   standing?: boolean;
-  category?: "decision" | "rule" | "gotcha" | "fact" | "preference";
+  /** A built-in category, or the slug of one of the project's own categories. */
+  category?: Category;
   why?: string;
   /** The id of a current memory this statement replaces, as a person said: no judge is asked, it
    *  supersedes that memory and inherits its kind, subjects, category, thread and audience unless given. */

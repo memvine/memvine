@@ -420,14 +420,17 @@ async def _find(conn, project_id: UUID, key: str):
         "ORDER BY (key = %s) DESC LIMIT 1", (project_id, key, key, key))).fetchone()
 
 
-async def update_threads(conn, llm: LLM, embedder: Embedder, project_id: UUID, ep, project: str) -> tuple[list[dict], dict]:
+async def update_threads(conn, llm: LLM, embedder: Embedder, project_id: UUID, ep, project: str,
+                         instructions: str | None = None) -> tuple[list[dict], dict]:
     """Ask the model for the changed pages of this episode's threads and store them. Returns the
-    threads written ({id, key, title, aliases}) and counts for the job result."""
+    threads written ({id, key, title, aliases}) and counts for the job result. `instructions`: the
+    project's memory instructions; on pages only what they say to leave out applies."""
     metadata = ep["metadata"] or {}
     keys = derive_keys(ep["label"], ep["content"])
     loaded = await load_threads(conn, project_id, keys, metadata.get("session_id"))
     raw = await llm.complete(THREADS_SYSTEM, threads_user(ep["label"] or ep["id"], ep["occurred_at"].isoformat(), ep["content"],
-                                                          project, keys, [page_for_model(r) for r in loaded]), max_tokens=8192)
+                                                          project, keys, [page_for_model(r) for r in loaded],
+                                                          instructions=instructions), max_tokens=8192)
     data = parse_json(raw)
     pages = data.get("threads") if isinstance(data, dict) else data
     if not isinstance(pages, list):

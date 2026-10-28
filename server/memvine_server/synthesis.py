@@ -25,18 +25,31 @@ def project_profile(project) -> str:
     return f"{project['name']} — {description}" if description else project["name"]
 
 
+async def project_categories(conn, project_id: UUID) -> list[tuple[str, str, str]]:
+    """The project's own categories as (slug, name, description), oldest first."""
+    rows = await (await conn.execute(
+        "SELECT slug, name, description FROM project_categories WHERE project_id = %s ORDER BY created_at, slug",
+        (project_id,))).fetchall()
+    return [(r["slug"], r["name"], r["description"]) for r in rows]
+
+
 async def synthesize_episode(conn, llm: LLM, embedder: Embedder, project, ep, context: str) -> dict:
     project_id: UUID = project["id"]
+    # The project's memory instructions and categories (migration 0008): they adjust what is kept.
+    instructions = (project.get("memory_instructions") or "").strip() or None
+    categories = await project_categories(conn, project_id)
     # A retry or re-send rewrites the pages this episode fed; take its old evidence off them first.
     await forget_episode(conn, project_id, ep["id"])
     profile = project_profile(project)
     written, thread_stats = [], {}
     # Pages are project-wide; an episode for a narrower audience feeds only audience-scoped knowledge.
     if ep["audience"] == "project":
-        written, thread_stats = await update_threads(conn, llm, embedder, project_id, ep, profile)
+        written, thread_stats = await update_threads(conn, llm, embedder, project_id, ep, profile,
+                                                      instructions=instructions)
 
     extraction = await extract_knowledge(llm, label=ep["label"] or ep["id"], occurred_at=ep["occurred_at"], content=ep["content"],
-                                         project=profile, threads=[(t["key"], t["title"]) for t in written], context=context)
+                                         project=profile, threads=[(t["key"], t["title"]) for t in written], context=context,
+                                         instructions=instructions, categories=categories)
     relations: dict[str, int] = {}
     code_context = await code.code_for_episode(conn, project_id, ep)
     anchored = 0
