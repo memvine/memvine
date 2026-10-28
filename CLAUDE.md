@@ -61,8 +61,9 @@ Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local
 
 ## Status (28 Oct 2026)
 
-- Running today: a laptop server (`deploy/laptop/`) with two team projects.
-- Next: host on Railway (`deploy/railway/README.md`; domains `app.memvine.dev` and
-  `api.memvine.dev` at the DNS provider DNS), with an Anthropic API key for synthesis; then move the
-  laptop's data across and re-point plugins.
+- Hosted on Railway (project `memvine`: `postgres`, `api`, `console`; see `deploy/railway/README.md`).
+  Deploy with `railway up server --path-as-root --service api` (and `console`) or GitHub auto-deploy.
+  The laptop server is retired.
+- Pending: custom domains `app.memvine.dev` / `api.memvine.dev` (the DNS provider DNS CNAMEs), the
+  Anthropic API key on `api`, re-pointing agent plugins to the new API address.
 - Later: security pass, terms and privacy pages, billing, SSO; the open-core split is undecided.
