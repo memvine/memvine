@@ -4,6 +4,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { forwarded } from "./forwarded";
 import { buildGraph, relatedFromDetail } from "./graph";
 import type {
   AddResult, ApiKey, Audience, EdgeDirection, EdgeKind, GraphEdge, GraphFile, GraphNode, MemoryGraph, MemoryRelated, RelatedEdge, RelatedRef, RelatedThread, AuditEvent, Invite, Role, Episode, Identity, OrgInfo, OrgKey, OrgSummary, SessionSummary, EpisodeSummary, Member, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project,
@@ -26,14 +27,14 @@ export type Viewer = OrgInfo;
 /** Who a key or sign-in session acts for, or null when the server refuses it. */
 export async function whoIs(key: string): Promise<Viewer | null> {
   if (!key) return null;
-  const res = await fetch(`${BASE}/v1/org`, { headers: { Authorization: `Bearer ${key}` }, cache: "no-store" });
+  const res = await fetch(`${BASE}/v1/org`, { headers: { Authorization: `Bearer ${key}`, ...(await forwarded()) }, cache: "no-store" });
   if (!res.ok) return null;
   return (await res.json()) as Viewer;
 }
 
 /** Unauthenticated calls of the sign-in and sign-up pages. Errors come back as their message. */
 export async function publicCall<T>(path: string, body?: unknown, token?: string): Promise<{ ok: true; data: T } | { ok: false; status: number; message: string }> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...(await forwarded()) };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${BASE}${path}`, { method: body === undefined ? "GET" : "POST", headers, body: body === undefined ? undefined : JSON.stringify(body), cache: "no-store" });
@@ -50,7 +51,7 @@ export class ApiError extends Error {
 }
 
 async function call<T>(path: string, init: { method?: string; body?: unknown; project?: string } = {}): Promise<T> {
-  const headers: Record<string, string> = { Authorization: `Bearer ${await managementKey()}` };
+  const headers: Record<string, string> = { Authorization: `Bearer ${await managementKey()}`, ...(await forwarded()) };
   if (init.project) headers["X-Memvine-Project"] = init.project;
   if (init.body !== undefined) headers["Content-Type"] = "application/json";
   const res = await fetch(`${BASE}${path}`, {

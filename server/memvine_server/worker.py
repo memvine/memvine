@@ -170,13 +170,15 @@ async def run_one(pool, llm: LLM, embedder: Embedder, project_id: UUID | None = 
         except LLMRateLimited as exc:
             # Not the job's fault: hand it back without spending an attempt, and pause long
             # enough for a subscription window or a provider's rate limit to clear.
-            log.warning("job %s rate limited; retrying in %ss: %s", job["id"], RATE_LIMIT_PAUSE_SECONDS, exc)
+            log.warning("job %s rate limited; retrying in %ss (%s)", job["id"], RATE_LIMIT_PAUSE_SECONDS, type(exc).__name__)
             await conn.execute(
                 "UPDATE jobs SET status = 'queued', attempts = attempts - 1, error = %s, run_after = now() + make_interval(secs => %s) WHERE id = %s",
                 (str(exc)[:1500], RATE_LIMIT_PAUSE_SECONDS, job["id"]),
             )
         except Exception as exc:  # noqa: BLE001 - every failure is recorded on the job
-            log.warning("job %s failed (attempt %s): %s", job["id"], job["attempts"], exc)
+            # The message can quote model output drawn from the project's text: it is kept on the job
+            # (GET /v1/jobs, the project's own), and the shared server log names only the error type.
+            log.warning("job %s failed (attempt %s): %s", job["id"], job["attempts"], type(exc).__name__)
             error = f"{exc}\n{traceback.format_exc()[-1500:]}"
             if job["attempts"] >= MAX_ATTEMPTS:
                 await conn.execute(

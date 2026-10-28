@@ -31,6 +31,10 @@ Configuration is `MEMVINE_*` environment variables or `server/.env`; see
 | `MEMVINE_LLM_BACKEND` | `anthropic` (needs `ANTHROPIC_API_KEY`), `claude-cli` (local `claude -p` on a Claude subscription; development only), `fake` | `anthropic` |
 | `MEMVINE_EMBEDDINGS_BACKEND` | `fastembed` (local BGE-small, downloaded once), `fake` | `fastembed` |
 
+On the public internet also read `docs/security.md`: rate limits (`MEMVINE_RATE_LIMIT_*`), the body
+cap (`MEMVINE_MAX_BODY_BYTES`, `MEMVINE_MAX_BULK_BODY_BYTES`), and which proxies' `X-Forwarded-For`
+is believed (`MEMVINE_TRUSTED_PROXIES`, default `private`).
+
 ## Use it
 
 ```sh

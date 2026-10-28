@@ -22,6 +22,22 @@ class Settings(BaseSettings):
     # A console sign-in lasts this long.
     session_days: int = 30
 
+    # Request hardening (security.py; docs/security.md).
+    # Proxies whose X-Forwarded-For hops are believed: comma-separated addresses or CIDR ranges, and
+    # "private" for loopback, RFC 1918, CGNAT (100.64/10), link-local and IPv6 ULA ranges (Railway's
+    # edge and private network, Docker, a local tunnel). Empty: X-Forwarded-For is ignored and the
+    # socket peer is the client.
+    trusted_proxies: str = "private"
+    rate_limit_enabled: bool = True
+    # Requests per minute per credential (project key, organization key, sign-in session) and per
+    # client address. Sign-in, sign-up, invite and password routes have tighter limits of their own.
+    rate_limit_key_per_minute: int = 1200
+    rate_limit_ip_per_minute: int = 3000
+    # Largest request body accepted, in bytes; ingest and session events (bulk conversation text,
+    # each item capped by its own model) get the larger cap.
+    max_body_bytes: int = 2_000_000
+    max_bulk_body_bytes: int = 25_000_000
+
     # LLM backend for extraction and reconciliation:
     #   anthropic  - the Anthropic SDK; needs ANTHROPIC_API_KEY (or an `ant auth login` profile)
     #   claude-cli - `claude -p` on the local machine, billed to a Claude subscription; dev only

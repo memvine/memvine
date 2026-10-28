@@ -126,6 +126,8 @@ async def synthesis_health(conn, org_id: UUID | None = None, project_id: UUID | 
 
 
 def _post(url: str, text: str) -> None:
+    if not url.lower().startswith(("https://", "http://")):
+        raise ValueError("the alert webhook must be an http(s) URL")  # urllib would also open file:// and ftp://
     req = urllib.request.Request(url, data=json.dumps({"text": text}).encode(),
                                  headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(req, timeout=10) as res:  # noqa: S310 - the operator's own URL
