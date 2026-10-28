@@ -13,4 +13,6 @@ RUN pip install --no-cache-dir . && mkdir -p /var/cache/fastembed
 RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"
 
 EXPOSE 8400
-CMD ["memvine-server", "serve", "--host", "0.0.0.0", "--port", "8400"]
+# MEMVINE_HOST=:: listens on IPv6 and IPv4 together (Railway's private network is IPv6).
+ENV MEMVINE_HOST=0.0.0.0
+CMD ["sh", "-c", "exec memvine-server serve --host \"$MEMVINE_HOST\" --port 8400"]
