@@ -211,8 +211,20 @@ def feedback_export(slug: str, out: str = typer.Option("", "--out", help="a file
 
 @app.command()
 def serve(host: str = "127.0.0.1", port: int = 8400, reload: bool = False):
-    """Run the API with the in-process synthesis worker."""
-    uvicorn.run("memvine_server.main:app", host=host, port=port, reload=reload)
+    """Run the API with the in-process synthesis worker. `--host ::` listens on IPv6 and IPv4
+    together (one dual-stack socket), as hosts with an IPv6 private network need (Railway)."""
+    if host != "::" or reload:
+        uvicorn.run("memvine_server.main:app", host=host, port=port, reload=reload)
+        return
+    import socket
+
+    # asyncio would mark a "::" socket IPv6-only; bind it ourselves with V6ONLY off instead.
+    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+    sock.bind(("::", port))
+    server = uvicorn.Server(uvicorn.Config("memvine_server.main:app", host=host, port=port))
+    server.run(sockets=[sock])
 
 
 @app.command()
