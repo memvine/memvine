@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { forwardedFrom } from "@/lib/forwarded";
 
 // Downloads a project's export (POST /v1/export) with the signed-in session, as a file. Owners
 // and admins only; the server records it in the audit log.
@@ -9,7 +10,7 @@ export async function GET(request: NextRequest) {
   if (!base || !project || !token) return new NextResponse("Not available", { status: 400 });
   const res = await fetch(`${base}/v1/export`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "X-Memvine-Project": project },
+    headers: { Authorization: `Bearer ${token}`, "X-Memvine-Project": project, ...forwardedFrom(request.headers) },
     cache: "no-store",
   });
   if (!res.ok) {
