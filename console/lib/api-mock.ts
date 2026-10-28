@@ -39,8 +39,16 @@ function projectData(slug: string): ProjectData {
   const data = store().data[slug];
   if (!data) throw new Error(`unknown project: ${slug}`);
   withSpeakers(data);
+  withReview(data);
   return data;
 }
+
+/** Seeded memories carry no review state: the last week's are new (awaiting review), older ones kept. */
+function withReview(data: ProjectData) {
+  for (const m of data.memories) if (m.review === undefined) m.review = m.recordedAt >= "2026-10-21" ? "new" : "kept";
+}
+
+const awaitingReview = (m: MemoryItem) => m.review === "new" && (m.status === "active" || m.status === "stale");
 
 /** Evidence carries who said it, as the server reports it: the identity of the quote's source. */
 function withSpeakers(data: ProjectData) {
@@ -66,6 +74,17 @@ const mockOrgKeys: import("./types").OrgKey[] = [
   { id: "ok_1", name: "default", masked: "mv_mk_••••9c2e", createdAt: "2026-09-01T00:00:00Z", lastUsedAt: "2026-10-25T08:00:00Z", revokedAt: null },
 ];
 
+// Memory aging, as the server derives it (store.py EXPIRED / UNUSED): an active or stale memory past
+// its stated end is expired; one older than UNUSED_DAYS that no recall served in that time is unused.
+const UNUSED_DAYS = 60;
+const isExpired = (m: MemoryItem) => (m.status === "active" || m.status === "stale") && Boolean(m.validTo) && m.validTo! <= new Date().toISOString();
+const isUnused = (m: MemoryItem) => {
+  const cutoff = new Date(Date.now() - UNUSED_DAYS * 86_400_000).toISOString();
+  return (m.status === "active" || m.status === "stale") && !isExpired(m) && m.recordedAt < cutoff
+    && (!m.lastRecalledAt || m.lastRecalledAt < cutoff);
+};
+const withAging = (m: MemoryItem): MemoryItem => ({ ...m, expired: isExpired(m) });
+
 const HISTORY_WORDS = /\b(was|were|before|previous|previously|changed|history|used to|originally)\b/i;
 const STOP = new Set(["the", "a", "an", "is", "are", "what", "when", "who", "how", "do", "does", "we", "our", "of", "to", "for", "in", "on", "and", "or", "it", "this", "that"]);
 const terms = (text: string) => text.toLowerCase().split(/[^a-z0-9$#-]+/).filter((t) => t.length > 1 && !STOP.has(t));
@@ -76,7 +95,7 @@ export const mockApi: MemvineApi = {
     return store().projects.map((p) => {
       const d = projectData(p.slug);
       const monthCredits = d.usage.reduce((s, u) => s + u.ingestCredits + u.recallCredits, 0);
-      return { ...p, memoryCount: d.memories.length, sourceCount: d.episodes.length, sampleSourceCount: d.episodes.filter((e) => e.id.startsWith(SAMPLE_PREFIX)).length, keyCount: d.keys.filter((k) => !k.revokedAt).length, monthCredits };
+      return { ...p, unusedCount: d.memories.filter((m) => isUnused(m)).length, unusedDays: UNUSED_DAYS, reviewCount: d.memories.filter(awaitingReview).length, memoryCount: d.memories.length, sourceCount: d.episodes.length, sampleSourceCount: d.episodes.filter((e) => e.id.startsWith(SAMPLE_PREFIX)).length, keyCount: d.keys.filter((k) => !k.revokedAt).length, monthCredits };
     });
   },
   async createProject(name, tags, options = {}) {
@@ -124,10 +143,15 @@ export const mockApi: MemvineApi = {
     const q = filter.q?.trim().toLowerCase();
     return projectData(project)
       .memories.filter((m) => !filter.kind || m.kind === filter.kind)
-      .filter((m) => !filter.status || m.status === filter.status)
+      .filter((m) => !filter.status || (filter.status === "expired" ? isExpired(m)
+        : m.status === filter.status && !((filter.status === "active" || filter.status === "stale") && isExpired(m))))
+      .filter((m) => !filter.unused || isUnused(m))
       .filter((m) => !filter.category || m.category === filter.category)
+      .filter((m) => filter.review !== "new" || awaitingReview(m))
+      .filter((m) => filter.review !== "kept" || m.review === "kept")
       .filter((m) => !q || m.statement.toLowerCase().includes(q))
-      .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
+      .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))
+      .map(withAging);
   },
   async getMemory(project, id): Promise<MemoryDetail | null> {
     const data = projectData(project);
@@ -140,7 +164,7 @@ export const mockApi: MemvineApi = {
     while (chain.at(-1)!.supersededBy && byId.has(chain.at(-1)!.supersededBy!)) chain.push(byId.get(chain.at(-1)!.supersededBy!)!);
     const episodeIds = new Set(memory.evidence.map((e) => e.episodeId));
     return {
-      memory, chain, conflicts: (memory.conflictsWith ?? []).map((cid) => byId.get(cid)).filter((m): m is MemoryItem => Boolean(m)),
+      memory: withAging(memory), chain, conflicts: (memory.conflictsWith ?? []).map((cid) => byId.get(cid)).filter((m): m is MemoryItem => Boolean(m)),
       episodes: data.episodes.filter((e) => episodeIds.has(e.id)),
     };
   },
@@ -221,6 +245,7 @@ export const mockApi: MemvineApi = {
       ...old, id: `mem_${randomBytes(6).toString("hex")}`, statement, validFrom: now, validTo: null, recordedAt: now,
       status: "active", supersedes: old.id, supersededBy: null, assertion: "stated", confidence: "high",
       evidence: [{ episodeId: "console", quote: statement, identity: "you@example.com" }], conflictsWith: [], staleReason: null, why: null,
+      review: "kept",
     };
     Object.assign(old, { status: "superseded", supersededBy: next.id, validTo: now });
     data.memories.push(next);
@@ -237,6 +262,7 @@ export const mockApi: MemvineApi = {
     if (memory) {
       memory.assertion = "observed";
       memory.confidence = "high";
+      memory.review = "kept";
     }
   },
 
@@ -373,7 +399,7 @@ export const mockApi: MemvineApi = {
       return wanted.length ? wanted.filter((t) => hay.has(t)).length / wanted.length : 0;
     };
     const scored = data.memories
-      .filter((m) => m.status !== "retired" && (historical || m.status !== "superseded"))
+      .filter((m) => m.status !== "retired" && (historical || (m.status !== "superseded" && !isExpired(m))))
       .map((m) => ({ m, score: relevance(`${m.statement} ${m.subjects.join(" ")}`) * (m.assertion === "claimed" ? 0.5 : 1) * (m.status === "active" ? 1 : 0.6) }))
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score || b.m.recordedAt.localeCompare(a.m.recordedAt));

@@ -214,3 +214,16 @@ async def test_concurrent_starts_of_a_legacy_database_baseline_once(scratch_dsn)
         for c in conns:
             await c.close()
     assert sum(any(s.startswith("baselined") for s in steps) for steps in results) == 1
+
+
+async def test_legacy_database_that_ran_later_blocks_migrates(scratch_dsn):
+    """Databases that ran a newer schema.sql (with the memory aging and review loop blocks that
+    became 0002 and 0003) are baselined at 0001 and run those files again without harm."""
+    async with await connect(scratch_dsn) as conn:
+        await build_legacy(conn)
+        for m in RELEASE:
+            if m.name in ("memory_aging", "review_loop"):
+                await conn.execute(m.sql)
+        steps = await migrate(conn)
+        assert steps[0].startswith("baselined 0001") and steps[1:] == [*LATER, "applied rls.sql (repeatable)"]
+        assert (await status(conn)).up_to_date

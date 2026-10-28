@@ -423,6 +423,35 @@ const codingTeam: ProjectData = {
       evidence: [{ episodeId: "ep_3005", quote: "the reminder timezone bug. Push them to 4.2.1." }],
     },
     {
+      // Time-bound: it said when it ends, and that day has passed, so recall no longer serves it (shown as Expired).
+      id: "mem_scratch_org", kind: "semantic", category: "fact", threadId: null,
+      statement: "The shared QA scratch org expires on 26 Oct 2026; after that, park test data in the new payments sandbox.",
+      why: "Test data left in the scratch org is lost when it expires.",
+      subjects: ["qa scratch org"], validFrom: "2026-10-14T08:45:00Z", validTo: "2026-10-26T23:59:59Z", recordedAt: "2026-10-14T08:46:00Z",
+      status: "active", supersedes: null, supersededBy: null, assertion: "stated", confidence: "high", audience: "project",
+      evidence: [{ episodeId: "ep_3001", quote: "the shared QA scratch org expires on 26 Oct" }],
+      lastRecalledAt: "2026-10-22T09:00:00Z", recallCount: 4,
+    },
+    {
+      // Unused: learned long ago and no recall has served it since (listed for review on Home and Memories).
+      id: "mem_vpn_profile", kind: "procedural", category: "gotcha", threadId: null,
+      statement: "The staging VPN profile is shared with the partner integration team; rotating it locks them out until they re-import it.",
+      why: "A Friday rotation once left the partner team without staging for the weekend.",
+      subjects: ["staging vpn"], validFrom: "2026-08-11T10:00:00Z", validTo: null, recordedAt: "2026-08-11T10:02:00Z",
+      status: "active", supersedes: null, supersededBy: null, assertion: "stated", confidence: "high", audience: "project",
+      evidence: [{ episodeId: "ep_2001", quote: "the staging VPN profile is shared with the partner integration team" }],
+      lastRecalledAt: null, recallCount: 0,
+    },
+    {
+      id: "mem_billing_flags", kind: "semantic", category: "fact", threadId: null,
+      statement: "Billing feature flags live in the ops dashboard, not in the repository config.",
+      why: "Changing the repo config has no effect on billing flags.",
+      subjects: ["billing flags"], validFrom: "2026-08-04T15:00:00Z", validTo: null, recordedAt: "2026-08-04T15:01:00Z",
+      status: "active", supersedes: null, supersededBy: null, assertion: "stated", confidence: "medium", audience: "project",
+      evidence: [{ episodeId: "ep_2001", quote: "billing flags live in the ops dashboard" }],
+      lastRecalledAt: "2026-08-20T11:30:00Z", recallCount: 2,
+    },
+    {
       id: "mem_coverage_release", kind: "semantic", category: "fact", threadId: "thr_coverage",
       statement: "The coverage gate only fails on release branches; main is green.",
       why: null,

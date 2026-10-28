@@ -24,6 +24,7 @@ from . import edges as edge_ops
 from . import health as health_ops
 from . import ingest as ingest_ops
 from . import instant as instant_ops
+from . import review as review_ops
 from . import sample as sample_ops
 from . import sessions as session_ops
 from . import threads as thread_ops
@@ -71,8 +72,7 @@ from .models import (
 )
 from .recall import recall as run_recall
 from .remember import SupersedeError, remember
-from .store import MEMORY_COLUMNS, get_memory, list_memories
-from .store import retire as retire_memory
+from .store import MEMORY_COLUMNS, get_memory, list_memories, unused_clause
 from .worker import run_forever
 
 log = logging.getLogger("memvine")
@@ -221,7 +221,9 @@ async def ingest(body: IngestRequest, request: Request, response: Response, prin
 async def recall(body: RecallRequest, request: Request, principal: Principal = Depends(require_project)):
     async with request.app.state.pool.connection() as conn:
         audiences = await access.readable_audiences(conn, principal.project_id, body.identity, principal.key_id is None)
-        result = await run_recall(conn, request.app.state.embedder, principal.project_id, body, audiences)
+        # The console's playground (no project key) is a person looking, not an agent using memory.
+        result = await run_recall(conn, request.app.state.embedder, principal.project_id, body, audiences,
+                                  track=principal.key_id is not None)
         request.state.log_detail = recall_log_detail(result)
         if principal.key_id is not None:  # the console's playground is not billed
             await billing.charge_recall(conn, principal.project_id)
@@ -393,13 +395,17 @@ async def memories(
     kind: str | None = None,
     category: str | None = None,
     scope: Literal["project", "thread"] | None = None,
+    review: Literal["new", "kept"] | None = Query(None, description="new: current memories no person has kept yet"),
     q: str | None = None,
+    unused: bool = False,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
+    """status=expired lists items past the end they stated; unused=true lists items no recall served
+    in memory_unused_days (for review: nothing is hidden or deleted for being unused)."""
     async with request.app.state.pool.connection() as conn:
         return await list_memories(conn, principal.project_id, status=status, kind=kind, q=q, limit=limit, offset=offset,
-                                   category=category, scope=scope)
+                                   category=category, scope=scope, unused=unused, review=review)
 
 
 @app.get("/v1/threads", response_model=list[ThreadSummary])
@@ -498,15 +504,19 @@ async def patch_memory(memory_id: UUID, body: MemoryPatch, request: Request, pri
         if not current:
             raise HTTPException(404, {"code": "not-found", "message": "No such memory"})
         if body.status == "retired":
-            await retire_memory(conn, principal.project_id, memory_id)  # an older fact it replaced is current again
+            # A person forgets it: an older fact it replaced is current again; synthesis will not
+            # learn it again; a synthesis-made one becomes a feedback case (review.py).
+            await review_ops.forget(conn, principal.project_id, memory_id)
         elif body.status and current.status != "superseded":
             await conn.execute(
                 "UPDATE memory_items SET status = %s, valid_to = CASE WHEN %s = 'retired' THEN now() ELSE NULL END WHERE id = %s",
                 (body.status, body.status, memory_id),
             )
+            if body.status == "active" and current.status == "retired":
+                await review_ops.restore(conn, principal.project_id, memory_id)
         if body.confirm:
             await conn.execute(
-                "UPDATE memory_items SET assertion = 'observed', confidence = 'high' WHERE id = %s", (memory_id,)
+                "UPDATE memory_items SET assertion = 'observed', confidence = 'high', review = 'kept' WHERE id = %s", (memory_id,)
             )
             await code_ops.revalidate(conn, principal.project_id, memory_id)
         return await get_memory(conn, principal.project_id, memory_id)
@@ -574,10 +584,23 @@ async def export_project(request: Request, principal: Principal = Depends(requir
                 "SELECT id, agent, identity, label, status, started_at, last_event_at, turns, state FROM sessions WHERE project_id = %s ORDER BY started_at")],
             "identities": await rows("SELECT identity, traits, origin, created_at, last_seen_at FROM identities WHERE project_id = %s ORDER BY identity"),
             "audiences": await rows("SELECT * FROM audiences WHERE project_id = %s"),
+            "feedback_cases": await rows(f"SELECT {review_ops.CASE_COLUMNS} FROM feedback_cases WHERE project_id = %s ORDER BY created_at"),
         }
     request.state.audit_target = principal.project_slug
     filename = f"memvine-{principal.project_slug}-{datetime.now(UTC):%Y%m%d}.json"
     return JSONResponse(jsonable_encoder(document), headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@app.get("/v1/feedback-cases")
+async def feedback_cases(request: Request, principal: Principal = Depends(require_project),
+                         limit: int = Query(200, ge=1, le=1000), offset: int = Query(0, ge=0)):
+    """Private feedback for extraction: synthesis-made memories a person forgot or corrected, each with
+    its statement, category, evidence quotes and an excerpt of its source. Owners and admins only
+    (they quote source text). `memvine-server feedback-export` writes the same as JSONL."""
+    ensure_manager(request)
+    async with request.app.state.pool.connection() as conn:
+        cases = await review_ops.list_cases(conn, principal.project_id, limit=limit, offset=offset)
+    return {"cases": jsonable_encoder(cases)}
 
 
 @app.delete("/v1/episodes/{episode_id}", status_code=204)
@@ -746,6 +769,10 @@ PROJECT_SELECT = """
            (SELECT coalesce(sum(u.credits), 0) FROM usage_events u WHERE u.project_id = p.id
              AND u.at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS month_credits,
            (SELECT count(*) FROM memory_items m WHERE m.project_id = p.id) AS memory_count,
+           (SELECT count(*) FROM memory_items m WHERE m.project_id = p.id AND """ + unused_clause(settings.memory_unused_days) + """) AS unused_count,
+           """ + str(int(settings.memory_unused_days)) + """ AS unused_days,
+           (SELECT count(*) FROM memory_items m WHERE m.project_id = p.id AND m.review = 'new'
+             AND m.status IN ('active', 'stale')) AS review_count,
            (SELECT count(*) FROM episodes e WHERE e.project_id = p.id) AS source_count,
            (SELECT count(*) FROM episodes e WHERE e.project_id = p.id AND e.metadata->>'source' = 'sample') AS sample_source_count,
            (SELECT count(*) FROM api_keys k WHERE k.project_id = p.id AND k.revoked_at IS NULL) AS key_count,

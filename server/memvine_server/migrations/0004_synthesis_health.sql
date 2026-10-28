@@ -1,4 +1,4 @@
--- Synthesis health (health.py). Each worker process records when its loops last polled the queue;
+-- 0004 synthesis health (health.py). Each worker process records when its loops last polled the queue;
 -- the newest beat tells whether any worker is alive. Rows of processes gone for a day are pruned.
 CREATE TABLE worker_heartbeats (
     worker_id     text PRIMARY KEY,          -- host:pid:random, one per process

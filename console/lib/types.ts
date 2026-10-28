@@ -24,6 +24,11 @@ export interface Project {
   sampleSourceCount?: number;
   /** What the project is for, in the owner's words; shown under its name on the graph. */
   description?: string | null;
+  /** Memories no recall served in the last `unusedDays` days (listed for review, never hidden). */
+  unusedCount?: number;
+  unusedDays?: number;
+  /** Current memories awaiting review (review "new"). */
+  reviewCount?: number;
 }
 
 /** POST /v1/ingest with `instant: true` (server/memvine_server/instant.py). status "done": every
@@ -96,11 +101,18 @@ export interface MemoryItem {
   /** What sort of durable knowledge this is; null or absent for plain memory. */
   /** "project" knowledge concerns everyone; "thread" knowledge only matters inside its thread. */
   scope?: "project" | "thread" | null;
+  /** Past the end it stated (validTo) while still active or stale: recall no longer serves it as current. */
+  expired?: boolean;
+  /** When a recall briefing last served it, and how many times one has. */
+  lastRecalledAt?: string | null;
+  recallCount?: number;
   category?: KnowledgeCategory | null;
   /** The reason behind a decision, rule or gotcha, in one sentence. */
   why?: string | null;
   /** The thread of work this came from, if any. */
   threadId?: string | null;
+  /** "new" until a person keeps it (Keep / Still true); synthesis writes "new", a person's own memory starts "kept". */
+  review?: "new" | "kept";
 }
 
 export type KnowledgeCategory = "decision" | "rule" | "gotcha" | "fact" | "preference";
@@ -338,8 +350,13 @@ export interface RecallResult {
 export interface MemoryFilter {
   q?: string;
   kind?: MemoryKind;
-  status?: MemoryStatus;
+  /** "expired" is not a stored status: active or stale memories past their stated end. "active" leaves those out. */
+  status?: MemoryStatus | "expired";
   category?: KnowledgeCategory;
+  /** Only memories no recall served in the project's unusedDays. */
+  unused?: boolean;
+  /** "new": current memories no person has kept yet. */
+  review?: "new" | "kept";
 }
 
 export interface MemoryDetail {

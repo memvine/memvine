@@ -17,6 +17,7 @@ const LEARNED = 8;
 const CHANGED = 5;
 const OUTDATED = 6;
 const RECALLS = 5;
+const REVIEW = 6;
 /** listMemories asks for at most this many per status. */
 const PAGE = 200;
 
@@ -25,7 +26,8 @@ const newest = (a: MemoryItem, b: MemoryItem) => b.recordedAt.localeCompare(a.re
 
 export default async function HomePage() {
   const project = await currentProject();
-  const [active, stale, superseded, episodes, keys, requests, sessions, usage, threads] = await Promise.all([
+  const [review, active, stale, superseded, episodes, keys, requests, sessions, usage, threads] = await Promise.all([
+    listMemories(project.slug, { review: "new" }),
     listMemories(project.slug, { status: "active" }),
     listMemories(project.slug, { status: "stale" }),
     listMemories(project.slug, { status: "superseded" }),
@@ -80,10 +82,11 @@ export default async function HomePage() {
     { done: sent.some((e) => e.label?.endsWith("(imported)")), label: "Backfill your past sessions", href: "/integrations", detail: "/memvine:backfill" },
   ];
 
-  const receipt = (m: MemoryItem) => (
-    <Receipt m={m} href={memoryHref(m.id)} showCategory
+  const receipt = (m: MemoryItem, reviewing = false) => (
+    <Receipt m={m} href={memoryHref(m.id)} showCategory reviewing={reviewing}
              thread={m.threadId && threadTitle.has(m.threadId) ? { id: m.threadId, title: threadTitle.get(m.threadId)! } : null} />
   );
+  const reviewTotal = Math.max(project.reviewCount ?? 0, review.length);
 
   return (
     <>
@@ -119,6 +122,18 @@ export default async function HomePage() {
 
           <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
             <div className="min-w-0 space-y-6">
+              {review.length > 0 && (
+                <Section
+                  title={`Review · ${reviewTotal.toLocaleString()}`}
+                  description="New memories no one has looked at yet. Keep what is worth knowing on another task, forget the rest, or say what is true instead. Agents are served them meanwhile."
+                  more={reviewTotal > REVIEW ? { href: "/memories?review=new", label: `All ${reviewTotal.toLocaleString()}` } : undefined}
+                >
+                  <ul className="divide-y divide-border">
+                    {[...review].sort(newest).slice(0, REVIEW).map((m) => <Row key={m.id}>{receipt(m, true)}</Row>)}
+                  </ul>
+                </Section>
+              )}
+
               <Section title="Recently learned" description="The newest memories agents are served now." more={{ href: "/memories", label: "All memories" }}>
                 {active.length === 0 ? <Quiet>No active memories.</Quiet> : (
                   <ul className="divide-y divide-border">
@@ -159,6 +174,8 @@ export default async function HomePage() {
             </div>
 
             <div className="min-w-0 space-y-6">
+              {(project.unusedCount ?? 0) > 0 && <UnusedCard count={project.unusedCount!} days={project.unusedDays ?? 60} />}
+
               <Section title="Possibly outdated" description="Memories whose ground moved; confirm, correct or forget them."
                        more={stale.length > OUTDATED ? { href: "/memories?status=stale", label: `All ${stale.length}` } : undefined}>
                 {stale.length === 0 ? <Quiet>Nothing looks outdated.</Quiet> : (
@@ -187,6 +204,21 @@ export default async function HomePage() {
         </>
       )}
     </>
+  );
+}
+
+/** Memories no agent's recall served lately: a nudge to review them, never hidden or deleted for it. */
+function UnusedCard({ count, days }: { count: number; days: number }) {
+  return (
+    <Card>
+      <Link href="/memories?unused=true" className="flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-surface-2/50 sm:px-5">
+        <p className="text-[13px] leading-snug text-text-2">
+          <span className="font-semibold tabular-nums text-text">{count.toLocaleString()}</span>{" "}
+          {count === 1 ? "memory hasn't" : "memories haven't"} been used in {days} days
+        </p>
+        <span className="inline-flex shrink-0 items-center gap-1 text-[12.5px] text-text-3">Review <ArrowRight className="size-3.5" aria-hidden /></span>
+      </Link>
+    </Card>
   );
 }
 

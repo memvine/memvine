@@ -15,6 +15,7 @@ from .embeddings import Embedder
 from .extraction.extract import extract_knowledge
 from .extraction.llm import LLM
 from .reconcile import reconcile
+from .review import has_forgotten, matches_forgotten
 from .threads import forget_episode, resolve_thread, update_threads
 
 
@@ -39,7 +40,14 @@ async def synthesize_episode(conn, llm: LLM, embedder: Embedder, project, ep, co
     relations: dict[str, int] = {}
     code_context = await code.code_for_episode(conn, project_id, ep)
     anchored = 0
-    for cand in extraction.items:
+    dropped_forgotten = 0
+    # A person forgot it once: never learn it again (review.py).
+    forgotten = await has_forgotten(conn, project_id) and bool(extraction.items)
+    vectors = await embedder.embed([c.statement for c in extraction.items]) if forgotten else []
+    for i, cand in enumerate(extraction.items):
+        if forgotten and await matches_forgotten(conn, project_id, cand.statement, vectors[i]):
+            dropped_forgotten += 1
+            continue
         decision = await reconcile(conn, llm, embedder, project_id, cand, recorded_at=ep["occurred_at"], episode_id=ep["id"],
                                    audience=ep["audience"])
         relations[decision.relation] = relations.get(decision.relation, 0) + 1
@@ -66,6 +74,7 @@ async def synthesize_episode(conn, llm: LLM, embedder: Embedder, project, ep, co
         "dropped_no_quote": extraction.dropped_no_quote,
         "dropped_invalid": extraction.dropped_invalid,
         "dropped_gate": extraction.dropped_gate,
+        "dropped_forgotten": dropped_forgotten,
         "relations": relations,
         "anchored": anchored,
     }

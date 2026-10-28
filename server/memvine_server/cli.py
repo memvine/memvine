@@ -175,6 +175,41 @@ def backfill_passages(project: str = typer.Option("", help="a project slug; all 
 
 
 @app.command()
+def feedback_export(slug: str, out: str = typer.Option("", "--out", help="a file to write; standard output when empty")):
+    """Write a project's feedback cases (memories people forgot or corrected) as JSONL, for the local
+    extraction gate: append them to ~/.memvine/eval/drop-cases.jsonl (benchmark/knowledge/cases.py).
+    They quote source text: keep the file private and out of any repository."""
+    import json
+    import sys
+
+    from fastapi.encoders import jsonable_encoder
+
+    from .review import list_cases
+    from .synthesis import project_profile
+
+    async def go(conn):
+        project = await (await conn.execute("SELECT id, name, description FROM projects WHERE slug = %s", (slug,))).fetchone()
+        if not project:
+            raise typer.BadParameter(f"no project {slug!r}")
+        cases, offset = [], 0
+        while batch := await list_cases(conn, project["id"], limit=500, offset=offset):
+            cases += batch
+            offset += len(batch)
+        return project_profile(project), cases
+
+    profile, cases = _run(_with_pool(go))
+    # profile: what extraction judged relevance against, so the gate can replay the case the same way.
+    lines = [json.dumps({"project": slug, "profile": profile, **jsonable_encoder(c)}, ensure_ascii=False) for c in reversed(cases)]
+    text = "".join(line + "\n" for line in lines)
+    if out:
+        with open(out, "w") as f:
+            f.write(text)
+        typer.echo(f"wrote {len(lines)} feedback cases to {out}", err=True)
+    else:
+        sys.stdout.write(text)
+
+
+@app.command()
 def serve(host: str = "127.0.0.1", port: int = 8400, reload: bool = False):
     """Run the API with the in-process synthesis worker."""
     uvicorn.run("memvine_server.main:app", host=host, port=port, reload=reload)

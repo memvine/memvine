@@ -32,7 +32,7 @@ from .models import RecallInclude, RecallRequest
 from .recall import recall as run_recall
 from .redaction import redact
 from .remember import SupersedeError, remember
-from .store import retire
+from .review import forget
 
 _project: ContextVar[UUID | None] = ContextVar("memvine_project", default=None)
 _runtime: dict = {}  # pool, embedder, llm; set by the API at startup
@@ -129,7 +129,7 @@ async def memory_forget(memory_id: str) -> str:
             "SELECT statement FROM memory_items WHERE project_id = %s AND id = %s", (project, mid))).fetchone()
         if not row:
             return f"No memory {memory_id} in this project."
-        if not await retire(conn, project, mid):
+        if not await forget(conn, project, mid):
             return f"Not current, so nothing to forget: {row['statement']}"
     return f"Forgotten: {row['statement']}"
 

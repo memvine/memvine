@@ -220,7 +220,7 @@ async def load_sample(conn, embedder: Embedder, project_id: UUID) -> dict:
                              category=mem.category, why=mem.why)
             old = ids.get(mem.supersedes) if mem.supersedes else None
             new_id = await insert_item(conn, project_id, cand, vectors[mem.statement], recorded_at=at, episode_id=src.id,
-                                       supersedes=old)
+                                       supersedes=old, origin="sample")
             ids[mem.key] = new_id
             thread_id = await _sample_thread(conn, embedder, project_id, mem.thread, src.id, at, threads) if mem.thread else None
             await conn.execute("UPDATE memory_items SET scope = 'project', thread_id = %s WHERE id = %s", (thread_id, new_id))

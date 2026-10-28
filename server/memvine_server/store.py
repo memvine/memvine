@@ -2,34 +2,50 @@
 reconciliation, recall and the HTTP routes."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from .extraction.extract import Candidate
+from .config import settings
 from .models import Evidence, MemoryOut
 
 MEMORY_COLUMNS = """
     id, kind, statement, subjects, valid_from, valid_to, recorded_at, status,
     supersedes, superseded_by, assertion, confidence, audience, conflicts_with, standing, stale_reason,
-    category, why, thread_id, scope
+    category, why, thread_id, scope,
+    last_recalled_at, recall_count, review, origin
 """
+# Expired: still active or stale, past the end it stated (valid_to). Unused: old enough and not
+# served by a recall within memory_unused_days. Both take the day count, then nothing else.
+EXPIRED = "(status IN ('active', 'stale') AND valid_to IS NOT NULL AND valid_to <= now())"
+UNUSED = ("(status IN ('active', 'stale') AND (valid_to IS NULL OR valid_to > now()) "
+          "AND created_at < now() - make_interval(days => %(unused_days)s) "
+          "AND (last_recalled_at IS NULL OR last_recalled_at < now() - make_interval(days => %(unused_days)s)))")
+
+
+def unused_clause(days: int) -> str:
+    """UNUSED with the day count inlined (an int), so it composes with positional parameters."""
+    return UNUSED % {"unused_days": int(days)}
+
 
 
 async def insert_item(conn, project_id: UUID, cand: Candidate, embedding: list[float], *, recorded_at: datetime,
-                      episode_id: str, supersedes: UUID | None = None, audience: str = "project") -> UUID:
+                      episode_id: str, supersedes: UUID | None = None, audience: str = "project",
+                      origin: str = "synthesis", review: str = "new") -> UUID:
+    """`origin`: who made it (synthesis, person, sample); `review`: 'new' until a person keeps it."""
     row = await (
         await conn.execute(
             f"""
             INSERT INTO memory_items
                 (project_id, kind, statement, subjects, valid_from, recorded_at, assertion, confidence, embedding, supersedes, audience, standing,
-                 category, why)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 category, why, valid_to, origin, review)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING {MEMORY_COLUMNS}
             """,
             (
                 project_id, cand.kind, cand.statement, cand.subjects, cand.valid_from or recorded_at, recorded_at,
                 cand.assertion, cand.confidence, embedding, supersedes, audience, cand.standing,
-                cand.category, cand.why,
+                cand.category, cand.why, cand.valid_until, origin, review,
             ),
         )
     ).fetchone()
@@ -74,6 +90,12 @@ def memory_out(row, evidence: list[Evidence] | None = None) -> MemoryOut:
         why=row.get("why"),
         thread_id=row.get("thread_id"),
         scope=row.get("scope"),
+        expired=row["status"] in ("active", "stale") and row["valid_to"] is not None
+        and row["valid_to"] <= datetime.now(timezone.utc),
+        last_recalled_at=row.get("last_recalled_at"),
+        recall_count=row.get("recall_count") or 0,
+        review=row.get("review") or "kept",
+        origin=row.get("origin"),
     )
 
 
@@ -109,16 +131,30 @@ async def get_memory(conn, project_id: UUID, memory_id: UUID) -> MemoryOut | Non
 
 async def list_memories(conn, project_id: UUID, *, status: str | None, kind: str | None, q: str | None,
                         limit: int, offset: int, category: str | None = None, thread_id: UUID | None = None,
-                        scope: str | None = None) -> list[MemoryOut]:
+                        scope: str | None = None, unused: bool = False, review: str | None = None) -> list[MemoryOut]:
+    """status "expired" is not a stored status: active or stale items past their valid_to. "active"
+    leaves those out. unused: what has not been recalled in settings.memory_unused_days. review "new":
+    current items no person has kept yet (review.py)."""
     clauses, params = ["project_id = %s"], [project_id]
+    if unused:
+        clauses.append(unused_clause(settings.memory_unused_days))
+    if review == "new":
+        clauses.append("review = 'new' AND status IN ('active', 'stale')")
+    elif review:
+        clauses.append("review = %s")
+        params.append(review)
     if scope == "project":  # items stored before scopes existed are project-wide
         clauses.append("scope IS DISTINCT FROM 'thread'")
     elif scope:
         clauses.append("scope = %s")
         params.append(scope)
-    if status:
+    if status == "expired":
+        clauses.append(EXPIRED)
+    elif status:
         clauses.append("status = %s")
         params.append(status)
+        if status in ("active", "stale"):
+            clauses.append(f"NOT {EXPIRED}")
     if kind:
         clauses.append("kind = %s")
         params.append(kind)

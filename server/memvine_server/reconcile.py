@@ -8,6 +8,7 @@ makes the call except for near-identical statements, which need no model.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -28,6 +29,24 @@ MIN_SIMILARITY = 0.45
 # values of one fact score about 0.9, different facts about one project 0.6-0.7.
 SIMILAR_WITHOUT_SUBJECT = 0.8
 IDENTICAL_SIMILARITY = 0.97
+# A reworded restatement of one fact (same category, same numbers and dates) this close is the same
+# item without asking the model: the existing wording stays and the restatement adds evidence, so
+# synthesis does not write near-copies. A changed value (an update) can score this high too, so the
+# numbers must match and the new wording must not announce a change; the model judges those.
+NEAR_DUPLICATE_SIMILARITY = 0.92
+_NUMBERS = re.compile(r"\d+(?:[.:]\d+)*")
+_CHANGE = re.compile(r"\b(now|no longer|moved|switched|changed|replaced|instead|renamed|anymore|not)\b")
+
+
+def near_duplicate(cand: Candidate, old) -> bool:
+    if old["similarity"] < NEAR_DUPLICATE_SIMILARITY or old["kind"] != cand.kind:
+        return False
+    if old.get("category") and cand.category and old["category"] != cand.category:
+        return False
+    before, after = normalize(old["statement"]), normalize(cand.statement)
+    if set(_CHANGE.findall(after)) - set(_CHANGE.findall(before)):
+        return False
+    return set(_NUMBERS.findall(before)) == set(_NUMBERS.findall(after))
 
 
 @dataclass
@@ -47,10 +66,11 @@ async def _related(conn, project_id: UUID, cand: Candidate, embedding: list[floa
     rows = await (
         await conn.execute(
             f"""
-            SELECT id, statement, kind, recorded_at, valid_from, confidence,
+            SELECT id, statement, kind, category, recorded_at, valid_from, confidence,
                    1 - (embedding <=> %s::vector) AS similarity
             FROM memory_items
-            WHERE project_id = %s AND audience = %s AND status IN ('active', 'stale') AND embedding IS NOT NULL AND {where}
+            WHERE project_id = %s AND audience = %s AND status IN ('active', 'stale') AND embedding IS NOT NULL
+              AND (valid_to IS NULL OR valid_to > now()) AND {where}
             ORDER BY embedding <=> %s::vector
             LIMIT %s
             """,
@@ -64,6 +84,9 @@ async def _classify(llm: LLM, cand: Candidate, new_date: datetime, related: list
     """One judgement over all related items: which one the candidate matches, and how."""
     for old in related:
         if old["similarity"] >= IDENTICAL_SIMILARITY and normalize(old["statement"]) == normalize(cand.statement):
+            return "same", old
+    for old in related:
+        if near_duplicate(cand, old):
             return "same", old
     try:
         raw = await fast(llm).complete(

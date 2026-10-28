@@ -99,6 +99,15 @@ class MemoryOut(BaseModel):
     thread_id: UUID | None = None
     # "project" (anyone in the project), "thread" (only beside its thread's page); None reads as project.
     scope: Literal["project", "thread"] | None = None
+    # Past valid_to while still active or stale: the item said when it stops being true and that moment
+    # has passed. Recall no longer serves it as current; its status is unchanged.
+    expired: bool = False
+    # When a recall briefing last served it, and how many times one has.
+    last_recalled_at: datetime | None = None
+    recall_count: int = 0
+    # Review loop (review.py): 'new' until a person keeps it; synthesis writes 'new', a person's own 'kept'.
+    review: Literal["new", "kept"] = "kept"
+    origin: Literal["synthesis", "person", "sample"] | None = None
 
 
 # Edges between memories (edges.py). supersedes, contradicts, extends and derived join two facts;
@@ -419,6 +428,9 @@ class ProjectOut(BaseModel):
     processing_paused: bool = False
     description: str | None = None
     recall_min_relevance: float | None = None  # null: the server default for its embedding model
+    unused_count: int = 0  # memories not served by a recall in unused_days (GET /v1/memories?unused=true)
+    unused_days: int = 60
+    review_count: int = 0  # current memories awaiting review (GET /v1/memories?review=new)
 
 
 class ThreadItemEvidence(BaseModel):
