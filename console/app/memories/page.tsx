@@ -10,21 +10,23 @@ import type { MemoryKind, MemoryStatus } from "@/lib/types";
 import { href } from "@/lib/url";
 
 const KINDS: MemoryKind[] = ["semantic", "episodic", "procedural", "prospective", "preference"];
-const STATUSES: MemoryStatus[] = ["active", "superseded", "retired", "stale"];
+const STATUSES: (MemoryStatus | "expired")[] = ["active", "superseded", "retired", "stale", "expired"];
 
 export default async function MemoriesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const params = await searchParams;
   const kind = KINDS.find((k) => k === params.kind);
   const status = STATUSES.find((s) => s === params.status);
+  const unused = params.unused === "true" ? "true" : undefined;
   const project = await currentProject();
+  const unusedDays = project.unusedDays ?? 60;
   const [memories, all, threads, detail] = await Promise.all([
-    listMemories(project.slug, { q: params.q, kind, status }),
-    params.q || kind || status ? listMemories(project.slug) : null,
+    listMemories(project.slug, { q: params.q, kind, status, unused: Boolean(unused) }),
+    params.q || kind || status || unused ? listMemories(project.slug) : null,
     listThreads(project.slug),
     params.open ? getMemory(project.slug, params.open) : null,
   ]);
-  const filtered = Boolean(params.q || kind || status);
-  const base = { q: params.q, kind, status };
+  const filtered = Boolean(params.q || kind || status || unused);
+  const base = { q: params.q, kind, status, unused };
   const link = (id: string) => href("/memories", { ...base, open: id });
   const total = all?.length ?? memories.length;
 
@@ -47,7 +49,17 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
           <option value="">Any status</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </Select>
+        <Select name="unused" defaultValue={unused ?? ""} aria-label="Use" wrapperClassName="w-[190px]" className="h-9">
+          <option value="">Any use</option>
+          <option value="true">Not used in {unusedDays} days</option>
+        </Select>
       </FilterBar>
+
+      {unused && (
+        <p className="mb-3 text-[12.5px] leading-relaxed text-text-3">
+          No agent&apos;s recall has served these in {unusedDays} days. Keep what still matters, correct or forget the rest; nothing is hidden or deleted for being unused.
+        </p>
+      )}
 
       <Card>
         <ReceiptList
