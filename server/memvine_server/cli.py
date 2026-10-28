@@ -135,19 +135,21 @@ def feedback_export(slug: str, out: str = typer.Option("", "--out", help="a file
     from fastapi.encoders import jsonable_encoder
 
     from .review import list_cases
+    from .synthesis import project_profile
 
     async def go(conn):
-        project = await (await conn.execute("SELECT id FROM projects WHERE slug = %s", (slug,))).fetchone()
+        project = await (await conn.execute("SELECT id, name, description FROM projects WHERE slug = %s", (slug,))).fetchone()
         if not project:
             raise typer.BadParameter(f"no project {slug!r}")
         cases, offset = [], 0
         while batch := await list_cases(conn, project["id"], limit=500, offset=offset):
             cases += batch
             offset += len(batch)
-        return cases
+        return project_profile(project), cases
 
-    cases = _run(_with_pool(go))
-    lines = [json.dumps({"project": slug, **jsonable_encoder(c)}, ensure_ascii=False) for c in reversed(cases)]
+    profile, cases = _run(_with_pool(go))
+    # profile: what extraction judged relevance against, so the gate can replay the case the same way.
+    lines = [json.dumps({"project": slug, "profile": profile, **jsonable_encoder(c)}, ensure_ascii=False) for c in reversed(cases)]
     text = "".join(line + "\n" for line in lines)
     if out:
         with open(out, "w") as f:

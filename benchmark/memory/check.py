@@ -6,6 +6,9 @@ to extraction, reconciliation or recall. Uses the real model; never runs in CI.
 It starts a throwaway API server (from --server-dir, default this checkout's server/) on its own
 database, then:
   1. keep/drop cases: what extraction admits (benchmark/knowledge/cases.py)
+  1b. private drop cases: memories people forgot or marked wrong, exported with
+     `memvine-server feedback-export` into ~/.memvine/eval/drop-cases.jsonl (MEMVINE_DROP_CASES);
+     extraction over each source excerpt must not yield the forgotten statement again
   2. the October test: three facts become the right memories, each is recalled first, an
      unrelated question abstains, a re-send changes nothing, a contradiction supersedes
   3. the briefing: what the agent receives for one question carries the answer once, nothing
@@ -143,6 +146,14 @@ def main() -> int:
         print("== 1. keep/drop cases", flush=True)
         for name, ok, items in asyncio.run(run_cases()):
             check(f"case {name}", ok, "; ".join(items)[:120] if items else "kept nothing")
+
+        from cases import DROP_CASES, run_private_cases
+
+        private = asyncio.run(run_private_cases())
+        print(f"== 1b. private drop cases ({len(private)} from {DROP_CASES})" if private
+              else f"== 1b. private drop cases: none ({DROP_CASES} absent or empty)", flush=True)
+        for name, ok, items in private:
+            check(f"case {name}", ok, ("re-learned: " + "; ".join(items))[:120] if items else "not re-learned")
 
     print(f"== 2. the October test (server: {args.server_dir})", flush=True)
     mgmt = "mv_mk_check_" + secrets.token_hex(8)

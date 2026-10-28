@@ -229,7 +229,7 @@ def test_feedback_export_cli(tmp_path):
         assert result.exit_code == 0, result.output
         lines = [json.loads(line) for line in out.read_text().splitlines()]
         assert [c["kind"] for c in lines] == ["forgotten", "wrong"]
-        assert lines[0]["project"] == slug and lines[0]["excerpt"] == "the excerpt" and lines[0]["quotes"][0]["quote"] == "q"
+        assert lines[0]["project"] == slug and lines[0]["profile"] == slug and lines[0]["excerpt"] == "the excerpt" and lines[0]["quotes"][0]["quote"] == "q"
         assert lines[1]["correction"] == "The right fact."
         assert CliRunner().invoke(cli, ["feedback-export", "no-such-project"]).exit_code != 0
     finally:
@@ -241,3 +241,40 @@ def test_feedback_export_cli(tmp_path):
     assert len(cut) == 100 and "NEEDLE" in cut
     assert excerpt_around(text, "missing", 50) == "a" * 50
     assert excerpt_around("short", "x") == "short"
+
+
+@pytest.mark.asyncio
+async def test_gate_replays_private_drop_cases(tmp_path, monkeypatch):
+    """benchmark/knowledge/cases.py: a forgotten statement re-extracted from its excerpt fails the case."""
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location("gate_cases", Path(__file__).parents[2] / "benchmark" / "knowledge" / "cases.py")
+    cases = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cases)
+
+    path = tmp_path / "drop-cases.jsonl"
+    assert cases.load_private_cases(path) == [] and await cases.run_private_cases(path=path) == []
+    path.write_text("\n".join(json.dumps(c) for c in [
+        {"kind": "forgotten", "statement": "CI for PR 88 is green with 142 tests passing.", "excerpt": "Assistant: PR #88 CI is green: 142 passed."},
+        {"kind": "wrong", "statement": "The deploy target is fly.io.", "excerpt": ""},  # excerpt expired: skipped
+    ]) + "\n")
+    assert len(cases.load_private_cases(path)) == 1
+    assert cases.keyword_overlap("CI for PR 88 is green with 142 tests passing.", "PR 88: CI green, 142 tests passing") >= 0.7
+
+    from memvine_server.extraction import llm as llm_module
+
+    responses = {}
+    make_llm = llm_module.make_llm
+
+    def fake(backend=None):
+        llm = make_llm("fake")
+        llm.responses = responses
+        return llm
+
+    monkeypatch.setattr(llm_module, "make_llm", fake)
+    [(name, ok, hits)] = await cases.run_private_cases(path=path)
+    assert ok and not hits and name.startswith("drop (forgotten)")
+    responses["PR #88"] = json.dumps([{**item("CI for PR #88 is green with 142 tests passing.", "PR #88 CI is green", "fact"), "kind": "episodic"}])
+    [(_, ok, hits)] = await cases.run_private_cases(path=path)
+    assert not ok and hits
