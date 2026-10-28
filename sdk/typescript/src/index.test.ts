@@ -53,6 +53,24 @@ test("a correction names what it supersedes and leaves the rest to be inherited"
   assert.deepEqual(bodies[1], { statement: "Deploys on Tuesdays.", kind: "semantic", subjects: [], assertion: "stated", audience: "project" });
 });
 
+test("history and the events feed call their routes", async () => {
+  const urls: string[] = [];
+  const fake = (async (url: URL) => {
+    urls.push(String(url));
+    return new Response(JSON.stringify(urls.length === 1 ? [{ id: 1, kind: "created" }] : { events: [], next_cursor: null }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const mv = new Memvine({ apiKey: "mv_sk_x", baseUrl: "http://memvine.test", fetch: fake });
+  const history = await mv.history("m-1");
+  assert.equal(history[0].kind, "created");
+  await mv.events({ since: new Date("2026-10-19T00:00:00Z"), kind: ["created", "forgotten"], memoryId: "m-1", limit: 20, cursor: "c1" });
+  await mv.events({ kind: "stale" });
+  await mv.events();
+  assert.equal(urls[0], "http://memvine.test/v1/memories/m-1/history");
+  assert.equal(urls[1], "http://memvine.test/v1/events?since=2026-10-19T00%3A00%3A00.000Z&kind=created&kind=forgotten&memory_id=m-1&limit=20&cursor=c1");
+  assert.equal(urls[2], "http://memvine.test/v1/events?kind=stale");
+  assert.equal(urls[3], "http://memvine.test/v1/events");
+});
+
 test("refuses to construct without a key", () => {
   assert.throws(() => new Memvine({ apiKey: "" }));
 });
