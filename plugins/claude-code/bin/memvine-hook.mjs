@@ -26,7 +26,7 @@ import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const VERSION = "0.7.1";
+export const VERSION = "0.7.2";
 const HOME = join(homedir(), ".memvine");
 export const CONFIG_PATH = join(HOME, "config.json");
 const STATE_PATH = join(HOME, "state.json");
@@ -603,10 +603,11 @@ async function modeBrief(_config, input) {
   if (!text) {
     const recalled = await api(config, "POST", "/v1/recall", {
       query: `${basename(cwd)} recent decisions, conventions and open work`, budget: BRIEF_BUDGET, identity: config.identity || undefined,
-      session_id: input.session_id || undefined, branch: currentBranch(cwd),
+      session_id: input.session_id || undefined, branch: currentBranch(cwd), profiles: true,
     }, 9000);
-    if (recalled && !recalled.error && !recalled.abstained) text = recalled.briefing;
-    else if (recalled && recalled.error) recordError(recalled, "recall");
+    // Who the caller is and what the project is (profiles) come whether or not recall abstained.
+    if (recalled && !recalled.error) text = [recalled.profiles, recalled.abstained ? "" : recalled.briefing].filter(Boolean).join("\n\n");
+    if (recalled && recalled.error) recordError(recalled, "recall");
   }
   const out = briefOutput(text, await noticed);
   emit("SessionStart", out.context, out.message);
