@@ -68,7 +68,7 @@ curl -s localhost:8400/v1/recall -H "Authorization: Bearer $KEY" -H 'content-typ
 | `GET /v1/jobs`, `POST /v1/jobs/{id}/retry` | Synthesis queue with per-episode results and errors; retry a failed job. |
 | `GET /v1/requests`, `GET /v1/usage` | Request log (a recall's `detail` says what it served or why it abstained); billable calls and credits per day. |
 | `PUT/GET/DELETE /v1/audiences/{slug}`, `PUT/GET/DELETE /v1/identities/{id}` | Who may read which memory (see Access). |
-| `GET/POST /v1/projects`, `PATCH/DELETE /v1/projects/{slug}`, `GET/POST /v1/projects/{slug}/keys`, `DELETE .../keys/{id}` | Projects (name, tags, `monthly_credit_cap`, `retention_days`, `description`, `recall_min_relevance`) and project keys, under a management key. Delete needs `?confirm=<slug>`. |
+| `GET/POST /v1/projects`, `PATCH/DELETE /v1/projects/{slug}`, `GET/POST /v1/projects/{slug}/keys`, `DELETE .../keys/{id}` | Projects (name, tags, `monthly_credit_cap`, `retention_days`, `description`, `recall_min_relevance`, `recall_half_life_days`) and project keys, under a management key. Delete needs `?confirm=<slug>`. |
 | `GET /v1/org`, `GET/POST /v1/org/keys`, `DELETE /v1/org/keys/{id}` | Who is calling (person, role, organizations), and the organization's keys (never the last one). |
 | `POST /v1/auth/signup`, `/login`, `/logout`, `/switch`, `/accept`, `/password`; `GET /v1/auth/config`, `POST /v1/auth/invites/describe` | Accounts: email and password, sign-in sessions (`mv_us_`), invite links, organization switching. Sign-up follows `MEMVINE_SIGNUP` (`open`, `invite`, `closed`). |
 | `GET /v1/org/members`, `PATCH/DELETE /v1/org/members/{user}`, `GET/POST /v1/org/invites`, `DELETE /v1/org/invites/{id}` | People and roles (owner, admin, member), invite links. |
@@ -131,6 +131,22 @@ states a superseded value; a page found by similarity also loses lines citing th
 a kept or superseded item, is dropped when nothing is left, and is dropped outright when its title
 and summary are about a replaced value (they name the old value and not the new one). A superseded value whose replacement is served is said once,
 as `(was: ...)`; it stays in `items`.
+
+Ranking and recency: items are ordered by their fused rank score (reciprocal rank over the vector and
+keyword lists) times the trust and currency weights, times a recency factor and a confirmation boost.
+Among comparably relevant memories, a fact or gotcha said recently ranks above one last said long
+ago: its score is multiplied by `0.6 + 0.4 * 0.5 ** (age_days / half_life)` (`RECENCY_FLOOR` 0.6, so
+an old fact that is the best match is still served), where age runs from when it was last said (the
+later of `recorded_at` and its newest evidence episode, so a restatement makes it recent again).
+Decisions, rules, preferences and standing rules never decay: they are true until superseded. Memories
+without a category decay only as plain facts or events (`semantic`, `episodic`). The half-life is the
+project's `recall_half_life_days` (`PATCH /v1/projects/{slug}`, or the console's project settings;
+null resets it, 0 turns recency off), else `MEMVINE_RECALL_HALF_LIFE_DAYS` (default 90). A history
+question (`include_history`, `as_of`, or history words such as "previously") gets no recency. A
+memory a person confirmed (`review = 'kept'`: Keep, or written by a person) gets ×1.1
+(`KEPT_BOOST`). Both change only the order: the relevance gate and `top_relevance` use raw relevance,
+the trim margin is on relevance, and the item the trim always keeps is the first by the score before
+recency, so recency reorders what the margin keeps but never brings in what it would drop.
 
 Standing instructions (`standing: true` memories) are always-on context, not search results: every
 recall returns them in `standing`, including an abstained one, so a caller may choose to apply them.
