@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
-  Activity, BookMarked, Brain, ChartColumn, ChevronsUpDown, Cog, FileText, FolderKanban, KeyRound,
+  Activity, BookMarked, Brain, ChartColumn, ChevronsUpDown, Cog, FileText, FolderKanban, History, KeyRound,
   House, LogOut, Menu, MessageCircleQuestion, MessagesSquare, Plug, PlugZap, Settings, Users, Waypoints, X,
 } from "lucide-react";
 import { switchProject } from "@/app/actions";
@@ -27,6 +27,7 @@ const NAV: { group: string; items: { href: string; label: string; icon: Icon }[]
     { href: "/audiences", label: "Audiences", icon: Users },
   ] },
   { group: "Developer", items: [
+    { href: "/activity", label: "Activity", icon: History },
     { href: "/requests", label: "Requests", icon: Activity },
     { href: "/usage", label: "Usage", icon: ChartColumn },
     { href: "/keys", label: "API keys", icon: KeyRound },

@@ -8,7 +8,7 @@ import { buildSample, SAMPLE_PREFIX } from "./sample-data";
 import { simulateInstant } from "./mock-instant";
 import { INSTANT_MAX_CHARS } from "./types";
 import type {
-  ApiKey, Episode, EpisodeSummary, GraphQuery, SynthesisHealth, SynthesisIssue, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project, RecallResult, SampleResult, ThreadDetail, ThreadSummary,
+  ApiKey, Episode, EpisodeSummary, EventPage, GraphQuery, MemoryEventItem, SynthesisHealth, SynthesisIssue, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project, RecallResult, SampleResult, ThreadDetail, ThreadSummary,
 } from "./types";
 
 function threadSummary(data: ProjectData, t: MockThread): ThreadSummary {
@@ -46,6 +46,45 @@ function projectData(slug: string): ProjectData {
 /** Seeded memories carry no review state: the last week's are new (awaiting review), older ones kept. */
 function withReview(data: ProjectData) {
   for (const m of data.memories) if (m.review === undefined) m.review = m.recordedAt >= "2026-10-21" ? "new" : "kept";
+}
+
+/** The project's events, oldest first: the seed's history derived from its memories (created,
+ *  superseded / supersedes, contradicted, forgotten) plus what the console's actions recorded. */
+function allEvents(data: ProjectData): MemoryEventItem[] {
+  const byId = new Map(data.memories.map((m) => [m.id, m]));
+  const ref = (role: string, id: string | null | undefined) => {
+    const m = id ? byId.get(id) : undefined;
+    return m ? [{ role, id: m.id, statement: m.statement, status: m.status }] : [];
+  };
+  const ev = (m: MemoryItem, kind: MemoryEventItem["kind"], at: string, extra: Partial<MemoryEventItem> = {}): MemoryEventItem => ({
+    id: 0, memoryId: m.id, kind, actor: "synthesis", detail: {}, episodeId: null, at, quotes: [], related: [], ...extra,
+  });
+  const derived: MemoryEventItem[] = [];
+  for (const m of data.memories) {
+    if (data.events?.some((e) => e.memoryId === m.id && e.kind === "created")) continue;  // made in this console session
+    const first = m.evidence[0];
+    derived.push(ev(m, "created", m.recordedAt, {
+      episodeId: first?.episodeId ?? null, quotes: m.evidence.filter((e) => e.episodeId === first?.episodeId).map((e) => e.quote),
+      detail: { relation: m.supersedes ? "update" : "new" },
+    }));
+    for (const e of m.evidence.slice(1).filter((e, i, all) => e.episodeId !== first?.episodeId && all.findIndex((x) => x.episodeId === e.episodeId) === i)) {
+      derived.push(ev(m, "restated", m.recordedAt, { episodeId: e.episodeId, quotes: [e.quote] }));
+    }
+    if (m.supersedes) derived.push(ev(m, "supersedes", m.recordedAt, { detail: { of: m.supersedes }, related: ref("of", m.supersedes) }));
+    if (m.supersededBy && !data.events?.some((e) => e.memoryId === m.id && e.kind === "corrected")) {
+      derived.push(ev(m, "superseded", m.validTo ?? m.recordedAt, { detail: { by: m.supersededBy }, related: ref("by", m.supersededBy) }));
+    }
+    for (const other of m.conflictsWith ?? []) derived.push(ev(m, "contradicted", m.recordedAt, { detail: { with: other }, related: ref("with", other) }));
+    if (m.status === "stale" && m.staleReason) derived.push(ev(m, "stale", m.recordedAt, { actor: "system", detail: { reason: m.staleReason } }));
+  }
+  const events = [...derived, ...(data.events ?? []).map((e) => ({ ...e, related: e.related.length ? e.related : [...ref("by", e.detail.by as string), ...ref("of", e.detail.of as string)] }))];
+  events.sort((a, b) => a.at.localeCompare(b.at));
+  return events.map((e, i) => ({ ...e, id: i + 1 }));
+}
+
+function recordEvent(data: ProjectData, memoryId: string, kind: MemoryEventItem["kind"], detail: Record<string, unknown> = {}) {
+  (data.events ??= []).push({ id: 0, memoryId, kind, actor: "person:you@example.com", detail, episodeId: null,
+                             at: new Date().toISOString(), quotes: [], related: [] });
 }
 
 const awaitingReview = (m: MemoryItem) => m.review === "new" && (m.status === "active" || m.status === "stale");
@@ -174,10 +213,29 @@ export const mockApi: MemvineApi = {
     const chain: MemoryItem[] = [head];
     while (chain.at(-1)!.supersededBy && byId.has(chain.at(-1)!.supersededBy!)) chain.push(byId.get(chain.at(-1)!.supersededBy!)!);
     const episodeIds = new Set(memory.evidence.map((e) => e.episodeId));
+    const history = allEvents(data).filter((e) => e.memoryId === id);
+    const aged = withAging(memory);
+    if (aged.expired && aged.validTo) history.push({ id: null, memoryId: id, kind: "expired", actor: "system", detail: { computed: true },
+                                                     episodeId: null, at: aged.validTo, quotes: [], related: [] });
     return {
-      memory: withAging(memory), chain, conflicts: (memory.conflictsWith ?? []).map((cid) => byId.get(cid)).filter((m): m is MemoryItem => Boolean(m)),
-      episodes: data.episodes.filter((e) => episodeIds.has(e.id)),
+      memory: aged, chain, conflicts: (memory.conflictsWith ?? []).map((cid) => byId.get(cid)).filter((m): m is MemoryItem => Boolean(m)),
+      episodes: data.episodes.filter((e) => episodeIds.has(e.id)), history,
     };
+  },
+  async listEvents(project, filter = {}): Promise<EventPage> {
+    const data = projectData(project);
+    const statements = new Map(data.memories.map((m) => [m.id, m]));
+    const matching = allEvents(data).reverse()
+      .filter((e) => !filter.kind || e.kind === filter.kind)
+      .filter((e) => !filter.memoryId || e.memoryId === filter.memoryId)
+      .filter((e) => !filter.since || e.at >= filter.since);
+    const start = Number(filter.cursor ?? 0) || 0;
+    const limit = filter.limit ?? 50;
+    const page = matching.slice(start, start + limit).map((e) => {
+      const m = e.memoryId ? statements.get(e.memoryId) : undefined;
+      return { ...e, statement: m?.statement ?? null, memoryStatus: m?.status ?? null };
+    });
+    return { events: page, nextCursor: start + limit < matching.length ? String(start + limit) : null };
   },
   async listThreads(project, filter = {}) {
     const data = projectData(project);
@@ -260,17 +318,27 @@ export const mockApi: MemvineApi = {
     };
     Object.assign(old, { status: "superseded", supersededBy: next.id, validTo: now });
     data.memories.push(next);
+    recordEvent(data, next.id, "created", { relation: "correction", related: old.id });
+    data.events!.at(-1)!.quotes = [statement];
+    recordEvent(data, next.id, "supersedes", { of: old.id, correction: true });
+    recordEvent(data, old.id, "corrected", { by: next.id });
     return next;
   },
   async setMemoryStatus(project, id, status) {
-    const memory = projectData(project).memories.find((m) => m.id === id);
+    const data = projectData(project);
+    const memory = data.memories.find((m) => m.id === id);
     if (!memory || memory.status === "superseded") return;
+    if (status === "retired" && memory.status !== "retired") recordEvent(data, id, "forgotten");
+    if (status === "active" && memory.status === "retired") recordEvent(data, id, "restored");
+    if (status === "active" && memory.status === "stale") recordEvent(data, id, "revalidated", { reason: "marked active" });
     memory.status = status;
     memory.validTo = status === "retired" ? new Date().toISOString() : null;
   },
   async confirmMemory(project, id) {
-    const memory = projectData(project).memories.find((m) => m.id === id);
+    const data = projectData(project);
+    const memory = data.memories.find((m) => m.id === id);
     if (memory) {
+      recordEvent(data, id, "confirmed");
       memory.assertion = "observed";
       memory.confidence = "high";
       memory.review = "kept";
