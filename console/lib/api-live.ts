@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { forwarded } from "./forwarded";
 import { buildGraph, relatedFromDetail } from "./graph";
 import type {
+  ConsolidationStats,
   ProjectCategory,
   AddResult, ApiKey, Audience, EdgeDirection, EventPage, MemoryEventItem, EdgeKind, GraphEdge, GraphFile, GraphNode, MemoryGraph, MemoryRelated, RelatedEdge, RelatedRef, RelatedThread, AuditEvent, Invite, Role, Episode, Identity, OrgInfo, OrgKey, OrgSummary, SessionSummary, EpisodeSummary, Member, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project,
   RecallResult, RequestLog, SampleResult, SynthesisHealth, SynthesisIssue, ThreadDetail, ThreadSummary, UsageDay,
@@ -87,6 +88,8 @@ interface ServerMemory {
   evidence: { episode_id: string; quote: string; identity?: string | null }[]; conflicts_with?: string[]; stale_reason?: string | null; scope?: "project" | "thread" | null;
   category?: MemoryItem["category"]; why?: string | null; thread_id?: string | null; review?: "new" | "kept";
   expired?: boolean; last_recalled_at?: string | null; recall_count?: number;
+  flag?: MemoryItem["flag"]; flag_reason?: string | null; flag_related?: string | null;
+  retired_reason?: MemoryItem["retiredReason"]; merged_into?: string | null;
 }
 
 const toMemory = (m: ServerMemory): MemoryItem => ({
@@ -104,6 +107,11 @@ const toMemory = (m: ServerMemory): MemoryItem => ({
   lastRecalledAt: m.last_recalled_at ?? null,
   recallCount: m.recall_count ?? 0,
   review: m.review ?? "kept",
+  flag: m.flag ?? null,
+  flagReason: m.flag_reason ?? null,
+  flagRelated: m.flag_related ?? null,
+  retiredReason: m.retired_reason ?? null,
+  mergedInto: m.merged_into ?? null,
 });
 
 interface ServerEvent {
@@ -141,6 +149,7 @@ interface ServerProject {
   month_credits: string; recall_min_relevance?: number | null; recall_half_life_days?: number | null; sample_source_count?: number;
   description?: string | null; unused_count?: number; unused_days?: number; review_count?: number;
   memory_instructions?: string | null; categories?: ServerCategory[];
+  flagged_count?: number; consolidated_at?: string | null; last_consolidation?: ConsolidationStats | null;
 }
 
 interface ServerCategory { slug: string; name: string; description: string; created_at: string }
@@ -160,6 +169,9 @@ const toProject = (p: ServerProject): Project => ({
   reviewCount: Number(p.review_count ?? 0),
   memoryInstructions: p.memory_instructions ?? null,
   categories: (p.categories ?? []).map(toCategory),
+  flaggedCount: Number(p.flagged_count ?? 0),
+  consolidatedAt: p.consolidated_at ?? null,
+  lastConsolidation: p.last_consolidation ?? null,
 });
 
 // ---- the memory graph (server/memvine_server/edges.py): GET /v1/graph, GET /v1/memories/{id}/related
@@ -277,12 +289,14 @@ export const liveApi: MemvineApi = {
     if (filter.category) params.set("category", filter.category);
     if (filter.unused) params.set("unused", "true");
     if (filter.review) params.set("review", filter.review);
+    if (filter.flag) params.set("flag", filter.flag);
     const rows = (await call<ServerMemory[]>(`/v1/memories?${params}`, { project })).map(toMemory);
     // A server that predates categories (or review) ignores the parameter; filter here so the answer is still right.
     return rows
       .filter((m) => !filter.category || m.category === filter.category)
       .filter((m) => filter.review !== "new" || (m.review === "new" && (m.status === "active" || m.status === "stale")))
-      .filter((m) => filter.review !== "kept" || m.review === "kept");
+      .filter((m) => filter.review !== "kept" || m.review === "kept")
+      .filter((m) => !filter.flag || (m.flag != null && (filter.flag === "any" || m.flag === filter.flag)));
   },
   async listThreads(project, filter = {}): Promise<ThreadSummary[]> {
     const params = new URLSearchParams();
@@ -433,6 +447,9 @@ export const liveApi: MemvineApi = {
   },
   async confirmMemory(project, id) {
     await call(`/v1/memories/${id}`, { method: "PATCH", body: { confirm: true }, project });
+  },
+  async dismissFlag(project, id) {
+    await call(`/v1/memories/${id}`, { method: "PATCH", body: { flag: null }, project });
   },
 
   async listEpisodes(project): Promise<EpisodeSummary[]> {

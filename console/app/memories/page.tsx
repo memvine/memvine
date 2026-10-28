@@ -17,14 +17,15 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const kind = KINDS.find((k) => k === params.kind);
   const status = STATUSES.find((s) => s === params.status);
   const unused = params.unused === "true" ? "true" : undefined;
-  const review = params.review === "new" ? "new" as const : undefined;
+  const review = params.review === "new" || params.review === "flagged" ? params.review : undefined;
   const project = await currentProject();
   const custom = project.categories ?? [];
   const categories: KnowledgeCategory[] = [...BUILTIN_CATEGORIES, ...custom.map((c) => c.slug)];
   const category = categories.find((c) => c === params.category);
   const unusedDays = project.unusedDays ?? 60;
   const [memories, all, threads, detail] = await Promise.all([
-    listMemories(project.slug, { q: params.q, kind, status, category, unused: Boolean(unused), review }),
+    listMemories(project.slug, { q: params.q, kind, status, category, unused: Boolean(unused),
+                                 ...(review === "flagged" ? { flag: "any" as const } : { review }) }),
     params.q || kind || status || category || unused || review ? listMemories(project.slug) : null,
     listThreads(project.slug),
     params.open ? getMemory(project.slug, params.open) : null,
@@ -64,6 +65,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
         <Select name="review" defaultValue={review ?? ""} aria-label="Review" wrapperClassName="w-[150px]" className="h-9">
           <option value="">Reviewed or not</option>
           <option value="new">Needs review</option>
+          <option value="flagged">Flagged by tidy-up</option>
         </Select>
       </FilterBar>
 

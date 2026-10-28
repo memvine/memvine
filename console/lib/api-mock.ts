@@ -42,7 +42,36 @@ function projectData(slug: string): ProjectData {
   if (!data) throw new Error(`unknown project: ${slug}`);
   withSpeakers(data);
   withReview(data);
+  withConsolidation(data);
   return data;
+}
+
+/** A mock of one background consolidation run (consolidation.py), applied once per project: a reworded
+ *  restatement of a rule merged into it, and the newest unreviewed fact flagged as no longer passing the bar. */
+function withConsolidation(data: ProjectData) {
+  if (data.consolidation || data.memories.length === 0) return;
+  const at = new Date(Date.now() - 3 * 3_600_000).toISOString();
+  const stats = { merged: 0, linked: 0, flagged: 0 };
+  const rule = data.memories.find((m) => m.category === "rule" && m.status === "active");
+  if (rule) {
+    const away: MemoryItem = {
+      ...structuredClone(rule), id: `${rule.id}_restated`, statement: `${rule.statement.replace(/\.$/, "")} (said again in other words).`,
+      status: "retired", retiredReason: "merged", mergedInto: rule.id, review: "new", flag: null,
+    };
+    data.memories.push(away);
+    recordEvent(data, away.id, "merged", { into: rule.id, judged: "rule" }, "consolidation", at);
+    recordEvent(data, rule.id, "merged", { from: away.id, judged: "rule" }, "consolidation", at);
+    stats.merged += 1;
+  }
+  const fact = [...data.memories].sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))
+    .find((m) => awaitingReview(m) && m.category === "fact" && !m.flag);
+  if (fact) {
+    fact.flag = "no_longer_passes";
+    fact.flagReason = "Not in the code: it describes how the code works, which the repository already says.";
+    recordEvent(data, fact.id, "flagged", { flag: fact.flag }, "consolidation", at);
+    stats.flagged += 1;
+  }
+  data.consolidation = { at, stats };
 }
 
 /** Seeded memories carry no review state: the last week's are new (awaiting review), older ones kept. */
@@ -84,12 +113,13 @@ function allEvents(data: ProjectData): MemoryEventItem[] {
   return events.map((e, i) => ({ ...e, id: i + 1 }));
 }
 
-function recordEvent(data: ProjectData, memoryId: string | null, kind: MemoryEventItem["kind"], detail: Record<string, unknown> = {}) {
-  (data.events ??= []).push({ id: 0, memoryId, kind, actor: "person:you@example.com", detail, episodeId: null,
-                             at: new Date().toISOString(), quotes: [], related: [] });
+function recordEvent(data: ProjectData, memoryId: string | null, kind: MemoryEventItem["kind"], detail: Record<string, unknown> = {},
+                     actor = "person:you@example.com", at = new Date().toISOString()) {
+  (data.events ??= []).push({ id: 0, memoryId, kind, actor, detail, episodeId: null, at, quotes: [], related: [] });
 }
 
 const awaitingReview = (m: MemoryItem) => m.review === "new" && (m.status === "active" || m.status === "stale");
+const flagged = (m: MemoryItem) => Boolean(m.flag) && (m.status === "active" || m.status === "stale");
 
 /** Evidence carries who said it, as the server reports it: the identity of the quote's source. */
 function withSpeakers(data: ProjectData) {
@@ -136,7 +166,7 @@ export const mockApi: MemvineApi = {
     return store().projects.map((p) => {
       const d = projectData(p.slug);
       const monthCredits = d.usage.reduce((s, u) => s + u.ingestCredits + u.recallCredits, 0);
-      return { ...p, unusedCount: d.memories.filter((m) => isUnused(m)).length, unusedDays: UNUSED_DAYS, reviewCount: d.memories.filter(awaitingReview).length, memoryCount: d.memories.length, sourceCount: d.episodes.length, sampleSourceCount: d.episodes.filter((e) => e.id.startsWith(SAMPLE_PREFIX)).length, keyCount: d.keys.filter((k) => !k.revokedAt).length, monthCredits };
+      return { ...p, unusedCount: d.memories.filter((m) => isUnused(m)).length, unusedDays: UNUSED_DAYS, reviewCount: d.memories.filter(awaitingReview).length, flaggedCount: d.memories.filter(flagged).length, consolidatedAt: d.consolidation?.at ?? null, lastConsolidation: d.consolidation?.stats ?? null, memoryCount: d.memories.length, sourceCount: d.episodes.length, sampleSourceCount: d.episodes.filter((e) => e.id.startsWith(SAMPLE_PREFIX)).length, keyCount: d.keys.filter((k) => !k.revokedAt).length, monthCredits };
     });
   },
   async createProject(name, tags, options = {}) {
@@ -234,6 +264,7 @@ export const mockApi: MemvineApi = {
       .filter((m) => !filter.category || m.category === filter.category)
       .filter((m) => filter.review !== "new" || awaitingReview(m))
       .filter((m) => filter.review !== "kept" || m.review === "kept")
+      .filter((m) => !filter.flag || (flagged(m) && (filter.flag === "any" || m.flag === filter.flag)))
       .filter((m) => !q || m.statement.toLowerCase().includes(q))
       .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))
       .map(withAging);
@@ -363,7 +394,17 @@ export const mockApi: MemvineApi = {
     const data = projectData(project);
     const memory = data.memories.find((m) => m.id === id);
     if (!memory || memory.status === "superseded") return;
-    if (status === "retired" && memory.status !== "retired") recordEvent(data, id, "forgotten");
+    if (status === "active" && memory.retiredReason === "merged") {
+      // Un-merge: current again (the server also takes the evidence the merge copied off the kept memory).
+      recordEvent(data, id, "unmerged", { from: memory.mergedInto });
+      if (memory.mergedInto) recordEvent(data, memory.mergedInto, "unmerged", { related: id });
+      Object.assign(memory, { status: "active", retiredReason: null, mergedInto: null });
+      return;
+    }
+    if (status === "retired" && memory.status !== "retired") {
+      recordEvent(data, id, "forgotten");
+      Object.assign(memory, { retiredReason: "forgotten", flag: null, flagReason: null, flagRelated: null });
+    }
     if (status === "active" && memory.status === "retired") recordEvent(data, id, "restored");
     if (status === "active" && memory.status === "stale") recordEvent(data, id, "revalidated", { reason: "marked active" });
     memory.status = status;
@@ -377,6 +418,16 @@ export const mockApi: MemvineApi = {
       memory.assertion = "observed";
       memory.confidence = "high";
       memory.review = "kept";
+      if (memory.flag) recordEvent(data, id, "unflagged", { flag: memory.flag, reason: "kept" });
+      Object.assign(memory, { flag: null, flagReason: null, flagRelated: null });
+    }
+  },
+  async dismissFlag(project, id) {
+    const data = projectData(project);
+    const memory = data.memories.find((m) => m.id === id);
+    if (memory?.flag) {
+      recordEvent(data, id, "unflagged", { flag: memory.flag, reason: "dismissed" });
+      Object.assign(memory, { flag: null, flagReason: null, flagRelated: null });
     }
   },
 

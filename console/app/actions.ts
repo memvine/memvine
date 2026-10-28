@@ -241,6 +241,18 @@ export async function stillTrue(_prev: ReceiptState, formData: FormData): Promis
   return {};
 }
 
+/** Dismiss: what background consolidation flagged is fine as it is; the flag goes, the memory stays. */
+export async function dismissFlag(_prev: ReceiptState, formData: FormData): Promise<ReceiptState> {
+  const project = await api.currentProject();
+  try {
+    await api.dismissFlag(project.slug, String(formData.get("id")));
+  } catch (e) {
+    return { error: plainError(e, "Could not dismiss it.") };
+  }
+  revalidatePath("/", "layout");
+  return {};
+}
+
 /** Forget: retire the fact (or, with `restore`, bring a forgotten one back). */
 export async function forgetMemory(_prev: ReceiptState, formData: FormData): Promise<ReceiptState> {
   const project = await api.currentProject();

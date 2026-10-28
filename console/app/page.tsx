@@ -11,7 +11,7 @@ import { SynthesisBanner } from "@/components/SynthesisBanner";
 import { Badge, ButtonLink, Card, CardHeader, cx, shortDate, timeAgo } from "@/components/ui";
 import { currentProject, getUsage, listEpisodes, listKeys, listMemories, listRequests, listSessions, listThreads } from "@/lib/api";
 import { SAMPLE_PREFIX } from "@/lib/sample-data";
-import type { MemoryItem, RequestLog } from "@/lib/types";
+import type { ConsolidationStats, MemoryItem, RequestLog } from "@/lib/types";
 
 const LEARNED = 8;
 const CHANGED = 5;
@@ -26,8 +26,9 @@ const newest = (a: MemoryItem, b: MemoryItem) => b.recordedAt.localeCompare(a.re
 
 export default async function HomePage() {
   const project = await currentProject();
-  const [review, active, stale, superseded, episodes, keys, requests, sessions, usage, threads] = await Promise.all([
+  const [unreviewed, flagged, active, stale, superseded, episodes, keys, requests, sessions, usage, threads] = await Promise.all([
     listMemories(project.slug, { review: "new" }),
+    listMemories(project.slug, { flag: "any" }),
     listMemories(project.slug, { status: "active" }),
     listMemories(project.slug, { status: "stale" }),
     listMemories(project.slug, { status: "superseded" }),
@@ -86,7 +87,11 @@ export default async function HomePage() {
     <Receipt m={m} href={memoryHref(m.id)} showCategory reviewing={reviewing}
              thread={m.threadId && threadTitle.has(m.threadId) ? { id: m.threadId, title: threadTitle.get(m.threadId)! } : null} />
   );
-  const reviewTotal = Math.max(project.reviewCount ?? 0, review.length);
+  // Review: what consolidation flagged (with its reason) first, then new memories no one has looked at.
+  const flaggedIds = new Set(flagged.map((m) => m.id));
+  const review = [...[...flagged].sort(newest), ...[...unreviewed].sort(newest).filter((m) => !flaggedIds.has(m.id))];
+  const reviewTotal = Math.max((project.reviewCount ?? 0) + flagged.filter((m) => m.review !== "new").length, review.length);
+  const tidied = project.consolidatedAt && project.lastConsolidation ? tidiedLine(project.consolidatedAt, project.lastConsolidation) : null;
 
   return (
     <>
@@ -96,6 +101,12 @@ export default async function HomePage() {
           {project.description && <p className="mt-1 max-w-2xl text-[13.5px] leading-relaxed text-text-2">{project.description}</p>}
           <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-text-3">
             <span>{tendedAt ? `tended ${timeAgo(tendedAt)}` : "not tended yet"}</span>
+            {tidied && (
+              <>
+                <span aria-hidden>·</span>
+                <Link href="/activity?kind=merged" className="hover:text-text-2 hover:underline" title="Background consolidation: duplicates merged, missed updates linked, doubtful memories flagged for review. Nothing is deleted.">{tidied}</Link>
+              </>
+            )}
             {tending > 0 && (
               <>
                 <span aria-hidden>·</span>
@@ -125,11 +136,13 @@ export default async function HomePage() {
               {review.length > 0 && (
                 <Section
                   title={`Review · ${reviewTotal.toLocaleString()}`}
-                  description="New memories no one has looked at yet. Keep what is worth knowing on another task, forget the rest, or say what is true instead. Agents are served them meanwhile."
+                  description={flagged.length > 0
+                    ? "Memories the last tidy-up doubted, with its reason, then new ones no one has looked at yet. Keep what is worth knowing on another task, forget the rest, or dismiss a doubt. Agents are served them meanwhile."
+                    : "New memories no one has looked at yet. Keep what is worth knowing on another task, forget the rest, or say what is true instead. Agents are served them meanwhile."}
                   more={reviewTotal > REVIEW ? { href: "/memories?review=new", label: `All ${reviewTotal.toLocaleString()}` } : undefined}
                 >
                   <ul className="divide-y divide-border">
-                    {[...review].sort(newest).slice(0, REVIEW).map((m) => <Row key={m.id}>{receipt(m, true)}</Row>)}
+                    {review.slice(0, Math.max(REVIEW, Math.min(flagged.length, 12))).map((m) => <Row key={m.id}>{receipt(m, true)}</Row>)}
                   </ul>
                 </Section>
               )}
@@ -205,6 +218,12 @@ export default async function HomePage() {
       )}
     </>
   );
+}
+
+/** "Last tidied 3h ago: 2 merged, 1 linked, 1 flagged", from the last consolidation run. */
+function tidiedLine(at: string, s: ConsolidationStats): string {
+  if (s.skipped) return `last tidied ${timeAgo(at)}`;
+  return `last tidied ${timeAgo(at)}: ${s.merged ?? 0} merged, ${s.linked ?? 0} linked, ${s.flagged ?? 0} flagged`;
 }
 
 /** Memories no agent's recall served lately: a nudge to review them, never hidden or deleted for it. */
