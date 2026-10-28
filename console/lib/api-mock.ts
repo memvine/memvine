@@ -116,6 +116,7 @@ export const mockApi: MemvineApi = {
     if (patch.monthlyCreditCap !== undefined) p.monthlyCreditCap = patch.monthlyCreditCap;
     if (patch.retentionDays !== undefined) p.retentionDays = patch.retentionDays;
     if (patch.recallMinRelevance !== undefined) p.recallMinRelevance = patch.recallMinRelevance;
+    if (patch.recallHalfLifeDays !== undefined) p.recallHalfLifeDays = patch.recallHalfLifeDays;
   },
   async deleteProject(slug) {
     store().projects = store().projects.filter((p) => p.slug !== slug);
@@ -399,7 +400,17 @@ export const mockApi: MemvineApi = {
    *  Relevance is the share of the question's terms a memory covers; below MIN_RELEVANCE for
    *  the best match, recall abstains. Standing instructions come with every recall. */
   async recall(project, query, budgetTokens, options = {}): Promise<RecallResult> {
-    const MIN_RELEVANCE = store().projects.find((p) => p.slug === project)?.recallMinRelevance ?? 0.3;
+    const settings = store().projects.find((p) => p.slug === project);
+    const MIN_RELEVANCE = settings?.recallMinRelevance ?? 0.3;
+    // As the server (recall.py: recency_factor): facts and gotchas said long ago rank lower among
+    // comparably relevant ones, never below 0.6 of their weight; not for a history question.
+    const halfLife = settings?.recallHalfLifeDays ?? 90;
+    const recency = (m: (typeof data.memories)[number]) => {
+      const decays = m.category ? m.category === "fact" || m.category === "gotcha" : m.kind === "semantic" || m.kind === "episodic";
+      if (historical || halfLife <= 0 || !decays) return 1;
+      const ageDays = Math.max(0, (Date.now() - Date.parse(m.recordedAt)) / 86_400_000);
+      return 0.6 + 0.4 * 0.5 ** (ageDays / halfLife);
+    };
     const data = projectData(project);
     const wanted = terms(query);
     const historical = HISTORY_WORDS.test(query);
@@ -410,10 +421,14 @@ export const mockApi: MemvineApi = {
     };
     const scored = data.memories
       .filter((m) => m.status !== "retired" && (historical || (m.status !== "superseded" && !isExpired(m))))
-      .map((m) => ({ m, score: relevance(`${m.statement} ${m.subjects.join(" ")}`) * (m.assertion === "claimed" ? 0.5 : 1) * (m.status === "active" ? 1 : 0.6) }))
-      .filter((s) => s.score > 0)
+      .map((m) => {
+        const rel = relevance(`${m.statement} ${m.subjects.join(" ")}`) * (m.assertion === "claimed" ? 0.5 : 1) * (m.status === "active" ? 1 : 0.6);
+        return { m, rel, score: rel * recency(m) * (m.review === "kept" ? 1.1 : 1) };
+      })
+      .filter((s) => s.rel > 0)
       .sort((a, b) => b.score - a.score || b.m.recordedAt.localeCompare(a.m.recordedAt));
-    const top = scored[0]?.score ?? 0;
+    // The gate uses relevance, never the recency-weighted score.
+    const top = Math.max(0, ...scored.map((s) => s.rel));
     const standing = data.standing ?? [];
 
     const round = (n: number) => Math.round(n * 1000) / 1000;

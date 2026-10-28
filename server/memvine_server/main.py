@@ -821,7 +821,7 @@ async def charge(conn, project_id, kind: str, chars: int) -> None:
 
 PROJECT_SELECT = """
     SELECT p.id, p.slug, p.name, p.created_at, p.tags, p.monthly_credit_cap, p.retention_days, p.processing_paused,
-           p.description, p.recall_min_relevance,
+           p.description, p.recall_min_relevance, p.recall_half_life_days,
            (SELECT coalesce(sum(u.credits), 0) FROM usage_events u WHERE u.project_id = p.id
              AND u.at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS month_credits,
            (SELECT count(*) FROM memory_items m WHERE m.project_id = p.id) AS memory_count,
@@ -901,8 +901,8 @@ async def projects(request: Request, admin: Admin = Depends(require_management))
 
 @app.patch("/v1/projects/{slug}", response_model=ProjectOut)
 async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: Admin = Depends(require_manager)):
-    """Rename, retag, pause, describe, or change the cap, retention or recall
-    relevance threshold of a project. The slug never changes."""
+    """Rename, retag, pause, describe, or change the cap, retention, recall
+    relevance threshold or recall recency half-life of a project. The slug never changes."""
     async with request.app.state.pool.connection() as conn:
         project = await _owned(conn, admin, slug)
         await conn.execute(
@@ -912,14 +912,16 @@ async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: 
                 retention_days = CASE WHEN %s THEN %s ELSE retention_days END,
                 processing_paused = COALESCE(%s, processing_paused),
                 description = CASE WHEN %s THEN %s ELSE description END,
-                recall_min_relevance = CASE WHEN %s THEN %s ELSE recall_min_relevance END
+                recall_min_relevance = CASE WHEN %s THEN %s ELSE recall_min_relevance END,
+                recall_half_life_days = CASE WHEN %s THEN %s ELSE recall_half_life_days END
             WHERE id = %s
             """,
             (body.name, sorted(set(body.tags)) if body.tags is not None else None,
              "monthly_credit_cap" in body.model_fields_set, body.monthly_credit_cap,
              "retention_days" in body.model_fields_set, body.retention_days, body.processing_paused,
              "description" in body.model_fields_set, (body.description or "").strip() or None,
-             "recall_min_relevance" in body.model_fields_set, body.recall_min_relevance, project["id"]),
+             "recall_min_relevance" in body.model_fields_set, body.recall_min_relevance,
+             "recall_half_life_days" in body.model_fields_set, body.recall_half_life_days, project["id"]),
         )
         updated = await (await conn.execute(PROJECT_SELECT + " WHERE p.id = %s", (project["id"],))).fetchone()
     return ProjectOut(**updated)

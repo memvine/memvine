@@ -447,6 +447,9 @@ class ProjectPatch(BaseModel):
     # Recall abstains unless some memory is at least this relevant (cosine similarity to the question,
     # see recall.py). Send null to use the server default for its embedding model.
     recall_min_relevance: float | None = Field(default=None, ge=0, le=1)
+    # Recency in recall's ranking: a fact or gotcha's weight halves toward a floor every this many days
+    # since it was last said (recall.py: recency_factor). 0 turns it off; null uses the server default.
+    recall_half_life_days: float | None = Field(default=None, ge=0, le=36500)
 
 
 class ProjectOut(BaseModel):
@@ -466,6 +469,7 @@ class ProjectOut(BaseModel):
     processing_paused: bool = False
     description: str | None = None
     recall_min_relevance: float | None = None  # null: the server default for its embedding model
+    recall_half_life_days: float | None = None  # null: the server default (90 days); 0: no recency weighting
     unused_count: int = 0  # memories not served by a recall in unused_days (GET /v1/memories?unused=true)
     unused_days: int = 60
     review_count: int = 0  # current memories awaiting review (GET /v1/memories?review=new)
