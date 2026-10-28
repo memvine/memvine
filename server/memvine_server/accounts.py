@@ -3,16 +3,17 @@
 
 Sign-up follows MEMVINE_SIGNUP: open (anyone who can reach the server; without an invite they get
 their own organization), invite (an invite link is required), closed. Passwords are hashed with
-scrypt. Failed logins are rate-limited per email and per address."""
+scrypt (N=2^14, r=8, p=5: OWASP's 16 MiB profile), off the event loop; older hashes are upgraded at
+the next sign-in. Failed sign-ins are limited per email and per address, failed password checks per
+person (security.py), on top of the per-address limits on every account route."""
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
 import re
 import secrets
-import time
-from collections import defaultdict, deque
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -21,50 +22,64 @@ from pydantic import BaseModel, Field
 
 from .auth import SESSION_PREFIX, Admin, client_ip, hash_key, require_management, require_manager
 from .config import settings
+from .security import LOGIN_FAILURES, PASSWORD_FAILURES, limiter
 
 router = APIRouter()
 
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MIN_PASSWORD = 10
 INVITE_DAYS = 7
-# Failed logins allowed per email and per client address in the window, before 429.
-LOGIN_FAILURES = 10
-LOGIN_WINDOW_SECONDS = 15 * 60
-_failures: dict[str, deque] = defaultdict(deque)
 
 
 # ------------------------------------------------------------------ passwords and tokens
 
+SCRYPT_N, SCRYPT_R, SCRYPT_P = 2**14, 8, 5
+SCRYPT_PREFIX = f"scrypt${SCRYPT_N}${SCRYPT_R}${SCRYPT_P}$"
+SCRYPT_MAXMEM = 64 * 1024 * 1024
+
+
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
-    digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
-    return "scrypt$16384$8$1$" + base64.b64encode(salt).decode() + "$" + base64.b64encode(digest).decode()
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=32, maxmem=SCRYPT_MAXMEM)
+    return SCRYPT_PREFIX + base64.b64encode(salt).decode() + "$" + base64.b64encode(digest).decode()
 
 
 def check_password(password: str, stored: str) -> bool:
     try:
         _, n, r, p, salt, digest = stored.split("$")
-        got = hashlib.scrypt(password.encode(), salt=base64.b64decode(salt), n=int(n), r=int(r), p=int(p), dklen=32)
+        if int(n) > 2**17 or int(r) > 16 or int(p) > 16:
+            return False  # a stored hash never asks for more work than this server would choose
+        got = hashlib.scrypt(password.encode(), salt=base64.b64decode(salt), n=int(n), r=int(r), p=int(p), dklen=32,
+                             maxmem=SCRYPT_MAXMEM)
         return hmac.compare_digest(got, base64.b64decode(digest))
     except (ValueError, TypeError):
         return False
 
 
-def _throttled(*keys: str) -> bool:
-    now = time.monotonic()
-    for key in keys:
-        q = _failures[key]
-        while q and now - q[0] > LOGIN_WINDOW_SECONDS:
-            q.popleft()
-        if len(q) >= LOGIN_FAILURES:
-            return True
-    return False
+def needs_rehash(stored: str) -> bool:
+    return not stored.startswith(SCRYPT_PREFIX)
 
 
-def _failed(*keys: str) -> None:
-    now = time.monotonic()
+# A hash checked when the email has no account, so a missing account costs the same time as a wrong password.
+_DUMMY_HASH = hash_password(secrets.token_urlsafe(16))
+
+
+async def hash_password_async(password: str) -> str:
+    return await asyncio.to_thread(hash_password, password)
+
+
+async def check_password_async(password: str, stored: str | None) -> bool:
+    ok = await asyncio.to_thread(check_password, password, stored or _DUMMY_HASH)
+    return ok and stored is not None
+
+
+async def _throttle(*keys: str, limit=None, message: str = "Too many failed sign-ins. Wait 15 minutes.") -> None:
+    limit = limit or LOGIN_FAILURES
     for key in keys:
-        _failures[key].append(now)
+        wait = await limiter.blocked(key, limit)
+        if wait is not None:
+            raise HTTPException(429, {"code": "too-many-attempts", "message": message},
+                                headers={"Retry-After": str(max(1, int(wait) + 1))})
 
 
 def _client(request: Request) -> str:
@@ -100,9 +115,15 @@ async def _valid_invite(conn, token: str):
 async def _join(conn, invite, user_id: UUID, email: str) -> None:
     if invite["email"] and invite["email"].lower() != email.lower():
         raise HTTPException(403, {"code": "invite-email-mismatch", "message": f"This invite is for {invite['email']}"})
+    # Claim the invite first, conditionally: of two requests racing on one link, only one joins.
+    claimed = await (await conn.execute(
+        "UPDATE invites SET accepted_at = now(), accepted_by = %s "
+        "WHERE id = %s AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now() RETURNING id",
+        (user_id, invite["id"]))).fetchone()
+    if not claimed:
+        raise HTTPException(404, {"code": "invite-invalid", "message": "This invite link is used, revoked or expired. Ask for a new one."})
     await conn.execute("INSERT INTO memberships (user_id, org_id, role) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
                        (user_id, invite["org_id"], invite["role"]))
-    await conn.execute("UPDATE invites SET accepted_at = now(), accepted_by = %s WHERE id = %s", (user_id, invite["id"]))
 
 
 def _session_admin(request: Request, user, org, role: str) -> None:
@@ -118,13 +139,13 @@ class SignUp(BaseModel):
     password: str = Field(max_length=200)
     name: str = Field("", max_length=100)
     organization: str = Field("", max_length=100)
-    invite: str | None = None
+    invite: str | None = Field(None, max_length=200)
 
 
 class Login(BaseModel):
     email: str = Field(max_length=254)
     password: str = Field(max_length=200)
-    org: str | None = None
+    org: str | None = Field(None, max_length=100)
 
 
 async def _first_account(request: Request) -> bool:
@@ -168,12 +189,13 @@ async def signup(body: SignUp, request: Request):
         raise HTTPException(422, {"code": "invalid-email", "message": "Enter a valid email address"})
     if len(body.password) < MIN_PASSWORD:
         raise HTTPException(422, {"code": "weak-password", "message": f"Use at least {MIN_PASSWORD} characters"})
+    password_hash = await hash_password_async(body.password)
     async with request.app.state.pool.connection() as conn, conn.transaction():
         if await (await conn.execute("SELECT 1 FROM users WHERE lower(email) = lower(%s)", (email,))).fetchone():
             raise HTTPException(409, {"code": "account-exists", "message": "An account with this email exists. Sign in instead."})
         user = await (await conn.execute(
             "INSERT INTO users (email, name, password_hash, last_login_at) VALUES (%s, %s, %s, now()) RETURNING id, email, name",
-            (email, body.name.strip(), hash_password(body.password)))).fetchone()
+            (email, body.name.strip(), password_hash))).fetchone()
         if body.invite:
             invite = await _valid_invite(conn, body.invite)
             await _join(conn, invite, user["id"], email)
@@ -192,13 +214,16 @@ async def signup(body: SignUp, request: Request):
 @router.post("/v1/auth/login")
 async def login(body: Login, request: Request):
     email, client = body.email.strip().lower(), _client(request)
-    if _throttled("email:" + email, "ip:" + client):
-        raise HTTPException(429, {"code": "too-many-attempts", "message": "Too many failed sign-ins. Wait 15 minutes."})
+    await _throttle("email:" + email, "ip:" + client)
     async with request.app.state.pool.connection() as conn:
         user = await (await conn.execute("SELECT id, email, name, password_hash FROM users WHERE lower(email) = %s", (email,))).fetchone()
-        if not user or not check_password(body.password, user["password_hash"]):
-            _failed("email:" + email, "ip:" + client)
+        if not await check_password_async(body.password, user["password_hash"] if user else None):
+            await limiter.failed("email:" + email, LOGIN_FAILURES)
+            await limiter.failed("ip:" + client, LOGIN_FAILURES)
             raise HTTPException(401, {"code": "bad-credentials", "message": "Wrong email or password"})
+        if needs_rehash(user["password_hash"]):
+            await conn.execute("UPDATE users SET password_hash = %s WHERE id = %s",
+                               (await hash_password_async(body.password), user["id"]))
         org = await (await conn.execute(
             "SELECT o.id, o.slug, o.name, m.role FROM memberships m JOIN organizations o ON o.id = m.org_id "
             "WHERE m.user_id = %s AND (%s::text IS NULL OR o.slug = %s) ORDER BY m.created_at LIMIT 1",
@@ -229,7 +254,7 @@ async def logout(request: Request, admin: Admin = Depends(require_session)):
 
 
 class Switch(BaseModel):
-    org: str
+    org: str = Field(max_length=100)
 
 
 @router.post("/v1/auth/switch")
@@ -247,7 +272,7 @@ async def switch_org(body: Switch, request: Request, admin: Admin = Depends(requ
 
 
 class Accept(BaseModel):
-    invite: str
+    invite: str = Field(max_length=200)
 
 
 @router.post("/v1/auth/accept")
@@ -272,11 +297,15 @@ class PasswordChange(BaseModel):
 async def change_password(body: PasswordChange, request: Request, admin: Admin = Depends(require_session)):
     if len(body.new) < MIN_PASSWORD:
         raise HTTPException(422, {"code": "weak-password", "message": f"Use at least {MIN_PASSWORD} characters"})
+    who = f"user:{admin.user_id}"
+    await _throttle(who, limit=PASSWORD_FAILURES, message="Too many wrong passwords. Wait 15 minutes.")
+    new_hash = await hash_password_async(body.new)
     async with request.app.state.pool.connection() as conn, conn.transaction():
         user = await (await conn.execute("SELECT password_hash FROM users WHERE id = %s", (admin.user_id,))).fetchone()
-        if not check_password(body.current, user["password_hash"]):
+        if not await check_password_async(body.current, user["password_hash"]):
+            await limiter.failed(who, PASSWORD_FAILURES)
             raise HTTPException(403, {"code": "bad-credentials", "message": "The current password is wrong"})
-        await conn.execute("UPDATE users SET password_hash = %s WHERE id = %s", (hash_password(body.new), admin.user_id))
+        await conn.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, admin.user_id))
         # Every other sign-in ends; this one stays.
         await conn.execute("UPDATE user_sessions SET revoked_at = now() WHERE user_id = %s AND revoked_at IS NULL AND token_hash <> %s",
                            (admin.user_id, hash_key(_bearer(request))))

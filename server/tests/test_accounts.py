@@ -3,7 +3,7 @@ import uuid
 
 import pytest
 
-from memvine_server import accounts
+from memvine_server import accounts, security
 from memvine_server.config import settings
 
 
@@ -99,13 +99,14 @@ async def test_signup_invite_roles_and_sessions(client):
 
 @pytest.mark.asyncio
 async def test_failed_logins_are_throttled(client, monkeypatch):
-    monkeypatch.setattr(accounts, "LOGIN_FAILURES", 3)
+    monkeypatch.setattr(security, "LOGIN_FAILURES", security.Limit("login-fail", 3, 900))
+    monkeypatch.setattr(accounts, "LOGIN_FAILURES", security.LOGIN_FAILURES)
     email = _email("t")
     await client.post("/v1/auth/signup", json={"email": email, "password": "x" * 12})
     codes = [(await client.post("/v1/auth/login", json={"email": email, "password": "wrong"})).status_code for _ in range(4)]
     assert codes == [401, 401, 401, 429]
-    assert (await client.post("/v1/auth/login", json={"email": email, "password": "x" * 12})).status_code == 429
-    accounts._failures.clear()
+    blocked = await client.post("/v1/auth/login", json={"email": email, "password": "x" * 12})
+    assert blocked.status_code == 429 and int(blocked.headers["retry-after"]) > 0
 
 
 @pytest.mark.asyncio

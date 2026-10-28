@@ -13,6 +13,7 @@ from fastapi import Depends, HTTPException, Request
 
 from .config import settings
 from .db import request_project
+from .security import request_client_ip
 
 PROJECT_PREFIX = "mv_sk_"
 MANAGEMENT_PREFIX = "mv_mk_"
@@ -37,10 +38,9 @@ class Principal:
 
 
 def client_ip(request: Request) -> str:
-    """The caller's address. Behind a tunnel or proxy the peer is the proxy; the first forwarded
-    address is the client's."""
-    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    return forwarded or (request.client.host if request.client else "")
+    """The caller's address: X-Forwarded-For is believed only for hops added by a trusted proxy
+    (MEMVINE_TRUSTED_PROXIES; security.resolve_client)."""
+    return request_client_ip(request.scope)
 
 
 def _bearer(request: Request) -> str:

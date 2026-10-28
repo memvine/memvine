@@ -42,7 +42,7 @@ async def run_instant(conn, llm: LLM, embedder: Embedder, project_id: UUID, epis
         async with conn.transaction():  # a savepoint: a failure leaves the episode stored and queued
             result = await process_episode(conn, llm, embedder, project_id, episode_id)
     except Exception as exc:  # noqa: BLE001 - the worker retries the queued job
-        log.warning("instant ingest of %s failed, left queued: %s", episode_id, exc)
+        log.warning("instant ingest failed, left queued: %s", type(exc).__name__)
         return InstantResult(status="queued", reason=f"Could not learn from it now ({str(exc)[:200]}); the text is queued.")
     await conn.execute(
         "UPDATE jobs SET status = 'done', attempts = attempts + 1, claimed_at = now(), finished_at = now(), result = %s "

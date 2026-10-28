@@ -16,6 +16,7 @@ from uuid import UUID
 import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from . import access, accounts, audit, billing, mcp_app
@@ -72,6 +73,7 @@ from .models import (
 )
 from .recall import recall as run_recall
 from .remember import SupersedeError, remember
+from .security import SecurityMiddleware
 from .store import MEMORY_COLUMNS, get_memory, list_memories, unused_clause
 from .worker import run_forever
 
@@ -127,6 +129,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Memvine Memory API", version="0.1.0", lifespan=lifespan)
 app.mount("/mcp", mcp_app.mcp_with_auth)
 app.include_router(accounts.router)
+# Outermost: rate limits, the body cap and security headers apply to every route, /mcp included.
+app.add_middleware(SecurityMiddleware)
 
 
 @app.middleware("http")
@@ -147,7 +151,8 @@ async def request_log(request: Request, call_next):
             log.exception("request log write failed")
     if request.method != "GET":
         try:
-            await audit.record(request.app.state.pool, request, response.status_code)
+            # app, not request.app: a mounted app (/mcp) replaces the request's app with its own.
+            await audit.record(app.state.pool, request, response.status_code)
         except Exception:
             log.exception("audit write failed")
     return response
@@ -156,7 +161,14 @@ async def request_log(request: Request, call_next):
 @app.exception_handler(HTTPException)
 async def http_error(_: Request, exc: HTTPException):
     detail = exc.detail if isinstance(exc.detail, dict) else {"code": "error", "message": str(exc.detail)}
-    return JSONResponse(status_code=exc.status_code, content={"error": detail})
+    return JSONResponse(status_code=exc.status_code, content={"error": detail}, headers=exc.headers)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    """422 as FastAPI words it, minus the echoed input: on account routes that is a password."""
+    errors = [{k: v for k, v in e.items() if k != "input"} for e in exc.errors()]
+    return JSONResponse(status_code=422, content=jsonable_encoder({"detail": errors}))
 
 
 @app.get("/health")
@@ -290,7 +302,7 @@ async def session_brief(session_id: str, request: Request, principal: Principal 
                 current = await session_ops.get_session(conn, principal.project_id, session_id)
             except LLMError as exc:
                 # A stale brief beats no brief for an agent mid-compaction; the brief says how far it reaches.
-                log.warning("brief for %s uses a stale state: %s", session_id, exc)
+                log.warning("brief for a session uses a stale state: %s", type(exc).__name__)
         text, tokens = await session_ops.brief(conn, state.embedder, principal.project_id, current, budget)
     return SessionBrief(session=current, text=text, tokens=tokens)
 

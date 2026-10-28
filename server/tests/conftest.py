@@ -45,6 +45,16 @@ def _db_available() -> bool:
     return True
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _fresh_rate_limits():
+    """Every test starts with empty rate-limit counters (all tests share one client address)."""
+    from memvine_server.security import limiter
+
+    await limiter.reset()
+    yield
+    await limiter.reset()
+
+
 needs_db = pytest.mark.skipif(not _db_available(), reason="Postgres not reachable; run `docker compose up -d` in server/")
 
 
