@@ -15,6 +15,7 @@ AUDITED: list[tuple[str, re.Pattern, str]] = [
     ("POST", re.compile(r"^/v1/projects/([^/]+)/categories$"), "category.create"),
     ("PATCH", re.compile(r"^/v1/projects/([^/]+/categories/[^/]+)$"), "category.update"),
     ("DELETE", re.compile(r"^/v1/projects/([^/]+/categories/[^/]+)$"), "category.delete"),
+    ("POST", re.compile(r"^/v1/projects/([^/]+)/consolidate$"), "project.consolidate"),
     ("POST", re.compile(r"^/v1/orgs$"), "org.create"),
     ("POST", re.compile(r"^/v1/org/keys$"), "org_key.create"),
     ("DELETE", re.compile(r"^/v1/org/keys/([^/]+)$"), "org_key.revoke"),

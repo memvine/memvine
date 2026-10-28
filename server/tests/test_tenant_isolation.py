@@ -65,7 +65,7 @@ BODIES: dict[tuple[str, str], dict | None] = {
     ("GET", "/v1/memories/{memory_id}/history"): None,
     ("GET", "/v1/events"): None,
     ("GET", "/v1/graph"): None,
-    ("PATCH", "/v1/memories/{memory_id}"): {"status": "retired", "confirm": True},
+    ("PATCH", "/v1/memories/{memory_id}"): {"status": "retired", "confirm": True, "flag": None},
     ("GET", "/v1/code/anchors"): None,
     ("POST", "/v1/code/check"): {"repo": "northwind/billing", "files": {"src/invoices.py": None}},
     ("POST", "/v1/export"): None,
@@ -88,6 +88,8 @@ BODIES: dict[tuple[str, str], dict | None] = {
     ("POST", "/v1/projects/{slug}/categories"): {"slug": "atk-{rand}", "name": "attacker category"},
     ("PATCH", "/v1/projects/{slug}/categories/{category}"): {"name": "hijacked", "description": "attacker"},
     ("DELETE", "/v1/projects/{slug}/categories/{category}"): None,
+    ("POST", "/v1/projects/{slug}/consolidate"): None,
+    ("GET", "/v1/projects/{slug}/consolidation-runs"): None,
     ("GET", "/v1/projects/{slug}/keys"): None,
     ("POST", "/v1/projects/{slug}/keys"): {"name": "attacker key"},
     ("DELETE", "/v1/projects/{slug}/keys/{key_id}"): None,
@@ -131,7 +133,7 @@ async def snapshot(dsn: str, b: dict) -> dict:
         "project": "SELECT slug, name, tags, monthly_credit_cap, retention_days, processing_paused, description, recall_min_relevance, "
                    "recall_half_life_days, memory_instructions FROM projects WHERE id = %(pid)s",
         "categories": "SELECT slug, name, description FROM project_categories WHERE project_id = %(pid)s ORDER BY slug",
-        "memories": "SELECT id, statement, status, review, assertion, superseded_by, valid_to FROM memory_items WHERE project_id = %(pid)s ORDER BY id",
+        "memories": "SELECT id, statement, status, review, assertion, superseded_by, valid_to, flag, retired_reason, merged_into FROM memory_items WHERE project_id = %(pid)s ORDER BY id",
         "episodes": "SELECT id, content, audience FROM episodes WHERE project_id = %(pid)s ORDER BY id",
         "sessions": "SELECT id, status, turns FROM sessions WHERE project_id = %(pid)s ORDER BY id",
         "events": "SELECT count(*) AS n FROM session_events WHERE project_id = %(pid)s",
@@ -141,6 +143,7 @@ async def snapshot(dsn: str, b: dict) -> dict:
         "jobs": "SELECT id, status, attempts FROM jobs WHERE project_id = %(pid)s ORDER BY id",
         "threads": "SELECT id, title, status FROM threads WHERE project_id = %(pid)s ORDER BY id",
         "feedback": "SELECT count(*) AS n FROM feedback_cases WHERE project_id = %(pid)s",
+        "consolidation_runs": "SELECT id, finished_at, error FROM consolidation_runs WHERE project_id = %(pid)s ORDER BY id",
         "memory_events": "SELECT id, memory_id, kind, actor FROM memory_events WHERE project_id = %(pid)s ORDER BY id",
         "projects": "SELECT id FROM projects WHERE org_id = %(oid)s ORDER BY id",
         "org": "SELECT slug, name FROM organizations WHERE id = %(oid)s",
@@ -192,6 +195,10 @@ async def test_no_route_reaches_another_organization(client):
     members = (await client.get("/v1/org/members", headers=hb)).json()
     async with await psycopg.AsyncConnection.connect(settings.database_url, row_factory=dict_row, autocommit=True) as conn:
         await conn.execute("UPDATE jobs SET status = 'failed' WHERE id = %s", (jobs[0]["id"],))  # retryable
+        # Something consolidation flagged and a run of it, for the flag and consolidation routes to reach for.
+        await conn.execute("UPDATE memory_items SET flag = 'possible_duplicate', flag_reason = 'quokka' WHERE id = %s", (mem["id"],))
+        await conn.execute("INSERT INTO consolidation_runs (project_id, finished_at, stats) "
+                           "SELECT id, now(), '{\"merged\": 1}' FROM projects WHERE slug = %s", (pb["slug"],))
         b = await (await conn.execute("SELECT p.id AS project_id, p.org_id, u.id AS user_id FROM projects p, users u "
                                       "WHERE p.slug = %s AND u.email = %s", (pb["slug"], f"quokka-owner-{tag}@example.com"))).fetchone()
     ids = {

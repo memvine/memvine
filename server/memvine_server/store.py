@@ -14,7 +14,8 @@ MEMORY_COLUMNS = """
     id, kind, statement, subjects, valid_from, valid_to, recorded_at, status,
     supersedes, superseded_by, assertion, confidence, audience, conflicts_with, standing, stale_reason,
     category, why, thread_id, scope,
-    last_recalled_at, recall_count, review, origin
+    last_recalled_at, recall_count, review, origin,
+    flag, flag_reason, flag_related, retired_reason, merged_into
 """
 # Expired: still active or stale, past the end it stated (valid_to). Unused: old enough and not
 # served by a recall within memory_unused_days. Both take the day count, then nothing else.
@@ -97,6 +98,11 @@ def memory_out(row, evidence: list[Evidence] | None = None) -> MemoryOut:
         recall_count=row.get("recall_count") or 0,
         review=row.get("review") or "kept",
         origin=row.get("origin"),
+        flag=row.get("flag"),
+        flag_reason=row.get("flag_reason"),
+        flag_related=row.get("flag_related"),
+        retired_reason=row.get("retired_reason"),
+        merged_into=row.get("merged_into"),
     )
 
 
@@ -135,11 +141,18 @@ async def get_memory(conn, project_id: UUID, memory_id: UUID) -> MemoryOut | Non
 
 async def list_memories(conn, project_id: UUID, *, status: str | None, kind: str | None, q: str | None,
                         limit: int, offset: int, category: str | None = None, thread_id: UUID | None = None,
-                        scope: str | None = None, unused: bool = False, review: str | None = None) -> list[MemoryOut]:
+                        scope: str | None = None, unused: bool = False, review: str | None = None,
+                        flag: str | None = None) -> list[MemoryOut]:
     """status "expired" is not a stored status: active or stale items past their valid_to. "active"
     leaves those out. unused: what has not been recalled in settings.memory_unused_days. review "new":
-    current items no person has kept yet (review.py)."""
+    current items no person has kept yet (review.py). flag: current items consolidation flagged for a
+    person (a flag name, or "any")."""
     clauses, params = ["project_id = %s"], [project_id]
+    if flag == "any":
+        clauses.append("flag IS NOT NULL AND status IN ('active', 'stale')")
+    elif flag:
+        clauses.append("flag = %s AND status IN ('active', 'stale')")
+        params.append(flag)
     if unused:
         clauses.append(unused_clause(settings.memory_unused_days))
     if review == "new":
