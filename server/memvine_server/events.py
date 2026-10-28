@@ -51,6 +51,8 @@ KINDS = (
     "deleted",        # its last source was deleted (memory_id NULL; detail.memory_id)
     "project_settings",  # memory rules changed (memory_id NULL): detail.field 'memory_instructions' with
                          # before_len / after_len (never the text), or 'category' with action and slug
+    "profile_rebuilt",   # a profile was rebuilt from memory (memory_id NULL): detail.subject_kind, subject,
+                         # lines, from_memories (profiles.py)
 )
 SYSTEM = "system"
 SYNTHESIS = "synthesis"

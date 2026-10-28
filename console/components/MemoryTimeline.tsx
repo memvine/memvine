@@ -26,6 +26,7 @@ export const EVENT_LABEL: Record<MemoryEventKind, string> = {
   unmerged: "Un-merged",
   flagged: "Flagged for review",
   unflagged: "Flag cleared",
+  profile_rebuilt: "Profile rebuilt",
 };
 
 /** Events that end or question a memory's currency, drawn in the warning color. */
@@ -61,6 +62,9 @@ export function eventNote(e: MemoryEventItem): string | null {
   }
   if (e.kind === "flagged" && typeof d.flag === "string") return FLAG_LABEL[d.flag] ?? d.flag;
   if (e.kind === "unflagged") return d.reason === "kept" ? "kept by a person" : "dismissed";
+  if (e.kind === "profile_rebuilt") {
+    return `${d.subject_kind === "project" ? "the project" : String(d.subject)}: ${d.lines} line${d.lines === 1 ? "" : "s"} from ${d.from_memories} memor${d.from_memories === 1 ? "y" : "ies"}`;
+  }
   if (e.kind === "category_changed") return `${d.before ?? "none"} → ${d.after ?? "none"}`;
   if (e.kind === "restated" && typeof d.confidence === "string") return `confidence now ${d.confidence}`;
   if (d.backfill) return "reconstructed from the memory's record";

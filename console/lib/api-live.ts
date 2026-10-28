@@ -9,7 +9,7 @@ import { buildGraph, relatedFromDetail } from "./graph";
 import type {
   ConsolidationStats,
   ProjectCategory,
-  AddResult, ApiKey, Audience, EdgeDirection, EventPage, MemoryEventItem, EdgeKind, GraphEdge, GraphFile, GraphNode, MemoryGraph, MemoryRelated, RelatedEdge, RelatedRef, RelatedThread, AuditEvent, Invite, Role, Episode, Identity, OrgInfo, OrgKey, OrgSummary, SessionSummary, EpisodeSummary, Member, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project,
+  AddResult, ApiKey, Audience, EdgeDirection, EventPage, MemoryEventItem, EdgeKind, GraphEdge, GraphFile, GraphNode, MemoryGraph, MemoryRelated, RelatedEdge, RelatedRef, RelatedThread, AuditEvent, Invite, Role, Episode, Identity, OrgInfo, OrgKey, Profile, OrgSummary, SessionSummary, EpisodeSummary, Member, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project,
   RecallResult, RequestLog, SampleResult, SynthesisHealth, SynthesisIssue, ThreadDetail, ThreadSummary, UsageDay,
 } from "./types";
 
@@ -51,6 +51,16 @@ export class ApiError extends Error {
     super(message);
   }
 }
+
+interface ServerProfile {
+  subject_kind: "person" | "project"; subject: string; lines: { text: string; memory_ids: string[] }[];
+  description: string | null; text: string; tokens: number; dirty: boolean; built_at: string | null;
+}
+
+const toProfile = (p: ServerProfile): Profile => ({
+  subjectKind: p.subject_kind, subject: p.subject, lines: p.lines.map((l) => ({ text: l.text, memoryIds: l.memory_ids })),
+  description: p.description ?? null, text: p.text, tokens: p.tokens, dirty: p.dirty, builtAt: p.built_at,
+});
 
 async function call<T>(path: string, init: { method?: string; body?: unknown; project?: string } = {}): Promise<T> {
   const headers: Record<string, string> = { Authorization: `Bearer ${await managementKey()}`, ...(await forwarded()) };
@@ -394,6 +404,22 @@ export const liveApi: MemvineApi = {
   },
   async putIdentity(project, identity, traits) {
     await call(`/v1/identities/${encodeURIComponent(identity)}`, { method: "PUT", body: { traits }, project });
+  },
+  async listProfiles(project): Promise<Profile[]> {
+    return (await call<ServerProfile[]>("/v1/profiles", { project })).map(toProfile);
+  },
+  async getProfile(project, identity): Promise<Profile | null> {
+    const params = new URLSearchParams({ subject_kind: "person", subject: identity });
+    const found = await call<ServerProfile[]>(`/v1/profiles?${params}`, { project });
+    return found[0] ? toProfile(found[0]) : null;
+  },
+  async getProjectProfile(project): Promise<Profile | null> {
+    const p = await notFoundAsNull(call<ServerProfile>("/v1/profiles/project", { project }));
+    return p && toProfile(p);
+  },
+  async rebuildProfiles(project, target): Promise<number> {
+    const body = target ? { subject_kind: target.subjectKind, subject: target.subject } : {};
+    return (await call<{ queued: number }>("/v1/profiles/rebuild", { method: "POST", body, project })).queued;
   },
   async getGraph(project, query = {}): Promise<MemoryGraph> {
     const params = new URLSearchParams();

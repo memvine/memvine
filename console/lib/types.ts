@@ -307,6 +307,24 @@ export interface Identity {
   lastSeenAt: string | null;
 }
 
+/** A short summary of a person or of the project, derived from memory (GET /v1/profiles). Every
+ *  line cites the memories it restates; lines whose memories are no longer current are left out. */
+export interface Profile {
+  subjectKind: "person" | "project";
+  /** The identity; "" for the project. */
+  subject: string;
+  lines: { text: string; memoryIds: string[] }[];
+  /** The project's description (project profile only), shown first. */
+  description: string | null;
+  /** As an agent's session-start brief shows it. */
+  text: string;
+  tokens: number;
+  /** Memory changed since it was built; a rebuild is due (at most every 10 minutes). */
+  dirty: boolean;
+  /** null: not built yet. */
+  builtAt: string | null;
+}
+
 export interface OrgInfo {
   operator: boolean;
   org: { slug: string; name: string } | null;
@@ -437,7 +455,7 @@ export interface MemoryDetail {
 export const MEMORY_EVENT_KINDS = [
   "created", "restated", "superseded", "supersedes", "contradicted", "extended", "confirmed", "forgotten", "restored",
   "expired", "corrected", "merged", "anchored", "stale", "revalidated", "category_changed", "refused", "deleted", "project_settings",
-  "unmerged", "flagged", "unflagged",
+  "unmerged", "flagged", "unflagged", "profile_rebuilt",
 ] as const;
 export type MemoryEventKind = (typeof MEMORY_EVENT_KINDS)[number];
 
@@ -619,6 +637,13 @@ export interface MemvineApi {
   deleteAudience(project: string, slug: string): Promise<void>;
   listIdentities(project: string): Promise<Identity[]>;
   putIdentity(project: string, identity: string, traits: Record<string, string>): Promise<void>;
+  /** Every profile built or asked for in the project. */
+  listProfiles(project: string): Promise<Profile[]>;
+  /** One person's profile (asking for it the first time queues its build). */
+  getProfile(project: string, identity: string): Promise<Profile | null>;
+  getProjectProfile(project: string): Promise<Profile | null>;
+  /** Rebuild now: one profile, or every profile of the project. Returns how many were queued. */
+  rebuildProfiles(project: string, target?: { subjectKind: "person" | "project"; subject?: string }): Promise<number>;
   getMemory(project: string, id: string): Promise<MemoryDetail | null>;
   /** The project's activity feed, newest first (GET /v1/events). */
   listEvents(project: string, filter?: EventFilter): Promise<EventPage>;

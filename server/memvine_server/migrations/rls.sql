@@ -31,7 +31,7 @@ BEGIN
                              'session_events', 'jobs', 'request_log', 'identities', 'audiences', 'passages',
                              'usage_events', 'audit_events', 'session_code', 'memory_anchors', 'code_files',
                              'threads', 'thread_sources', 'thread_links', 'memory_links', 'feedback_cases',
-                             'memory_events', 'project_categories', 'consolidation_runs',
+                             'memory_events', 'project_categories', 'profiles', 'consolidation_runs',
                              'consolidation_judgements'] LOOP
         CONTINUE WHEN to_regclass(format('public.%I', t)) IS NULL;  -- a later migration adds it
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);

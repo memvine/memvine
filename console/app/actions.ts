@@ -477,6 +477,16 @@ export async function deleteAudience(formData: FormData) {
   revalidatePath("/audiences");
 }
 
+/** Rebuild a profile now (owners and admins): one person's, the project's, or all of them. */
+export async function rebuildProfile(formData: FormData) {
+  const project = await api.currentProject();
+  const kind = String(formData.get("subjectKind") ?? "");
+  const subject = String(formData.get("subject") ?? "");
+  await api.rebuildProfiles(project.slug, kind === "person" || kind === "project" ? { subjectKind: kind, subject } : undefined);
+  revalidatePath("/people");
+  revalidatePath("/");
+}
+
 export interface RecallState {
   query?: string;
   result?: Awaited<ReturnType<typeof api.recall>>;

@@ -14,7 +14,7 @@ import time
 import traceback
 from uuid import UUID
 
-from . import consolidation, health
+from . import consolidation, health, profiles
 from .billing import apply_retention
 from .config import settings
 from .embeddings import Embedder
@@ -140,6 +140,8 @@ async def _dispatch(conn, llm: LLM, embedder: Embedder, job) -> dict:
             return await refresh_state(conn, llm, job["project_id"], job["episode_id"])
         if job["kind"] == "session_close":
             return await synthesize_session(conn, job["project_id"], job["episode_id"])
+        if job["kind"] == "profile":
+            return await profiles.build(conn, llm, job["project_id"], *profiles.parse_key(job["episode_id"]))
         raise ValueError(f"unknown job kind {job['kind']}")
 
 
@@ -225,6 +227,7 @@ async def _loop(pool, llm: LLM, embedder: Embedder, stop: asyncio.Event) -> None
                     await seal_due(conn)
                     await requeue_abandoned(conn)
                     await apply_retention(conn)
+                    await profiles.sweep(conn)  # throttled to once a minute
                     await _schedule_consolidation(conn)
             except Exception:
                 log.exception("idle sweep error")

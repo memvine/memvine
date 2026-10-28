@@ -27,6 +27,7 @@ from . import events as event_ops
 from . import health as health_ops
 from . import ingest as ingest_ops
 from . import instant as instant_ops
+from . import profiles as profile_ops
 from . import review as review_ops
 from . import sample as sample_ops
 from . import sessions as session_ops
@@ -66,6 +67,8 @@ from .models import (
     MemoryPatch,
     MemoryRelated,
     OrgCreate,
+    ProfileOut,
+    ProfileRebuild,
     ProjectCategoryCreate,
     ProjectCategoryOut,
     ProjectCategoryPatch,
@@ -243,9 +246,15 @@ async def ingest(body: IngestRequest, request: Request, response: Response, prin
 async def recall(body: RecallRequest, request: Request, principal: Principal = Depends(require_project)):
     async with request.app.state.pool.connection() as conn:
         audiences = await access.readable_audiences(conn, principal.project_id, body.identity, principal.key_id is None)
+        profile_text, profile_tokens = "", 0
+        if body.profiles:  # a session-start brief: who the caller is and what the project is, first
+            profile_text, profile_tokens = await profile_ops.brief_sections(conn, principal.project_id, body.identity)
+            budget = min(body.budget or settings.recall_default_budget, settings.recall_max_budget)
+            body = body.model_copy(update={"budget": max(100, budget - profile_tokens)})
         # The console's playground (no project key) is a person looking, not an agent using memory.
         result = await run_recall(conn, request.app.state.embedder, principal.project_id, body, audiences,
                                   track=principal.key_id is not None)
+        result.profiles, result.profile_tokens = profile_text, profile_tokens
         request.state.log_detail = recall_log_detail(result)
         if principal.key_id is not None:  # the console's playground is not billed
             await billing.charge_recall(conn, principal.project_id)
@@ -336,6 +345,41 @@ async def session_kept(session_id: str, request: Request, principal: Principal =
     if not out:
         raise HTTPException(404, {"code": "not-found", "message": "No such session"})
     return out
+
+
+@app.get("/v1/profiles", response_model=list[ProfileOut])
+async def profiles(request: Request, principal: Principal = Depends(require_project),
+                   subject_kind: Literal["person", "project"] | None = None,
+                   subject: str | None = Query(None, max_length=200)):
+    """Profiles: short summaries of a person or of the project, derived from memory, each line citing
+    its memories. With subject_kind and subject, that one profile (created and queued for a build the
+    first time it is asked for); otherwise every profile of the project."""
+    async with request.app.state.pool.connection() as conn:
+        if subject_kind and (subject is not None or subject_kind == "project"):
+            one = await profile_ops.get(conn, principal.project_id, subject_kind, "" if subject_kind == "project" else subject)
+            return [one] if one else []
+        return await profile_ops.list_profiles(conn, principal.project_id, subject_kind)
+
+
+@app.get("/v1/profiles/project", response_model=ProfileOut)
+async def project_profile(request: Request, principal: Principal = Depends(require_project)):
+    """The project profile: its description, standing rules and most durable decisions."""
+    async with request.app.state.pool.connection() as conn:
+        return await profile_ops.get(conn, principal.project_id, "project", "")
+
+
+@app.post("/v1/profiles/rebuild", status_code=202)
+async def rebuild_profiles(request: Request, principal: Principal = Depends(require_project), body: ProfileRebuild | None = None):
+    """Rebuild now, past the 10-minute debounce: one profile, or every profile of the project
+    (owners and admins)."""
+    ensure_manager(request)
+    body = body or ProfileRebuild()
+    if body.subject_kind == "person" and not body.subject:
+        raise HTTPException(400, {"code": "subject-required", "message": "Name the person (subject) to rebuild"})
+    async with request.app.state.pool.connection() as conn, conn.transaction():
+        queued = await profile_ops.rebuild(conn, principal.project_id, body.subject_kind,
+                                           "" if body.subject_kind == "project" else body.subject)
+    return {"queued": queued}
 
 
 @app.put("/v1/identities/{identity}")
@@ -665,6 +709,8 @@ async def export_project(request: Request, principal: Principal = Depends(requir
                                         "WHERE project_id = %s ORDER BY at, id"),
             "consolidation_runs": await rows("SELECT id, started_at, finished_at, stats, error FROM consolidation_runs "
                                              "WHERE project_id = %s ORDER BY started_at, id"),
+            "profiles": await rows("SELECT subject_kind, subject, lines, token_estimate, dirty, built_at, built_from_event_id "
+                                   "FROM profiles WHERE project_id = %s ORDER BY subject_kind, subject"),
         }
     request.state.audit_target = principal.project_slug
     filename = f"memvine-{principal.project_slug}-{datetime.now(UTC):%Y%m%d}.json"

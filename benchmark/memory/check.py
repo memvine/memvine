@@ -2,7 +2,6 @@
 to extraction, reconciliation or recall. Uses the real model; never runs in CI.
 
   cd server && .venv/bin/python ../benchmark/memory/check.py [--server-dir DIR] [--skip-cases] [--skip-agent] [--agent-e2e]
-                                                             [--consolidation | --consolidation-only]
 
 It starts a throwaway API server (from --server-dir, default this checkout's server/) on its own
 database, then:
@@ -18,7 +17,10 @@ database, then:
   5. (--agent-e2e) a real Claude Code agent, run headless with the plugin connected and again
      without memory, deploys, answers and tests the way memory says (benchmark/memory/agent_e2e.py:
      six short `claude -p` runs in a scratch repo, isolated from the person's own setup)
-  6. (--consolidation) background consolidation on the fast model: restatements merged, an unlinked
+  6. (--profiles) profiles on the October project: a person's (one source said by them) and the
+     project's, built by the fast model; every line cites current memories, the person's says
+     what they own or prefer only when memory has it, and the session-start brief carries both
+  7. (--consolidation) background consolidation on the fast model: restatements merged, an unlinked
      changed value superseded or flagged, a code description flagged, nothing deleted
      (benchmark/memory/consolidation_check.py); --consolidation-only runs just this section
 and prints PASS/FAIL per check (exit 1 on any FAIL). Synthesis runs on MEMVINE_LLM_BACKEND
@@ -44,7 +46,7 @@ os.environ.setdefault("MEMVINE_CLAUDE_CLI_CONCURRENCY", "4")
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 ADMIN_DSN = os.environ.get("MEMVINE_CHECK_ADMIN_URL", "postgresql://memvine:memvine@localhost:5433/memvine")
-DB = os.environ.get("MEMVINE_CHECK_DB", "memvine_check")  # parallel runs: give each its own
+DB = os.environ.get("MEMVINE_CHECK_DB", "memvine_check")  # parallel runs: one each
 PORT = int(os.environ.get("MEMVINE_CHECK_PORT", "8411"))
 BRIEFING_CEILING = int(os.environ.get("MEMVINE_CHECK_TOKENS", "300"))  # tokens for a one-fact question
 
@@ -134,14 +136,67 @@ def fresh_agent(briefing: str) -> str:
     return out.stdout.strip()
 
 
+PERSON = "priya@northwind.dev"
+PERSON_EPISODE = {"id": "ep-priya", "timestamp": "2026-10-26T10:00:00Z", "identity": PERSON,
+                  "content": "User: I'm Priya. I own muse deploys and I approve every production release. I prefer squash merges "
+                             "over merge commits on muse. Assistant: Noted: you own muse deploys and approve production releases, "
+                             "and you prefer squash merges."}
+
+
+def wait_jobs(key: str, timeout: int = 600) -> None:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if call("GET", "/v1/jobs", key)["pending"] == 0:
+            return
+        time.sleep(3)
+    raise SystemExit("profile jobs did not finish in time")
+
+
+def profile_checks(key: str, profile: dict, label: str, caps: tuple[int, int]) -> None:
+    lines = profile["lines"]
+    current = {m["id"] for m in call("GET", "/v1/memories", key) or [] if m["status"] in ("active", "stale")}
+    check(f"{label}: built", profile["built_at"] is not None and not profile["dirty"], f"{len(lines)} lines")
+    check(f"{label}: every line cites current memories", all(line["memory_ids"] and set(line["memory_ids"]) <= current for line in lines))
+    check(f"{label}: within {caps[0]} lines", len(lines) <= caps[0], str(len(lines)))
+    check(f"{label}: within {caps[1]} tokens", profile["tokens"] <= caps[1] + 20, str(profile["tokens"]))
+    check(f"{label}: no superseded value (5544)", "5544" not in profile["text"])
+
+
+def profile_section(key: str) -> None:
+    print("== 6. profiles", flush=True)
+    call("POST", "/v1/ingest", key, {"items": [PERSON_EPISODE]})
+    wait_synthesized(key)
+    call("POST", "/v1/profiles/rebuild", key, {"subject_kind": "person", "subject": PERSON})
+    call("POST", "/v1/profiles/rebuild", key, {"subject_kind": "project"})
+    wait_jobs(key)
+    person = call("GET", f"/v1/profiles?subject_kind=person&subject={urllib.request.quote(PERSON)}", key)[0]
+    project = call("GET", "/v1/profiles/project", key)
+    (HERE / "check-profiles.txt").write_text(f"{person['text']}\n\n{project['text']}\n")
+    print(person["text"], "\n", project["text"], sep="", flush=True)
+    profile_checks(key, person, "person profile", (6, 150))
+    profile_checks(key, project, "project profile", (8, 200))
+    mems = [m for m in call("GET", "/v1/memories", key) or [] if m["status"] in ("active", "stale")]
+    text = person["text"].lower()
+    owns = any("priya" in m["statement"].lower() and "deploy" in m["statement"].lower() for m in mems)
+    check("person profile: says she owns deploys only when memory does", ("deploy" in text) == owns, f"memory has it: {owns}")
+    squash = any("squash" in m["statement"].lower() for m in mems)
+    check("person profile: her squash-merge preference only when memory has it", ("squash" in text) == squash, f"memory has it: {squash}")
+    check("person profile: not the unowned deploy command", "make deploy" not in text)
+    check("project profile: carries the standing deploy rule", "make deploy" in project["text"])
+    brief = call("POST", "/v1/recall", key, {"query": "muse recent decisions, conventions and open work", "identity": PERSON, "profiles": True})
+    check("the session-start brief carries both profiles",
+          f"about {PERSON}" in brief["profiles"] and "this project" in brief["profiles"], f"{brief['profile_tokens']} tokens")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--server-dir", type=Path, default=ROOT / "server")
     ap.add_argument("--skip-cases", action="store_true")
     ap.add_argument("--skip-agent", action="store_true")
     ap.add_argument("--agent-e2e", action="store_true", help="section 5: six headless Claude Code runs with and without the plugin")
-    ap.add_argument("--consolidation", action="store_true", help="section 6: background consolidation on the real fast model")
-    ap.add_argument("--consolidation-only", action="store_true", help="only section 6")
+    ap.add_argument("--profiles", action="store_true", help="section 6: person and project profiles on the October project")
+    ap.add_argument("--consolidation", action="store_true", help="section 7: background consolidation on the real fast model")
+    ap.add_argument("--consolidation-only", action="store_true", help="only section 7")
     args = ap.parse_args()
     if args.consolidation_only:
         args.consolidation = args.skip_cases = args.skip_agent = True
@@ -184,7 +239,7 @@ def main() -> int:
 
 
 def october(args, mgmt: str) -> None:
-    """Sections 2-5 on the project "muse"."""
+    """Sections 2-6 on the project "muse"."""
     print("== 2. the October test", flush=True)
     call("POST", "/v1/projects", mgmt, {"name": "muse", "slug": "muse",
                                          "description": "muse: a web app (SvelteKit frontend, Postgres) and how it is deployed"})
@@ -228,6 +283,9 @@ def october(args, mgmt: str) -> None:
         from agent_e2e import run_section
 
         run_section(call, check, key, PORT, wait_synthesized, HERE)
+
+    if args.profiles:
+        profile_section(key)
 
 
 if __name__ == "__main__":

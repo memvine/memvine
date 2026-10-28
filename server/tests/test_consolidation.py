@@ -454,3 +454,26 @@ async def test_a_failed_run_is_recorded_and_rolled_back(client):
         row = await (await conn.execute("SELECT error, finished_at FROM consolidation_runs WHERE project_id = %s", (pid,))).fetchone()
         assert "model fell over" in row["error"] and row["finished_at"]
         assert (await item(conn, old))["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_merges_and_unmerges_mark_profiles_dirty(client):
+    from memvine_server import profiles
+    from memvine_server.main import app
+
+    pid = await pid_of(app, client.project_slug)
+    async with app.state.pool.connection() as conn:
+        await fillers(conn, pid)
+        old = await add(conn, pid, "Dunning emails go out at 09:00 local time.", vec(1), category="decision")
+        new = await add(conn, pid, "Dunning emails are sent at 09:00 local time.", vec(1, 0.96), category="decision")
+        through = (await (await conn.execute("SELECT max(id) AS id FROM memory_events")).fetchone())["id"] or 0
+        await conn.execute("INSERT INTO profiles (project_id, subject_kind, subject, lines, dirty, built_at, built_from_event_id) "
+                           "VALUES (%s, 'project', '', %s, false, now(), %s)",
+                           (pid, json.dumps([{"text": "Dunning at 09:00.", "memory_ids": [str(new)]}]), through))
+    await run(app, pid, Judge())
+    async with app.state.pool.connection() as conn:
+        await profiles.sweep(conn, force=True)
+        dirty = await (await conn.execute("SELECT dirty FROM profiles WHERE project_id = %s", (pid,))).fetchone()
+        assert dirty["dirty"]  # it cited the merged-away memory
+        assert "unmerged" in profiles.RELEVANT_KINDS and "merged" in profiles.RELEVANT_KINDS
+        assert (await item(conn, new))["merged_into"] == old

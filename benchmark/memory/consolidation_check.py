@@ -1,4 +1,4 @@
-"""Section 6 of the memory check (--consolidation): background consolidation on the real fast model.
+"""Section 7 of the memory check (--consolidation): background consolidation on the real fast model.
 
 A throwaway project gets memories written straight into the database, as if write-time reconcile had
 missed them: two restatements of one rule in different words, a fact and its later changed value
@@ -74,7 +74,7 @@ def _seed(dsn: str, server_dir: Path) -> dict[str, str]:
 
 
 def run_section(call, check, mgmt: str, dsn: str, server_dir: Path) -> None:
-    print("== 6. background consolidation (real fast model)", flush=True)
+    print("== 7. background consolidation (real fast model)", flush=True)
     call("POST", "/v1/projects", mgmt, {"name": PROJECT, "slug": PROJECT,
                                          "description": "Northwind billing: invoices, refunds, tax and how they are run"})
     key = call("POST", f"/v1/projects/{PROJECT}/keys", mgmt, {"name": "check"})["key"]
