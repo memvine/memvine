@@ -65,13 +65,15 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
   }, [wrong]);
 
   const faded = m.status === "superseded" || m.status === "retired";
+  // Past the end it stated: still listed, no longer served as current.
+  const expired = Boolean(m.expired);
   const live = m.status === "active" || m.status === "stale";
   const quote = m.evidence[0]?.quote;
   const source = sourceOf(m);
   const error = confirmState.error ?? forgetState.error ?? wrongState.error;
   const statementCls = cx(
     size === "lg" ? "text-[15.5px] leading-snug font-medium" : "text-[13.5px] leading-snug",
-    faded ? "text-text-3 line-through decoration-text-3/50" : "text-text",
+    faded ? "text-text-3 line-through decoration-text-3/50" : expired ? "text-text-3" : "text-text",
   );
   const reveal = open || wrong || Boolean(error);
 
@@ -118,6 +120,7 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
           )}
           {m.status === "superseded" && <span className="block">superseded {m.validTo ? shortDate(m.validTo) : ""}</span>}
           {m.status === "retired" && <span className="block">forgotten</span>}
+          {expired && <span className="block">Expired {m.validTo ? shortDate(m.validTo) : ""}</span>}
         </p>
       </div>
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from .config import settings
@@ -67,6 +67,10 @@ ASSERTION_WEIGHT = {"observed": 1.0, "stated": 1.0, "inferred": 0.8, "claimed": 
 STATUS_WEIGHT = {"active": 1.0, "superseded": 0.6, "stale": 0.7}
 # Contradiction pairs listed first: among this many top-ranked facts, at most this many pairs.
 CONFLICT_SCAN = 12
+# Expired: an item that said when it stops being true ("the scratch org expires on 28 Oct", stored as
+# valid_to) keeps its status ('active' or 'stale') past that moment; this clause is what keeps it out of
+# a briefing about now. A historical question (include_history) or an as_of before the end still sees it.
+NOT_EXPIRED = "(valid_to IS NULL OR valid_to > now())"
 MAX_CONFLICT_PAIRS = 3
 
 
@@ -113,6 +117,10 @@ def render_line(row, previous: str | None, conflicts: list[tuple[str, datetime]]
         head.append(TRUST_WORD[row["assertion"]])
     if row["status"] == "superseded":
         head.append(f"superseded {_short(row['valid_to'])}" if row.get("valid_to") else "superseded")
+    elif row.get("valid_to") and row["status"] != "retired":
+        # A time-bound item: "ended" once past (only a historical question sees it then), else "until".
+        ended = row["valid_to"] <= datetime.now(timezone.utc)
+        head.append(f"{'ended' if ended else 'until'} {_short(row['valid_to'])}")
     if previous:
         head.append(f"supersedes {_short(links['supersedes'])}" if links.get("supersedes") else "supersedes")
     head += [f"contradicts {_short(at)}" for at in links.get("contradicts", [])]
@@ -157,8 +165,11 @@ def line_links(edges: list[dict], neighbors: dict, *, supersedes_at: datetime | 
     return out
 
 
-async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest, audiences: list[str] | None = None) -> RecallResponse:
+async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest, audiences: list[str] | None = None,
+                 *, track: bool = True) -> RecallResponse:
     """audiences: the ones this recall may read (from access.readable_audiences); None reads all.
+    track: record what was served (mark_recalled), so unused memory can surface for review; the
+    console's own playground passes False.
 
     Abstention: something must be a hit for anything to be served. A hit is a memory whose relevance
     (cosine similarity to the question, plus KEYWORD_BONUS when it also matches the question's words)
@@ -176,6 +187,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     if req.as_of:
         time_clause = "AND valid_from <= %s AND (valid_to IS NULL OR valid_to > %s)"
         time_params = [req.as_of, req.as_of]
+    elif not include_history:
+        time_clause = f"AND {NOT_EXPIRED}"
     if audiences is not None:
         time_clause += " AND audience = ANY(%s)"
         time_params = [*time_params, audiences]
@@ -258,6 +271,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
            or any(thread_is_hit(t) for t in threads)
            or any(shared_terms(terms, m.content) for m in pending))
     if not hit:
+        if track:  # standing instructions are served with every answer, abstention or not
+            await mark_recalled(conn, [r["id"] for r in standing_rows])
         if candidates:
             reason = "below_threshold"
         elif await has_memory(conn, project_id, audiences):
@@ -340,7 +355,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     if conflict_ids:
         for cr in await (
             await conn.execute(
-                "SELECT id, statement, recorded_at FROM memory_items WHERE id = ANY(%s) AND status = 'active'", (list(conflict_ids),)
+                f"SELECT id, statement, recorded_at FROM memory_items WHERE id = ANY(%s) AND status = 'active' AND {NOT_EXPIRED}",
+                (list(conflict_ids),)
             )
         ).fetchall():
             conflict_text[cr["id"]] = (cr["statement"], cr["recorded_at"])
@@ -467,6 +483,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
         for item in items:
             item.related = refs.get(item.memory.id, [])
             spent += sum(tokens_of(ref.statement) + 2 for ref in item.related)
+    if track:
+        await mark_recalled(conn, [*(r["id"] for r in standing_rows), *(i.memory.id for i in items)])
     served_threads = [RecallThread(id=t["id"], key=t["key"], title=t["title"], status=t["status"], summary=t["summary"])
                       for t in shown_threads]
     served_passages = [RecallPassage(episode_id=p["episode_id"], occurred_at=p["occurred_at"], content=p["content"]) for p in excerpts]
@@ -475,6 +493,14 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     return RecallResponse(briefing="\n".join(lines), standing=standing, pending=pending, threads=served_threads,
                           passages=served_passages, items=items, tokens=spent, abstained=False,
                           min_relevance=min_relevance, top_relevance=top_relevance)
+
+
+async def mark_recalled(conn, memory_ids: list[UUID]) -> None:
+    """One statement for everything a briefing served: when it was last recalled, and how often."""
+    if memory_ids:
+        await conn.execute(
+            "UPDATE memory_items SET last_recalled_at = now(), recall_count = recall_count + 1 WHERE id = ANY(%s)",
+            (list(dict.fromkeys(memory_ids)),))
 
 
 def min_relevance_for(project, embedder: Embedder) -> float:
@@ -699,8 +725,10 @@ async def standing_instructions(conn, project_id: UUID, req: RecallRequest, audi
         clauses.append("audience = ANY(%s)")
         params.append(audiences)
     if req.as_of:
-        clauses.append("recorded_at <= %s")
-        params.append(req.as_of)
+        clauses.append("recorded_at <= %s AND (valid_to IS NULL OR valid_to > %s)")
+        params += [req.as_of, req.as_of]
+    else:
+        clauses.append(NOT_EXPIRED)
     rows = await (await conn.execute(
         f"SELECT id, statement, subjects FROM memory_items WHERE {' AND '.join(clauses)} ORDER BY recorded_at DESC LIMIT 30", params)).fetchall()
     out, spent = [], 0

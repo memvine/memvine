@@ -52,6 +52,10 @@ export interface Memory {
   why?: string | null;
   thread_id?: string | null;
   scope?: "project" | "thread" | null;
+  /** Past the end it stated (valid_to) while still active or stale: no longer served as current. */
+  expired?: boolean;
+  last_recalled_at?: string | null;
+  recall_count?: number;
 }
 
 /** supersedes, contradicts, extends and derived join two facts; anchored a fact and a file; decided_in a fact and its thread. */
@@ -235,8 +239,10 @@ export class Memvine {
     });
   }
 
-  memories(o: { q?: string; status?: Memory["status"]; kind?: Memory["kind"]; limit?: number } = {}) {
-    return this.call<Memory[]>("GET", "/v1/memories", undefined, { q: o.q, status: o.status, kind: o.kind, limit: o.limit ?? 50 });
+  /** status "expired": past the end they stated. unused: not served by a recall in 60 days (for review). */
+  memories(o: { q?: string; status?: Memory["status"] | "expired"; kind?: Memory["kind"]; unused?: boolean; limit?: number } = {}) {
+    return this.call<Memory[]>("GET", "/v1/memories", undefined,
+      { q: o.q, status: o.status, kind: o.kind, unused: o.unused ? "true" : undefined, limit: o.limit ?? 50 });
   }
 
   memory(id: string) {
