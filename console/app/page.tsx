@@ -9,7 +9,8 @@ import { EmptyProject, SetupSteps, type SetupStep } from "@/components/EmptyProj
 import { Receipt } from "@/components/Receipt";
 import { SynthesisBanner } from "@/components/SynthesisBanner";
 import { Badge, ButtonLink, Card, CardHeader, cx, shortDate, timeAgo } from "@/components/ui";
-import { currentProject, getUsage, listEpisodes, listKeys, listMemories, listRequests, listSessions, listThreads } from "@/lib/api";
+import { ProfileLines, ProfileMeta, RebuildButton } from "@/components/ProfileLines";
+import { canManage, currentProject, getProjectProfile, getUsage, listEpisodes, listKeys, listMemories, listRequests, listSessions, listThreads } from "@/lib/api";
 import { SAMPLE_PREFIX } from "@/lib/sample-data";
 import type { MemoryItem, RequestLog } from "@/lib/types";
 
@@ -26,7 +27,7 @@ const newest = (a: MemoryItem, b: MemoryItem) => b.recordedAt.localeCompare(a.re
 
 export default async function HomePage() {
   const project = await currentProject();
-  const [review, active, stale, superseded, episodes, keys, requests, sessions, usage, threads] = await Promise.all([
+  const [review, active, stale, superseded, episodes, keys, requests, sessions, usage, threads, profile, manage] = await Promise.all([
     listMemories(project.slug, { review: "new" }),
     listMemories(project.slug, { status: "active" }),
     listMemories(project.slug, { status: "stale" }),
@@ -37,6 +38,8 @@ export default async function HomePage() {
     listSessions(project.slug),
     getUsage(project.slug),
     listThreads(project.slug),
+    getProjectProfile(project.slug),
+    canManage(),
   ]);
 
   const live = [...active, ...stale];
@@ -174,6 +177,17 @@ export default async function HomePage() {
             </div>
 
             <div className="min-w-0 space-y-6">
+              {profile && (profile.lines.length > 0 || profile.builtAt) && (
+                <Card>
+                  <CardHeader
+                    title="Project profile"
+                    description={<>What every agent session here starts with. <ProfileMeta profile={profile} /></>}
+                    action={manage ? <RebuildButton subjectKind="project" /> : undefined}
+                  />
+                  <div className="px-4 pb-4 sm:px-5"><ProfileLines profile={{ ...profile, description: null }} /></div>
+                </Card>
+              )}
+
               {(project.unusedCount ?? 0) > 0 && <UnusedCard count={project.unusedCount!} days={project.unusedDays ?? 60} />}
 
               <Section title="Possibly outdated" description="Memories whose ground moved; confirm, correct or forget them."
