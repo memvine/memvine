@@ -8,7 +8,7 @@ import { forwarded } from "./forwarded";
 import { buildGraph, relatedFromDetail } from "./graph";
 import type {
   ProjectCategory,
-  AddResult, ApiKey, Audience, EdgeDirection, EdgeKind, GraphEdge, GraphFile, GraphNode, MemoryGraph, MemoryRelated, RelatedEdge, RelatedRef, RelatedThread, AuditEvent, Invite, Role, Episode, Identity, OrgInfo, OrgKey, OrgSummary, SessionSummary, EpisodeSummary, Member, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project,
+  AddResult, ApiKey, Audience, EdgeDirection, EventPage, MemoryEventItem, EdgeKind, GraphEdge, GraphFile, GraphNode, MemoryGraph, MemoryRelated, RelatedEdge, RelatedRef, RelatedThread, AuditEvent, Invite, Role, Episode, Identity, OrgInfo, OrgKey, OrgSummary, SessionSummary, EpisodeSummary, Member, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project,
   RecallResult, RequestLog, SampleResult, SynthesisHealth, SynthesisIssue, ThreadDetail, ThreadSummary, UsageDay,
 } from "./types";
 
@@ -104,6 +104,17 @@ const toMemory = (m: ServerMemory): MemoryItem => ({
   lastRecalledAt: m.last_recalled_at ?? null,
   recallCount: m.recall_count ?? 0,
   review: m.review ?? "kept",
+});
+
+interface ServerEvent {
+  id: number | null; memory_id: string | null; kind: MemoryEventItem["kind"]; actor: string; detail: Record<string, unknown> | null;
+  episode_id: string | null; at: string; quotes?: string[]; related?: MemoryEventItem["related"];
+  statement?: string | null; memory_status?: MemoryItem["status"] | null;
+}
+
+const toEvent = (e: ServerEvent): MemoryEventItem => ({
+  id: e.id, memoryId: e.memory_id, kind: e.kind, actor: e.actor, detail: e.detail ?? {}, episodeId: e.episode_id, at: e.at,
+  quotes: e.quotes ?? [], related: e.related ?? [], statement: e.statement, memoryStatus: e.memory_status,
 });
 
 interface ServerThread {
@@ -320,7 +331,18 @@ export const liveApi: MemvineApi = {
     ).filter((e): e is Episode => e !== null);
     const conflicts = (await Promise.all((memory.conflicts_with ?? []).map(fetchOne)))
       .filter((m): m is ServerMemory => m !== null).map(toMemory);
-    return { memory: toMemory(memory), chain: chain.map(toMemory), conflicts, episodes };
+    const history = (await notFoundAsNull(call<ServerEvent[]>(`/v1/memories/${id}/history`, { project }))) ?? [];
+    return { memory: toMemory(memory), chain: chain.map(toMemory), conflicts, episodes, history: history.map(toEvent) };
+  },
+  async listEvents(project, filter = {}): Promise<EventPage> {
+    const params = new URLSearchParams();
+    if (filter.kind) params.set("kind", filter.kind);
+    if (filter.memoryId) params.set("memory_id", filter.memoryId);
+    if (filter.since) params.set("since", filter.since);
+    if (filter.cursor) params.set("cursor", filter.cursor);
+    params.set("limit", String(filter.limit ?? 50));
+    const page = await call<{ events: ServerEvent[]; next_cursor: string | null }>(`/v1/events?${params}`, { project });
+    return { events: page.events.map(toEvent), nextCursor: page.next_cursor };
   },
   async deleteSession(project, id) {
     return call<{ messages: number; sources: number; memories: number }>(`/v1/sessions/${encodeURIComponent(id)}`, { method: "DELETE", project });

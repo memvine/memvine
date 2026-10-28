@@ -35,6 +35,7 @@ class Principal:
     project_id: UUID
     project_slug: str
     key_id: UUID | None  # None when the management key acts on a project (the console)
+    key_name: str | None = None  # the project key's name, for the memory history's actor (events.actor_of)
 
 
 def client_ip(request: Request) -> str:
@@ -185,7 +186,7 @@ async def require_project(request: Request) -> Principal:
         row = await (
             await conn.execute(
                 """
-                SELECT k.id AS key_id, k.revoked_at, p.id AS project_id, p.slug
+                SELECT k.id AS key_id, k.name AS key_name, k.revoked_at, p.id AS project_id, p.slug
                 FROM api_keys k JOIN projects p ON p.id = k.project_id
                 WHERE k.key_hash = %s
                 """,
@@ -199,7 +200,7 @@ async def require_project(request: Request) -> Principal:
         await conn.execute("UPDATE api_keys SET last_used_at = now(), last_used_ip = %s, "
                            "last_user_agent = COALESCE(%s, last_user_agent) WHERE id = %s",
                            (client_ip(request) or None, user_agent(request.headers.get("user-agent")), row["key_id"]))
-    principal = Principal(project_id=row["project_id"], project_slug=row["slug"], key_id=row["key_id"])
+    principal = Principal(project_id=row["project_id"], project_slug=row["slug"], key_id=row["key_id"], key_name=row["key_name"])
     request.state.principal = principal
     request_project.set(str(principal.project_id))
     return principal

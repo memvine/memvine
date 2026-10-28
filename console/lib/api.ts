@@ -109,6 +109,7 @@ export const deleteAudience = forward("deleteAudience");
 export const listIdentities = forward("listIdentities", []);
 export const putIdentity = forward("putIdentity");
 export const getMemory = forward("getMemory", null);
+export const listEvents = forward("listEvents", { events: [], nextCursor: null });
 export const setMemoryStatus = forward("setMemoryStatus");
 export const getRelated = forward("getRelated", null);
 export const getGraph = forward("getGraph", { nodes: [], edges: [], since: null, truncated: false });

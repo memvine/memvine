@@ -19,9 +19,10 @@ def content_hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-async def delete_derived(conn, project_id: UUID, episode_id: str) -> int:
+async def delete_derived(conn, project_id: UUID, episode_id: str, *, actor: str = "system") -> int:
     """Remove memories drawn only from this episode, and its evidence on thread pages.
-    Returns how many memories were deleted."""
+    Returns how many memories were deleted. Their history goes with them; the feed keeps a
+    'deleted' event (memory_id NULL), and an older fact a deleted one had replaced is 'restored'."""
     await forget_episode(conn, project_id, episode_id)
     await conn.execute(
         "DELETE FROM evidence WHERE project_id = %s AND episode_id = %s", (project_id, episode_id)
@@ -31,15 +32,28 @@ async def delete_derived(conn, project_id: UUID, episode_id: str) -> int:
             """
             WITH orphans AS (
                 SELECT m.id FROM memory_items m
-                WHERE m.project_id = %s AND NOT EXISTS (SELECT 1 FROM evidence e WHERE e.memory_id = m.id)
+                WHERE m.project_id = %(p)s AND NOT EXISTS (SELECT 1 FROM evidence e WHERE e.memory_id = m.id)
             ), restored AS (
                 -- A superseded item whose successor is being deleted becomes current again.
-                UPDATE memory_items SET status = 'active', superseded_by = NULL, valid_to = NULL
-                WHERE superseded_by IN (SELECT id FROM orphans) AND status = 'superseded'
+                UPDATE memory_items m SET status = 'active', superseded_by = NULL, valid_to = NULL
+                FROM orphans o WHERE m.superseded_by = o.id AND m.status = 'superseded'
+                RETURNING m.id, o.id AS successor
+            ), restored_events AS (
+                INSERT INTO memory_events (project_id, memory_id, kind, actor, detail, episode_id)
+                SELECT %(p)s, id, 'restored', %(actor)s,
+                       jsonb_build_object('reason', 'replacement deleted with its source', 'related', successor), %(ep)s
+                FROM restored
+            ), gone AS (
+                DELETE FROM memory_items WHERE id IN (SELECT id FROM orphans) RETURNING id
+            ), gone_events AS (
+                INSERT INTO memory_events (project_id, memory_id, kind, actor, detail, episode_id)
+                SELECT %(p)s, NULL, 'deleted', %(actor)s,
+                       jsonb_build_object('memory_id', id, 'reason', 'its last source was deleted'), %(ep)s
+                FROM gone
             )
-            DELETE FROM memory_items WHERE id IN (SELECT id FROM orphans) RETURNING id
+            SELECT id FROM gone
             """,
-            (project_id,),
+            {"p": project_id, "actor": actor, "ep": episode_id},
         )
     ).fetchall()
     await conn.execute(
@@ -86,8 +100,8 @@ async def ingest_episode(conn, project_id: UUID, ep: EpisodeIn) -> IngestItemRes
     return IngestItemResult(id=ep.id, outcome=outcome)
 
 
-async def delete_episode(conn, project_id: UUID, episode_id: str) -> bool:
-    await delete_derived(conn, project_id, episode_id)
+async def delete_episode(conn, project_id: UUID, episode_id: str, *, actor: str = "system") -> bool:
+    await delete_derived(conn, project_id, episode_id, actor=actor)
     row = await (
         await conn.execute(
             "DELETE FROM episodes WHERE project_id = %s AND id = %s RETURNING id", (project_id, episode_id)

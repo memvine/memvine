@@ -62,6 +62,8 @@ BODIES: dict[tuple[str, str], dict | None] = {
     ("POST", "/v1/memories"): {"statement": "Attackers replaced this fact.", "supersedes": "{memory_id}"},
     ("GET", "/v1/memories/{memory_id}"): None,
     ("GET", "/v1/memories/{memory_id}/related"): None,
+    ("GET", "/v1/memories/{memory_id}/history"): None,
+    ("GET", "/v1/events"): None,
     ("GET", "/v1/graph"): None,
     ("PATCH", "/v1/memories/{memory_id}"): {"status": "retired", "confirm": True},
     ("GET", "/v1/code/anchors"): None,
@@ -139,6 +141,7 @@ async def snapshot(dsn: str, b: dict) -> dict:
         "jobs": "SELECT id, status, attempts FROM jobs WHERE project_id = %(pid)s ORDER BY id",
         "threads": "SELECT id, title, status FROM threads WHERE project_id = %(pid)s ORDER BY id",
         "feedback": "SELECT count(*) AS n FROM feedback_cases WHERE project_id = %(pid)s",
+        "memory_events": "SELECT id, memory_id, kind, actor FROM memory_events WHERE project_id = %(pid)s ORDER BY id",
         "projects": "SELECT id FROM projects WHERE org_id = %(oid)s ORDER BY id",
         "org": "SELECT slug, name FROM organizations WHERE id = %(oid)s",
         "members": "SELECT user_id, role FROM memberships WHERE org_id = %(oid)s ORDER BY user_id",
@@ -231,6 +234,8 @@ async def test_no_route_reaches_another_organization(client):
                 params["confirm"] = pb["slug"]
             if path == "/v1/code/anchors":
                 params["repo"] = "northwind/billing"
+            if path == "/v1/events":
+                params["memory_id"] = ids["memory_id"]
             r = await client.request(method, url, params=params, json=fill(template, route_ids), headers=headers)
             if MARKER in r.text.lower():
                 leaks.append(f"{who}: {method} {url} -> {r.status_code}: {r.text[:200]}")

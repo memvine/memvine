@@ -46,3 +46,25 @@ def test_remember_supersedes_and_graph_all():
     assert seen[1][2] == {"statement": "Deploys on Tuesdays.", "kind": "semantic", "subjects": [], "assertion": "stated",
                           "audience": "project"}
     assert seen[2][1] == "http://memvine.test/v1/graph?all=true"
+
+
+def test_history_and_events_requests():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        if request.url.path.endswith("/history"):
+            return httpx.Response(200, json=[{"id": 1, "kind": "created"}])
+        cursor = request.url.params.get("cursor")
+        return httpx.Response(200, json={"events": [{"id": 2 if cursor else 3}], "next_cursor": None if cursor else "c1"})
+
+    mv = Memvine("mv_sk_x", http=httpx.Client(base_url="http://memvine.test", transport=httpx.MockTransport(handler)))
+    assert mv.history("m-1")[0]["kind"] == "created"
+    mv.events(since="2026-10-19T00:00:00Z", kind=["created", "forgotten"], memory_id="m-1", limit=20, cursor="c0")
+    mv.events(kind="stale")
+    assert [e["id"] for e in mv.iter_events(limit=1)] == [3, 2]
+    assert seen[0] == "http://memvine.test/v1/memories/m-1/history"
+    assert seen[1] == ("http://memvine.test/v1/events?since=2026-10-19T00%3A00%3A00Z&kind=created&kind=forgotten"
+                       "&memory_id=m-1&limit=20&cursor=c0")
+    assert seen[2] == "http://memvine.test/v1/events?kind=stale"
+    assert seen[3:] == ["http://memvine.test/v1/events?limit=1", "http://memvine.test/v1/events?limit=1&cursor=c1"]

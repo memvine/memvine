@@ -4,6 +4,7 @@ import { ArrowUpRight, Check, RotateCcw, Archive } from "lucide-react";
 import { confirmMemory, setMemoryStatus } from "@/app/actions";
 import type { MemoryDetail, MemoryItem, ThreadSummary } from "@/lib/types";
 import { CopyButton, Drawer } from "./client";
+import { MemoryTimeline } from "./MemoryTimeline";
 import {
   AssertionBadge, Badge, button, Callout, categoryLabel, CategoryBadge, Eyebrow, formatDate, KeyValue, KeyValueList, Mono, SourceQuote,
   StatusBadge, ThreadStatusBadge,
@@ -175,10 +176,14 @@ export function MemoryDrawer({ detail, closeHref, linkFor, thread }: {
         )}
         {chain.length > 1 && (
           <section>
-            <Eyebrow className="mb-3">History of this fact</Eyebrow>
+            <Eyebrow className="mb-3">Values of this fact</Eyebrow>
             <MemoryHistory chain={chain} current={m.id} linkFor={linkFor} />
           </section>
         )}
+        <section>
+          <Eyebrow className="mb-3">History</Eyebrow>
+          <MemoryTimeline events={detail.history} linkFor={linkFor} />
+        </section>
       </div>
     </Drawer>
   );

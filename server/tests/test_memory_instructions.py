@@ -108,6 +108,15 @@ async def test_memory_instructions_are_set_cleared_and_bounded(client):
         r = await client.patch(f"/v1/projects/{slug}", headers=MGMT, json={"memory_instructions": clear})
         assert r.status_code == 200 and r.json()["memory_instructions"] is None
 
+    # Each change is in the activity feed with lengths only, never the text; an unchanged value adds nothing.
+    events = (await client.get("/v1/events?kind=project_settings")).json()["events"]
+    details = [e["detail"] for e in reversed(events)]
+    assert [(d["field"], d["before_len"], d["after_len"]) for d in details] == [
+        ("memory_instructions", 0, len(INSTRUCTIONS)), ("memory_instructions", len(INSTRUCTIONS), details[1]["after_len"]),
+        ("memory_instructions", details[1]["after_len"], 0)]
+    assert all(e["memory_id"] is None and e["actor"].startswith("key:") for e in events)
+    assert "on-call" not in json.dumps(events) and "Never keep" not in json.dumps(events)
+
 
 @needs_db
 @pytest.mark.asyncio
@@ -137,6 +146,10 @@ async def test_categories_are_validated_and_capped_at_five(client):
     assert (await client.post(base, headers=MGMT, json={"slug": "sixth", "name": "Sixth"})).status_code == 201, "a freed place"
     project = next(p for p in (await client.get("/v1/projects", headers=MGMT)).json() if p["slug"] == client.project_slug)
     assert [c["slug"] for c in project["categories"]] == ["runbook", "vendor", "glossary", "on-call", "sixth"]
+    events = (await client.get("/v1/events?kind=project_settings")).json()["events"]
+    assert [(e["detail"]["action"], e["detail"]["slug"]) for e in reversed(events)] == [
+        ("created", "runbook"), ("created", "vendor"), ("created", "glossary"), ("created", "on-call"), ("created", "ab"),
+        ("updated", "runbook"), ("deleted", "ab"), ("created", "sixth")]
 
     # A project key administers nothing.
     assert (await client.post(base, json={"slug": "keyed", "name": "Keyed"})).status_code in (401, 403)

@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from . import access, accounts, audit, billing, mcp_app
 from . import code as code_ops
 from . import edges as edge_ops
+from . import events as event_ops
 from . import health as health_ops
 from . import ingest as ingest_ops
 from . import instant as instant_ops
@@ -50,6 +51,7 @@ from .models import (
     BUILTIN_CATEGORIES,
     MAX_PROJECT_CATEGORIES,
     CodeCheck,
+    EventFeed,
     GraphOut,
     IngestRequest,
     IngestResponse,
@@ -58,6 +60,7 @@ from .models import (
     KeyOut,
     MemoryCreate,
     MemoryCreated,
+    MemoryEvent,
     MemoryOut,
     MemoryPatch,
     MemoryRelated,
@@ -470,7 +473,8 @@ async def create_memory(body: MemoryCreate, request: Request, principal: Princip
             decision = await remember(conn, state.llm, state.embedder, principal.project_id, statement=body.statement,
                                       kind=body.kind, subjects=body.subjects, assertion=body.assertion,
                                       audience=body.audience, standing=body.standing, category=body.category, why=body.why,
-                                      supersedes=body.supersedes, given=set(body.model_fields_set))
+                                      supersedes=body.supersedes, given=set(body.model_fields_set),
+                                      actor=event_ops.actor_of(request))
         except billing.CapReached as exc:
             raise HTTPException(429, {"code": "project-cap-reached", "message": str(exc)}) from exc
         except SupersedeError as exc:
@@ -521,27 +525,64 @@ async def memory_graph(request: Request, principal: Principal = Depends(require_
 
 @app.patch("/v1/memories/{memory_id}", response_model=MemoryOut)
 async def patch_memory(memory_id: UUID, body: MemoryPatch, request: Request, principal: Principal = Depends(require_project)):
-    async with request.app.state.pool.connection() as conn:
+    actor = event_ops.actor_of(request)
+    async with request.app.state.pool.connection() as conn, conn.transaction():
         current = await get_memory(conn, principal.project_id, memory_id)
         if not current:
             raise HTTPException(404, {"code": "not-found", "message": "No such memory"})
         if body.status == "retired":
             # A person forgets it: an older fact it replaced is current again; synthesis will not
             # learn it again; a synthesis-made one becomes a feedback case (review.py).
-            await review_ops.forget(conn, principal.project_id, memory_id)
+            await review_ops.forget(conn, principal.project_id, memory_id, actor=actor)
         elif body.status and current.status != "superseded":
             await conn.execute(
                 "UPDATE memory_items SET status = %s, valid_to = CASE WHEN %s = 'retired' THEN now() ELSE NULL END WHERE id = %s",
                 (body.status, body.status, memory_id),
             )
             if body.status == "active" and current.status == "retired":
-                await review_ops.restore(conn, principal.project_id, memory_id)
+                await review_ops.restore(conn, principal.project_id, memory_id, actor=actor)
+            elif body.status == "active" and current.status == "stale":
+                await event_ops.record(conn, principal.project_id, "revalidated", memory_id=memory_id, actor=actor,
+                                       detail={"reason": "marked active"})
         if body.confirm:
             await conn.execute(
                 "UPDATE memory_items SET assertion = 'observed', confidence = 'high', review = 'kept' WHERE id = %s", (memory_id,)
             )
-            await code_ops.revalidate(conn, principal.project_id, memory_id)
+            await event_ops.record(conn, principal.project_id, "confirmed", memory_id=memory_id, actor=actor)
+            await code_ops.revalidate(conn, principal.project_id, memory_id, actor=actor)
         return await get_memory(conn, principal.project_id, memory_id)
+
+
+@app.get("/v1/memories/{memory_id}/history", response_model=list[MemoryEvent])
+async def memory_history(memory_id: UUID, request: Request, principal: Principal = Depends(require_project)):
+    """Everything that happened to one memory, oldest first: created (with its evidence quotes),
+    restated, superseded and supersedes (with the other memory's statement), contradicted, extended,
+    confirmed, forgotten, restored, corrected, anchored, stale, revalidated, and expired (computed)."""
+    async with request.app.state.pool.connection() as conn:
+        out = await event_ops.history(conn, principal.project_id, memory_id)
+    if out is None:
+        raise HTTPException(404, {"code": "not-found", "message": "No such memory"})
+    return out
+
+
+@app.get("/v1/events", response_model=EventFeed)
+async def memory_events(request: Request, principal: Principal = Depends(require_project), since: datetime | None = None,
+                        kind: list[str] | None = Query(None, description="one or more event kinds"),
+                        memory_id: UUID | None = None, limit: int = Query(50, ge=1, le=200),
+                        cursor: str | None = Query(None, max_length=200)):
+    """The project's activity: memory events, newest first. Pass `next_cursor` back as `cursor` for
+    the next page."""
+    if since is not None and since.tzinfo is None:
+        since = since.replace(tzinfo=UTC)
+    unknown = [k for k in kind or [] if k not in event_ops.KINDS]
+    if unknown:
+        raise HTTPException(400, {"code": "unknown-kind", "message": f"Unknown event kind {unknown[0]!r}"})
+    async with request.app.state.pool.connection() as conn:
+        try:
+            return await event_ops.feed(conn, principal.project_id, since=since, kinds=kind, memory_id=memory_id,
+                                        limit=limit, cursor=cursor)
+        except ValueError as exc:
+            raise HTTPException(400, {"code": "bad-cursor", "message": "Not a cursor from this feed"}) from exc
 
 
 @app.get("/v1/code/anchors")
@@ -556,7 +597,7 @@ async def code_anchors(repo: str, request: Request, principal: Principal = Depen
 async def code_check(body: CodeCheck, request: Request, principal: Principal = Depends(require_project)):
     """Report the current versions of files; memories about files that changed turn stale (and back)."""
     async with request.app.state.pool.connection() as conn, conn.transaction():
-        result = await code_ops.check(conn, principal.project_id, body.repo, body.files)
+        result = await code_ops.check(conn, principal.project_id, body.repo, body.files, actor=event_ops.actor_of(request))
     return {"checked": result["checked"], "stale": len(result["stale"]), "fresh": len(result["fresh"])}
 
 
@@ -610,6 +651,8 @@ async def export_project(request: Request, principal: Principal = Depends(requir
             "identities": await rows("SELECT identity, traits, origin, created_at, last_seen_at FROM identities WHERE project_id = %s ORDER BY identity"),
             "audiences": await rows("SELECT * FROM audiences WHERE project_id = %s"),
             "feedback_cases": await rows(f"SELECT {review_ops.CASE_COLUMNS} FROM feedback_cases WHERE project_id = %s ORDER BY created_at"),
+            "memory_events": await rows("SELECT id, memory_id, kind, actor, detail, episode_id, at FROM memory_events "
+                                        "WHERE project_id = %s ORDER BY at, id"),
         }
     request.state.audit_target = principal.project_slug
     filename = f"memvine-{principal.project_slug}-{datetime.now(UTC):%Y%m%d}.json"
@@ -632,7 +675,7 @@ async def feedback_cases(request: Request, principal: Principal = Depends(requir
 async def delete_episode(episode_id: str, request: Request, principal: Principal = Depends(require_project)):
     ensure_manager(request)
     async with request.app.state.pool.connection() as conn, conn.transaction():
-        found = await ingest_ops.delete_episode(conn, principal.project_id, episode_id)
+        found = await ingest_ops.delete_episode(conn, principal.project_id, episode_id, actor=event_ops.actor_of(request))
     if not found:
         raise HTTPException(404, {"code": "not-found", "message": "No such episode"})
 
@@ -875,8 +918,11 @@ async def projects(request: Request, admin: Admin = Depends(require_management))
 async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: Admin = Depends(require_manager)):
     """Rename, retag, pause, describe, or change the cap, retention, recall relevance threshold,
     recall recency half-life or memory instructions of a project. The slug never changes."""
-    async with request.app.state.pool.connection() as conn:
+    async with request.app.state.pool.connection() as conn, conn.transaction():
         project = await _owned(conn, admin, slug)
+        before = await (await conn.execute("SELECT memory_instructions FROM projects WHERE id = %s FOR UPDATE",
+                                           (project["id"],))).fetchone()
+        instructions = (body.memory_instructions or "").strip() or None
         await conn.execute(
             """
             UPDATE projects SET name = COALESCE(%s, name), tags = COALESCE(%s, tags),
@@ -895,8 +941,13 @@ async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: 
              "description" in body.model_fields_set, (body.description or "").strip() or None,
              "recall_min_relevance" in body.model_fields_set, body.recall_min_relevance,
              "recall_half_life_days" in body.model_fields_set, body.recall_half_life_days,
-             "memory_instructions" in body.model_fields_set, (body.memory_instructions or "").strip() or None, project["id"]),
+             "memory_instructions" in body.model_fields_set, instructions, project["id"]),
         )
+        if "memory_instructions" in body.model_fields_set and instructions != before["memory_instructions"]:
+            # The activity feed says the rules changed and by whom; the text itself stays out of events.
+            await event_ops.record(conn, project["id"], "project_settings", actor=event_ops.actor_of(request),
+                                   detail={"field": "memory_instructions", "before_len": len(before["memory_instructions"] or ""),
+                                           "after_len": len(instructions or "")})
         updated = await (await conn.execute(PROJECT_SELECT + " WHERE p.id = %s", (project["id"],))).fetchone()
     return ProjectOut(**updated)
 
@@ -950,6 +1001,8 @@ async def create_category(slug: str, body: ProjectCategoryCreate, request: Reque
         row = await (await conn.execute(
             f"INSERT INTO project_categories (project_id, slug, name, description) VALUES (%s, %s, %s, %s) RETURNING {CATEGORY_COLUMNS}",
             (project["id"], body.slug, body.name.strip(), body.description.strip()))).fetchone()
+        await event_ops.record(conn, project["id"], "project_settings", actor=event_ops.actor_of(request),
+                               detail={"field": "category", "action": "created", "slug": body.slug})
     request.state.audit_target = f"{slug}/categories/{body.slug}"
     return ProjectCategoryOut(**row)
 
@@ -958,13 +1011,16 @@ async def create_category(slug: str, body: ProjectCategoryCreate, request: Reque
 async def patch_category(slug: str, category: str, body: ProjectCategoryPatch, request: Request,
                          admin: Admin = Depends(require_manager)):
     """Rename or re-describe a category. Its slug never changes (memories carry it)."""
-    async with request.app.state.pool.connection() as conn:
+    async with request.app.state.pool.connection() as conn, conn.transaction():
         project = await _owned(conn, admin, slug)
         row = await (await conn.execute(
             f"UPDATE project_categories SET name = COALESCE(%s, name), description = COALESCE(%s, description) "
             f"WHERE project_id = %s AND slug = %s RETURNING {CATEGORY_COLUMNS}",
             (body.name.strip() if body.name else None, body.description.strip() if body.description is not None else None,
              project["id"], category))).fetchone()
+        if row:
+            await event_ops.record(conn, project["id"], "project_settings", actor=event_ops.actor_of(request),
+                                   detail={"field": "category", "action": "updated", "slug": category})
     if not row:
         raise HTTPException(404, {"code": "not-found", "message": "No such category"})
     request.state.audit_target = f"{slug}/categories/{category}"
@@ -974,9 +1030,12 @@ async def patch_category(slug: str, category: str, body: ProjectCategoryPatch, r
 @app.delete("/v1/projects/{slug}/categories/{category}", status_code=204)
 async def delete_category(slug: str, category: str, request: Request, admin: Admin = Depends(require_manager)):
     """Remove a category. Memories already filed under it keep it; extraction stops offering it."""
-    async with request.app.state.pool.connection() as conn:
+    async with request.app.state.pool.connection() as conn, conn.transaction():
         project = await _owned(conn, admin, slug)
         cur = await conn.execute("DELETE FROM project_categories WHERE project_id = %s AND slug = %s", (project["id"], category))
+        if cur.rowcount:
+            await event_ops.record(conn, project["id"], "project_settings", actor=event_ops.actor_of(request),
+                                   detail={"field": "category", "action": "deleted", "slug": category})
     if not cur.rowcount:
         raise HTTPException(404, {"code": "not-found", "message": "No such category"})
     request.state.audit_target = f"{slug}/categories/{category}"

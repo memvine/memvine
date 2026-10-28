@@ -169,6 +169,44 @@ class MemoryRelated(BaseModel):
     edges: list[RelatedEdge]
 
 
+class EventRelated(BaseModel):
+    """A memory an event names: role is the detail key (by, of, with, into, from, related)."""
+    role: str
+    id: UUID
+    statement: str
+    status: Status
+
+
+class MemoryEvent(BaseModel):
+    """One change to a memory (events.py). id is None only for a computed event (expired)."""
+    id: int | None
+    memory_id: UUID | None
+    kind: str
+    actor: str
+    detail: dict = {}
+    episode_id: str | None = None
+    at: datetime
+    quotes: list[str] = []  # created / restated: the evidence that source gave
+    related: list[EventRelated] = []
+
+
+class FeedEvent(BaseModel):
+    id: int
+    memory_id: UUID | None
+    kind: str
+    actor: str
+    detail: dict = {}
+    episode_id: str | None = None
+    at: datetime
+    statement: str | None = None  # the memory's statement; None when it was deleted
+    memory_status: Status | None = None
+
+
+class EventFeed(BaseModel):
+    events: list[FeedEvent]
+    next_cursor: str | None = None
+
+
 class InstantResult(BaseModel):
     """What an instant ingest learned. status "done": `memories` is every memory the episode is now
     evidence for, each with all its edges (the shape of GET /v1/memories/{id}/related), ordered so

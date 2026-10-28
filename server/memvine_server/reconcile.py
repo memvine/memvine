@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
+from . import events
 from .embeddings import Embedder
 from .extraction.extract import Candidate, normalize, parse_json
 from .extraction.llm import LLM, LLMError, fast
@@ -107,9 +108,10 @@ async def _classify(llm: LLM, cand: Candidate, new_date: datetime, related: list
 
 
 async def reconcile(conn, llm: LLM, embedder: Embedder, project_id: UUID, cand: Candidate, *,
-                    recorded_at: datetime, episode_id: str, audience: str = "project") -> Decision:
+                    recorded_at: datetime, episode_id: str, audience: str = "project", actor: str = events.SYNTHESIS) -> Decision:
     """Facts only merge or supersede within one audience: a memory one audience may read is
-    never replaced or extended by evidence another audience cannot see."""
+    never replaced or extended by evidence another audience cannot see. Each outcome is recorded
+    in the memory's history (events.py) as `actor`."""
     embedding = (await embedder.embed([cand.statement]))[0]
     related = await _related(conn, project_id, cand, embedding, audience)
 
@@ -126,6 +128,8 @@ async def reconcile(conn, llm: LLM, embedder: Embedder, project_id: UUID, cand: 
                 raised = "high" if cand.confidence == "high" else old["confidence"]
             if raised != old["confidence"]:
                 await conn.execute("UPDATE memory_items SET confidence = %s WHERE id = %s", (raised, old["id"]))
+            await events.record(conn, project_id, "restated", memory_id=old["id"], actor=actor, episode_id=episode_id,
+                                detail={"confidence": raised} if raised != old["confidence"] else None)
             return Decision("same", old["id"], old["id"])
 
         if relation == "contradiction":
@@ -135,6 +139,11 @@ async def reconcile(conn, llm: LLM, embedder: Embedder, project_id: UUID, cand: 
                 "UPDATE memory_items SET conflicts_with = array_append(conflicts_with, %s) WHERE id = %s", (old["id"], new_id))
             await conn.execute(
                 "UPDATE memory_items SET conflicts_with = array_append(conflicts_with, %s) WHERE id = %s", (new_id, old["id"]))
+            await events.record_batch(conn, project_id, [
+                _created(new_id, episode_id, relation, old["id"]),
+                {"kind": "contradicted", "memory_id": new_id, "detail": {"with": old["id"]}},
+                {"kind": "contradicted", "memory_id": old["id"], "detail": {"with": new_id}, "episode_id": episode_id},
+            ], actor=actor)
             return Decision("contradiction", new_id, old["id"])
 
         if relation == "extends":
@@ -143,6 +152,10 @@ async def reconcile(conn, llm: LLM, embedder: Embedder, project_id: UUID, cand: 
             await conn.execute(
                 "INSERT INTO memory_links (project_id, from_id, to_id, kind, episode_id) VALUES (%s, %s, %s, 'extends', %s) "
                 "ON CONFLICT DO NOTHING", (project_id, new_id, old["id"], episode_id))
+            await events.record_batch(conn, project_id, [
+                _created(new_id, episode_id, relation, old["id"]),
+                {"kind": "extended", "memory_id": old["id"], "detail": {"by": new_id}, "episode_id": episode_id},
+            ], actor=actor)
             return Decision("extends", new_id, old["id"])
 
         if relation == "update":
@@ -158,7 +171,19 @@ async def reconcile(conn, llm: LLM, embedder: Embedder, project_id: UUID, cand: 
                 """,
                 (new_id, boundary, old["id"]),
             )
+            await events.record_batch(conn, project_id, [
+                _created(new_id, episode_id, relation, old["id"]),
+                {"kind": "supersedes", "memory_id": new_id, "detail": {"of": old["id"]}},
+                {"kind": "superseded", "memory_id": old["id"], "detail": {"by": new_id}, "episode_id": episode_id},
+            ], actor=actor)
             return Decision(relation, new_id, old["id"])
 
     new_id = await insert_item(conn, project_id, cand, embedding, recorded_at=recorded_at, episode_id=episode_id, audience=audience)
-    return Decision("new" if not related else "different", new_id, related[0]["id"] if related else None)
+    relation = "new" if not related else "different"
+    await events.record_batch(conn, project_id, [_created(new_id, episode_id, relation, None)], actor=actor)
+    return Decision(relation, new_id, related[0]["id"] if related else None)
+
+
+def _created(memory_id: UUID, episode_id: str, relation: str, related: UUID | None) -> dict:
+    detail = {"relation": relation, **({"related": related} if related is not None else {})}
+    return {"kind": "created", "memory_id": memory_id, "detail": detail, "episode_id": episode_id}

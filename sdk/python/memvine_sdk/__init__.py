@@ -136,6 +136,32 @@ class Memvine:
         anchored, decided_in."""
         return self._call("GET", f"/v1/memories/{memory_id}/related")
 
+    def history(self, memory_id: str) -> list[dict]:
+        """Everything that happened to a memory, oldest first: dicts with id, kind (created,
+        restated, superseded, supersedes, contradicted, extended, confirmed, forgotten, restored,
+        expired, corrected, merged, anchored, stale, revalidated, category_changed, refused), actor,
+        detail, episode_id, at, quotes (created/restated: the evidence that source gave) and related
+        (the memories detail names, with statement and status)."""
+        return self._call("GET", f"/v1/memories/{memory_id}/history")
+
+    def events(self, *, since: datetime | str | None = None, kind: str | list[str] | None = None,
+               memory_id: str | None = None, limit: int | None = None, cursor: str | None = None) -> dict:
+        """The project's activity feed, newest first: {"events": [...], "next_cursor"}. Pass
+        next_cursor back as `cursor` for the next page (None on the last)."""
+        params = {k: v for k, v in {"since": _iso(since), "kind": [kind] if isinstance(kind, str) else kind,
+                                    "memory_id": memory_id, "limit": limit, "cursor": cursor}.items() if v is not None}
+        return self._call("GET", "/v1/events", params=params)
+
+    def iter_events(self, **filters: Any):
+        """Every event matching `filters` (as events() takes them), newest first, page by page."""
+        cursor = None
+        while True:
+            page = self.events(cursor=cursor, **filters)
+            yield from page["events"]
+            cursor = page.get("next_cursor")
+            if not cursor:
+                return
+
     def graph(self, *, since: datetime | str | None = None, thread: str | None = None, subject: str | None = None,
               all: bool = False) -> dict:  # noqa: A002 - the API parameter
         """A neighborhood of the memory graph, at most 300 nodes: {"nodes", "edges", "truncated",
