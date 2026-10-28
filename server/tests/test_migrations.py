@@ -12,7 +12,7 @@ import psycopg
 import pytest
 from conftest import ADMIN_DSN, TEST_DSN, needs_db
 
-from memvine_server.migrate import MIGRATIONS_DIR, MigrationError, migrate, status
+from memvine_server.migrate import MIGRATIONS_DIR, MigrationError, load_migrations, migrate, status
 
 pytestmark = needs_db
 
@@ -45,6 +45,19 @@ async def build_legacy(conn) -> None:
     await conn.execute("CREATE TABLE IF NOT EXISTS schema_meta (hash text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())")
     await conn.execute(schema)
     await conn.execute("INSERT INTO schema_meta (hash) VALUES (%s)", (hashlib.sha256(schema.encode()).hexdigest(),))
+
+
+RELEASE = load_migrations()
+LATER = [f"applied {m.label}" for m in RELEASE if m.version > 1]  # what follows the baseline in this release
+NEXT = f"{RELEASE[-1].version + 1:04d}"  # the number a new migration would take
+
+
+def baseline_only(tmp_path: Path) -> Path:
+    directory = tmp_path / "baseline"
+    directory.mkdir()
+    for name in ("0001_baseline.sql", "rls.sql"):
+        shutil.copy(MIGRATIONS_DIR / name, directory / name)
+    return directory
 
 
 def migrations_copy(tmp_path: Path, extra: dict[str, str] | None = None) -> Path:
@@ -99,7 +112,7 @@ async def test_fresh_database_applies_every_migration(scratch_dsn):
 async def test_baseline_is_the_legacy_schema(scratch_dsn, tmp_path):
     """0001 + rls.sql build exactly what the hash-gated schema.sql built, down to column order."""
     async with await connect(scratch_dsn) as conn:
-        await migrate(conn)
+        await migrate(conn, baseline_only(tmp_path))
         fresh = await catalog(conn)
     legacy_dsn = scratch_dsn + "_legacy"
     admin = await connect(ADMIN_DSN)
@@ -122,19 +135,20 @@ async def test_legacy_database_is_baselined_then_migrates(scratch_dsn, tmp_path)
         await conn.execute("INSERT INTO projects (slug, name) VALUES ('kept', 'Kept')")
 
         st = await status(conn)
-        assert st.legacy and st.pending == []
+        assert st.legacy and [m.version for m in st.pending] == [m.version for m in RELEASE if m.version > 1]
         assert await migrate(conn, dry_run=True) == [
-            "baseline 0001_baseline (existing database; recorded, not run)", "apply rls.sql (repeatable)"]
+            "baseline 0001_baseline (existing database; recorded, not run)",
+            *[s.replace("applied", "apply") for s in LATER], "apply rls.sql (repeatable)"]
         assert not (await status(conn)).applied  # a dry run changes nothing
 
         steps = await migrate(conn)
-        assert steps == ["baselined 0001_baseline (existing database; recorded, not run)", "applied rls.sql (repeatable)"]
-        row = await (await conn.execute("SELECT version, baseline FROM schema_migrations")).fetchone()
+        assert steps == ["baselined 0001_baseline (existing database; recorded, not run)", *LATER, "applied rls.sql (repeatable)"]
+        row = await (await conn.execute("SELECT version, baseline FROM schema_migrations ORDER BY version")).fetchone()
         assert row == (1, True)
         assert await (await conn.execute("SELECT name FROM projects WHERE slug = 'kept'")).fetchone() == ("Kept",)
 
-        directory = migrations_copy(tmp_path, {"0002_widget_note.sql": "ALTER TABLE projects ADD COLUMN widget_note text;"})
-        assert await migrate(conn, directory) == ["applied 0002_widget_note", "applied rls.sql (repeatable)"]
+        directory = migrations_copy(tmp_path, {f"{NEXT}_widget_note.sql": "ALTER TABLE projects ADD COLUMN widget_note text;"})
+        assert await migrate(conn, directory) == [f"applied {NEXT}_widget_note", "applied rls.sql (repeatable)"]
         await conn.execute("SELECT widget_note FROM projects")
         assert await migrate(conn, directory) == []
 
@@ -159,23 +173,23 @@ async def test_changed_migration_refuses_to_start(scratch_dsn, tmp_path):
 
 
 async def test_database_from_a_newer_release_refuses_to_start(scratch_dsn, tmp_path):
-    directory = migrations_copy(tmp_path, {"0002_newer.sql": "CREATE TABLE newer (id int);"})
+    directory = migrations_copy(tmp_path, {f"{NEXT}_newer.sql": "CREATE TABLE newer (id int);"})
     async with await connect(scratch_dsn) as conn:
         await migrate(conn, directory)
-        with pytest.raises(MigrationError, match="0002_newer"):
+        with pytest.raises(MigrationError, match=f"{NEXT}_newer"):
             await migrate(conn)
 
 
 async def test_failed_migration_rolls_back(scratch_dsn, tmp_path):
     directory = migrations_copy(tmp_path, {
-        "0002_broken.sql": "CREATE TABLE half_done (id int);\nSELECT no_such_column FROM projects;"})
+        f"{NEXT}_broken.sql": "CREATE TABLE half_done (id int);\nSELECT no_such_column FROM projects;"})
     async with await connect(scratch_dsn) as conn:
-        with pytest.raises(MigrationError, match="0002_broken failed"):
+        with pytest.raises(MigrationError, match=f"{NEXT}_broken failed"):
             await migrate(conn, directory)
         assert await (await conn.execute("SELECT to_regclass('half_done')")).fetchone() == (None,)
         st = await status(conn, directory)
-        assert [m.label for m in st.pending] == ["0002_broken"]
-        assert [r["version"] for r in st.applied] == [1]
+        assert [m.label for m in st.pending] == [f"{NEXT}_broken"]
+        assert [r["version"] for r in st.applied] == [m.version for m in RELEASE]
 
 
 async def test_concurrent_starts_apply_once(scratch_dsn):
@@ -187,7 +201,7 @@ async def test_concurrent_starts_apply_once(scratch_dsn):
             await c.close()
     assert sum("applied 0001_baseline" in steps for steps in results) == 1
     async with await connect(scratch_dsn) as conn:
-        assert await (await conn.execute("SELECT count(*) FROM schema_migrations")).fetchone() == (1,)
+        assert await (await conn.execute("SELECT count(*) FROM schema_migrations")).fetchone() == (len(RELEASE),)
 
 
 async def test_concurrent_starts_of_a_legacy_database_baseline_once(scratch_dsn):

@@ -48,6 +48,18 @@ class Settings(BaseSettings):
     # On shutdown, how long a running job may finish before it is cancelled and requeued.
     worker_shutdown_seconds: float = 10.0
 
+    # Synthesis health (health.py, GET /v1/health/synthesis, console banners). Unhealthy when a job
+    # failed in the last alert_failed_hours, when a project's oldest waiting live job is older than
+    # alert_queue_minutes (paused projects excepted), or when no worker polled within alert_worker_minutes.
+    alert_failed_hours: int = 24
+    alert_queue_minutes: int = 30
+    alert_worker_minutes: int = 10
+    # Slack-compatible incoming webhook ({"text": ...}); the worker posts each unhealthy condition
+    # at most once per alert_repeat_minutes. Empty: no webhook.
+    alert_webhook_url: str = ""
+    alert_repeat_minutes: int = 60
+    alert_check_seconds: float = 60.0
+
     # A live session with no event for this long is over: its turns become episodes.
     session_idle_minutes: int = 30
     # Refresh a session's working state after this many new turns (or on explicit request).

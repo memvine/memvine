@@ -76,6 +76,10 @@ Codex, Cursor and other MCP clients: see `plugins/claude-code/README.md`, with t
   it, and `restore-test` restores the newest dump into a scratch database and compares its counts
   with the live one. A real restore: `docker exec -i $(docker compose -f server/docker-compose.yml ps -q db)
   pg_restore -U memvine -d memvine --clean --no-owner < <dump>` with the server stopped.
+- **Broken synthesis.** Home and Sources show a banner when sources failed to synthesize in the
+  last day, the queue stopped moving, or the worker stopped polling. To hear about it on Slack,
+  put `MEMVINE_ALERT_WEBHOOK_URL=https://hooks.slack.com/services/...` in `~/.memvine/server/env`
+  and restart; each problem is posted at most once an hour.
 - **Upgrades.** Pull the new code, then `deploy/laptop/memvine-laptop.sh restart`. When the new
   code changes the database schema, `restart` lists the migrations, takes a backup
   (`memvine-laptop.sh backup`), and the API applies them as it starts (see "Schema and

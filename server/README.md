@@ -272,6 +272,23 @@ migration is baselined on its first start: the server checks that every table an
 `0001_baseline.sql` exists, records 0001 as applied without running it, and reapplies `rls.sql`.
 If anything is missing it refuses to start and names it. `schema_meta` is left in place, unused.
 
+## Synthesis health and alerts
+
+`GET /v1/health/synthesis` (owners and admins for their organization's projects, the operator for
+all; `?project=<slug>` narrows to one) reports what leaves memory silently behind:
+
+- **failed**: sources whose synthesis used every attempt in the last `MEMVINE_ALERT_FAILED_HOURS` (24)
+- **stuck**: a live (not imported) source waiting longer than `MEMVINE_ALERT_QUEUE_MINUTES` (30) in a
+  project that is not paused
+- **worker**: no worker has polled the queue for `MEMVINE_ALERT_WORKER_MINUTES` (10); each worker
+  process records a heartbeat in `worker_heartbeats` as it polls
+
+The console shows the project's issues as a banner on Home and Sources. Set
+`MEMVINE_ALERT_WEBHOOK_URL` to a Slack incoming webhook (or anything taking `{"text": ...}`) and the
+worker posts each condition at most once per `MEMVINE_ALERT_REPEAT_MINUTES` (60), checking every
+minute, whichever worker process notices first. A worker whose process is gone cannot post that it
+is gone; the banner and the endpoint still show it.
+
 ## Docker
 
 `docker build -t memvine-server .` then run it with `MEMVINE_DATABASE_URL`, `MEMVINE_MANAGEMENT_KEY`

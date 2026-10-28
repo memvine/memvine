@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 from . import access, accounts, audit, billing, mcp_app
 from . import code as code_ops
 from . import edges as edge_ops
+from . import health as health_ops
 from . import ingest as ingest_ops
 from . import instant as instant_ops
 from . import sample as sample_ops
@@ -163,6 +164,21 @@ async def health(request: Request):
     async with request.app.state.pool.connection() as conn:
         await conn.execute("SELECT 1")
     return {"ok": True, "version": app.version}
+
+
+@app.get("/v1/health/synthesis")
+async def synthesis_health(request: Request, admin: Admin = Depends(require_manager), project: str | None = Query(None)):
+    """Whether synthesis is keeping up: jobs failed recently, a live job waiting too long in a project
+    that is not paused, a worker that stopped polling. The operator sees every project; an
+    organization's owners and admins see its own; `project` narrows to one."""
+    async with request.app.state.pool.connection() as conn:
+        project_id = None
+        if project:
+            found = await find_project(conn, admin, project)
+            if not found:
+                raise HTTPException(404, {"code": "not-found", "message": f"No project {project!r}"})
+            project_id = found["id"]
+        return await health_ops.synthesis_health(conn, org_id=None if admin.is_operator else admin.org_id, project_id=project_id)
 
 
 # ------------------------------------------------------------------ memory
