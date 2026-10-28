@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import * as api from "@/lib/api";
-import { INSTANT_MAX_CHARS } from "@/lib/types";
+import { BUILTIN_CATEGORIES, INSTANT_MAX_CHARS, MAX_MEMORY_INSTRUCTIONS, MAX_PROJECT_CATEGORIES } from "@/lib/types";
 
 export interface SignInState {
   error?: string;
@@ -523,4 +523,59 @@ export async function addToMemory(_prev: AddState, formData: FormData): Promise<
   } catch (e) {
     return { content, error: e instanceof Error ? e.message.replace(/^\d+ [a-z-]+: /, "") : "Could not add it to memory." };
   }
+}
+
+// ---- memory rules: the project's memory instructions and its own categories (Settings → Memory rules)
+
+export interface MemoryRulesState {
+  error?: string;
+  saved?: boolean;
+}
+
+const CATEGORY_SLUG_RE = /^[a-z0-9-]{2,24}$/;
+
+/** A server error like "409 category-limit: ..." as a sentence for the form. */
+function categoryError(e: unknown): string {
+  const message = e instanceof Error ? e.message : "Could not save.";
+  if (message.includes("category-limit")) return `A project has at most ${MAX_PROJECT_CATEGORIES} categories of its own; remove one first.`;
+  if (message.includes("category-exists")) return "This project already has a category with that slug.";
+  if (message.includes("category-builtin")) return "That slug is a built-in category.";
+  return message;
+}
+
+export async function saveMemoryInstructions(_prev: MemoryRulesState, formData: FormData): Promise<MemoryRulesState> {
+  const { slug } = await api.currentProject();
+  const text = String(formData.get("instructions") ?? "").trim();
+  if (text.length > MAX_MEMORY_INSTRUCTIONS) return { error: `Keep the instructions under ${MAX_MEMORY_INSTRUCTIONS.toLocaleString()} characters.` };
+  try {
+    await api.updateProject(slug, { memoryInstructions: text || null });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not save." };
+  }
+  revalidatePath("/settings");
+  return { saved: true };
+}
+
+export async function addCategory(_prev: MemoryRulesState, formData: FormData): Promise<MemoryRulesState> {
+  const project = (await api.currentProject()).slug;
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const slug = (String(formData.get("slug") ?? "").trim() || name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24);
+  if (!name) return { error: "Give the category a name." };
+  if (name.length > 60) return { error: "Keep the name under 60 characters." };
+  if (description.length > 300) return { error: "Keep the description under 300 characters." };
+  if (!CATEGORY_SLUG_RE.test(slug)) return { error: "The slug is 2 to 24 lowercase letters, digits and dashes." };
+  if ((BUILTIN_CATEGORIES as string[]).includes(slug)) return { error: "That slug is a built-in category." };
+  try {
+    await api.createCategory(project, { slug, name, description });
+  } catch (e) {
+    return { error: categoryError(e) };
+  }
+  revalidatePath("/", "layout");
+  return { saved: true };
+}
+
+export async function removeCategory(formData: FormData) {
+  await api.deleteCategory((await api.currentProject()).slug, String(formData.get("slug")));
+  revalidatePath("/", "layout");
 }

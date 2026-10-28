@@ -6,7 +6,9 @@ import { seedData, seedMembers, seedProjects, type MockThread, type ProjectData 
 import { buildGraph, relatedFromGraph, relatedRefs } from "./graph";
 import { buildSample, SAMPLE_PREFIX } from "./sample-data";
 import { simulateInstant } from "./mock-instant";
-import { INSTANT_MAX_CHARS } from "./types";
+import { BUILTIN_CATEGORIES, INSTANT_MAX_CHARS, MAX_PROJECT_CATEGORIES } from "./types";
+
+const CATEGORY_SLUG = /^[a-z0-9-]{2,24}$/;
 import type {
   ApiKey, Episode, EpisodeSummary, EventPage, GraphQuery, MemoryEventItem, SynthesisHealth, SynthesisIssue, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project, RecallResult, SampleResult, ThreadDetail, ThreadSummary,
 } from "./types";
@@ -82,7 +84,7 @@ function allEvents(data: ProjectData): MemoryEventItem[] {
   return events.map((e, i) => ({ ...e, id: i + 1 }));
 }
 
-function recordEvent(data: ProjectData, memoryId: string, kind: MemoryEventItem["kind"], detail: Record<string, unknown> = {}) {
+function recordEvent(data: ProjectData, memoryId: string | null, kind: MemoryEventItem["kind"], detail: Record<string, unknown> = {}) {
   (data.events ??= []).push({ id: 0, memoryId, kind, actor: "person:you@example.com", detail, episodeId: null,
                              at: new Date().toISOString(), quotes: [], related: [] });
 }
@@ -156,6 +158,39 @@ export const mockApi: MemvineApi = {
     if (patch.retentionDays !== undefined) p.retentionDays = patch.retentionDays;
     if (patch.recallMinRelevance !== undefined) p.recallMinRelevance = patch.recallMinRelevance;
     if (patch.recallHalfLifeDays !== undefined) p.recallHalfLifeDays = patch.recallHalfLifeDays;
+    if (patch.memoryInstructions !== undefined) {
+      const next = patch.memoryInstructions?.trim() || null;
+      if (next !== (p.memoryInstructions ?? null)) {
+        recordEvent(projectData(slug), null, "project_settings", { field: "memory_instructions", before_len: p.memoryInstructions?.length ?? 0, after_len: next?.length ?? 0 });
+      }
+      p.memoryInstructions = next;
+    }
+  },
+  async createCategory(project, category) {
+    const p = store().projects.find((x) => x.slug === project);
+    if (!p) throw new Error("404 not-found");
+    const categories = p.categories ?? [];
+    if (!CATEGORY_SLUG.test(category.slug)) throw new Error("422 a slug is 2-24 of a-z, 0-9 and -");
+    if ((BUILTIN_CATEGORIES as string[]).includes(category.slug)) throw new Error(`400 category-builtin: '${category.slug}' is a built-in category`);
+    if (categories.some((c) => c.slug === category.slug)) throw new Error(`409 category-exists: this project already has '${category.slug}'`);
+    if (categories.length >= MAX_PROJECT_CATEGORIES) throw new Error(`409 category-limit: at most ${MAX_PROJECT_CATEGORIES} categories`);
+    const created = { ...category, name: category.name.trim(), description: category.description.trim(), createdAt: new Date().toISOString() };
+    p.categories = [...categories, created];
+    recordEvent(projectData(project), null, "project_settings", { field: "category", action: "created", slug: category.slug });
+    return created;
+  },
+  async updateCategory(project, slug, patch) {
+    const c = store().projects.find((x) => x.slug === project)?.categories?.find((x) => x.slug === slug);
+    if (!c) throw new Error("404 not-found");
+    if (patch.name) c.name = patch.name.trim();
+    if (patch.description !== undefined) c.description = patch.description.trim();
+    recordEvent(projectData(project), null, "project_settings", { field: "category", action: "updated", slug });
+  },
+  async deleteCategory(project, slug) {
+    const p = store().projects.find((x) => x.slug === project);
+    if (!p?.categories?.some((c) => c.slug === slug)) throw new Error("404 not-found");
+    p.categories = p.categories.filter((c) => c.slug !== slug);
+    recordEvent(projectData(project), null, "project_settings", { field: "category", action: "deleted", slug });
   },
   async deleteProject(slug) {
     store().projects = store().projects.filter((p) => p.slug !== slug);

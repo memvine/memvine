@@ -6,7 +6,7 @@ import { ArrowUpRight, FileCode2, FileText, Sparkles, X } from "lucide-react";
 import { MemoryHistory } from "@/components/MemoryPanel";
 import { Receipt } from "@/components/Receipt";
 import { ThreadKindTag } from "@/components/thread-bits";
-import { Badge, CATEGORY_LABEL, Eyebrow, formatDate, Mono, plural, shortDate, ThreadStatusBadge, timeAgo } from "@/components/ui";
+import { Badge, categoryLabel, Eyebrow, formatDate, Mono, plural, shortDate, ThreadStatusBadge, timeAgo } from "@/components/ui";
 import { getMemory, getRelated } from "@/lib/api";
 import { edgeVerb, threadIdOf, threadNodeId } from "@/lib/graph";
 import { personName } from "@/lib/trust";
@@ -63,7 +63,7 @@ async function FactPanel({ project, id, base, params, graph }: { project: string
   const onGraph = (nid: string) => graph.nodes.some((n) => n.id === nid);
 
   return (
-    <PanelShell eyebrow={<>{m.category ? CATEGORY_LABEL[m.category].one : "Memory"} · {m.kind}</>} close={close}>
+    <PanelShell eyebrow={<>{m.category ? categoryLabel(m.category) : "Memory"} · {m.kind}</>} close={close}>
       <div className="px-4 pb-4 sm:px-5">
         <Receipt m={m} size="lg" open followParam="node" readOnly={m.status === "superseded"} />
         {m.status === "superseded" && m.supersededBy && (

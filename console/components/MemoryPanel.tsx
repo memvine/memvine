@@ -6,7 +6,7 @@ import type { MemoryDetail, MemoryItem, ThreadSummary } from "@/lib/types";
 import { CopyButton, Drawer } from "./client";
 import { MemoryTimeline } from "./MemoryTimeline";
 import {
-  AssertionBadge, Badge, button, Callout, CATEGORY_LABEL, CategoryBadge, Eyebrow, formatDate, KeyValue, KeyValueList, Mono, SourceQuote,
+  AssertionBadge, Badge, button, Callout, categoryLabel, CategoryBadge, Eyebrow, formatDate, KeyValue, KeyValueList, Mono, SourceQuote,
   StatusBadge, ThreadStatusBadge,
 } from "./ui";
 
@@ -107,7 +107,7 @@ export function MemoryDrawer({ detail, closeHref, linkFor, thread }: {
   const [first, ...rest] = m.evidence;
   const episodeOf = (id: string) => episodes.find((e) => e.id === id);
   const firstEpisode = first ? episodeOf(first.episodeId) : undefined;
-  const heading = m.category ? CATEGORY_LABEL[m.category].one : "Memory";
+  const heading = m.category ? categoryLabel(m.category) : "Memory";
 
   return (
     <Drawer

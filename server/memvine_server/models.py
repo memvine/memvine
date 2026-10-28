@@ -16,7 +16,13 @@ Redacted = Annotated[str, AfterValidator(redact)]
 Kind = Literal["episodic", "semantic", "procedural", "prospective", "preference"]
 Status = Literal["active", "superseded", "retired", "stale"]
 Assertion = Literal["observed", "stated", "claimed", "inferred"]
-Category = Literal["decision", "rule", "gotcha", "fact", "preference"]
+Category = Literal["decision", "rule", "gotcha", "fact", "preference"]  # the built-ins
+BUILTIN_CATEGORIES = ("decision", "rule", "gotcha", "fact", "preference")
+# A project's own category (project_categories, migration 0008); a memory's category is a built-in or one of these.
+CATEGORY_SLUG = r"^[a-z0-9-]{2,24}$"
+CategorySlug = Annotated[str, Field(pattern=CATEGORY_SLUG)]
+MAX_PROJECT_CATEGORIES = 5
+MAX_MEMORY_INSTRUCTIONS = 1500
 ThreadKind = Literal["release", "task", "pr", "ticket", "topic"]
 ThreadStatus = Literal["open", "blocked", "done", "abandoned"]
 
@@ -93,8 +99,8 @@ class MemoryOut(BaseModel):
     standing: bool = False
     # Set when code this memory describes changed since it was learned, e.g. "src/queue.py changed since 3 Oct 2026".
     stale_reason: str | None = None
-    # Knowledge: what kind of durable item it is, why it matters, its thread.
-    category: Category | None = None
+    # Knowledge: what kind of durable item it is (a built-in or the project's own category), why it matters, its thread.
+    category: str | None = None
     why: str | None = None
     thread_id: UUID | None = None
     # "project" (anyone in the project), "thread" (only beside its thread's page); None reads as project.
@@ -397,7 +403,7 @@ class MemoryCreate(BaseModel):
     assertion: Assertion = "stated"
     audience: str = Field(default="project", max_length=40)
     standing: bool | None = None
-    category: Category | None = None
+    category: CategorySlug | None = Field(default=None, description="a built-in category or one of the project's own")
     why: Redacted | None = Field(default=None, max_length=500)
     supersedes: UUID | None = Field(
         default=None,
@@ -450,6 +456,27 @@ class ProjectPatch(BaseModel):
     # Recency in recall's ranking: a fact or gotcha's weight halves toward a floor every this many days
     # since it was last said (recall.py: recency_factor). 0 turns it off; null uses the server default.
     recall_half_life_days: float | None = Field(default=None, ge=0, le=36500)
+    # What this project's memory should and should not keep, added to the extraction prompt
+    # (prompts.instructions_block). It narrows or points the rules; it cannot switch them off. Send null to clear.
+    memory_instructions: Redacted | None = Field(default=None, max_length=MAX_MEMORY_INSTRUCTIONS)
+
+
+class ProjectCategoryOut(BaseModel):
+    slug: str
+    name: str
+    description: str = ""
+    created_at: datetime
+
+
+class ProjectCategoryCreate(BaseModel):
+    slug: str = Field(pattern=CATEGORY_SLUG, description="2-24 of a-z, 0-9 and -; not a built-in category")
+    name: str = Field(min_length=1, max_length=60)
+    description: Redacted = Field(default="", max_length=300)
+
+
+class ProjectCategoryPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    description: Redacted | None = Field(default=None, max_length=300)
 
 
 class ProjectOut(BaseModel):
@@ -473,6 +500,8 @@ class ProjectOut(BaseModel):
     unused_count: int = 0  # memories not served by a recall in unused_days (GET /v1/memories?unused=true)
     unused_days: int = 60
     review_count: int = 0  # current memories awaiting review (GET /v1/memories?review=new)
+    memory_instructions: str | None = None
+    categories: list[ProjectCategoryOut] = []  # the project's own categories, besides the built-ins
 
 
 class ThreadItemEvidence(BaseModel):

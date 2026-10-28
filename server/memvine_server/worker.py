@@ -48,7 +48,7 @@ async def process_episode(conn, llm: LLM, embedder: Embedder, project_id: UUID, 
     passages = await index_episode(conn, embedder, project_id, ep["id"])
     metadata = ep["metadata"] or {}
     context = await boundary_context(conn, embedder, project_id, ep, metadata)
-    project = await (await conn.execute("SELECT id, name, description FROM projects WHERE id = %s",
+    project = await (await conn.execute("SELECT id, name, description, memory_instructions FROM projects WHERE id = %s",
                                         (project_id,))).fetchone()
     return {**await synthesize_episode(conn, llm, embedder, project, ep, context), "passages": passages}
 

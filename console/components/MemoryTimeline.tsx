@@ -22,6 +22,7 @@ export const EVENT_LABEL: Record<MemoryEventKind, string> = {
   category_changed: "Category set",
   refused: "Not learned again",
   deleted: "Deleted with its source",
+  project_settings: "Memory rules changed",
 };
 
 /** Events that end or question a memory's currency, drawn in the warning color. */
@@ -45,6 +46,10 @@ export function eventNote(e: MemoryEventItem): string | null {
   if (typeof d.reason === "string" && e.kind !== "refused") return d.reason;
   if (e.kind === "refused") return "a source said it again after it was forgotten";
   if (e.kind === "anchored" && Array.isArray(d.files)) return (d.files as string[]).join(", ");
+  if (e.kind === "project_settings") {
+    if (d.field === "memory_instructions") return `instructions ${d.after_len ? `set (${d.after_len} characters)` : "cleared"}`;
+    if (d.field === "category") return `category ${d.slug} ${d.action}`;
+  }
   if (e.kind === "category_changed") return `${d.before ?? "none"} → ${d.after ?? "none"}`;
   if (e.kind === "restated" && typeof d.confidence === "string") return `confidence now ${d.confidence}`;
   if (d.backfill) return "reconstructed from the memory's record";

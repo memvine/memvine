@@ -1,6 +1,6 @@
 """Tenant isolation across every route: callers from organization A (a project key, a signed-in owner,
 an organization key) aim every route in the app at organization B's project, memories, sources,
-sessions, keys, audiences, identities, members, invites and jobs. Nothing of B may come back, and
+sessions, keys, audiences, identities, categories, members, invites and jobs. Nothing of B may come back, and
 nothing of B may change.
 
 The test enumerates the app's routes, so a new route fails it until it is listed below with a body
@@ -81,8 +81,13 @@ BODIES: dict[tuple[str, str], dict | None] = {
     ("GET", "/v1/usage"): None,
     ("POST", "/v1/projects"): {"name": "attacker project {rand}"},
     ("GET", "/v1/projects"): None,
-    ("PATCH", "/v1/projects/{slug}"): {"name": "hijacked", "processing_paused": True, "monthly_credit_cap": 0},
+    ("PATCH", "/v1/projects/{slug}"): {"name": "hijacked", "processing_paused": True, "monthly_credit_cap": 0,
+                                       "memory_instructions": "Keep everything."},
     ("DELETE", "/v1/projects/{slug}"): None,
+    ("GET", "/v1/projects/{slug}/categories"): None,
+    ("POST", "/v1/projects/{slug}/categories"): {"slug": "atk-{rand}", "name": "attacker category"},
+    ("PATCH", "/v1/projects/{slug}/categories/{category}"): {"name": "hijacked", "description": "attacker"},
+    ("DELETE", "/v1/projects/{slug}/categories/{category}"): None,
     ("GET", "/v1/projects/{slug}/keys"): None,
     ("POST", "/v1/projects/{slug}/keys"): {"name": "attacker key"},
     ("DELETE", "/v1/projects/{slug}/keys/{key_id}"): None,
@@ -123,7 +128,9 @@ def fill(template, ids: dict):
 async def snapshot(dsn: str, b: dict) -> dict:
     """Everything of B's that a leak could change (last-used timestamps aside)."""
     queries = {
-        "project": "SELECT slug, name, tags, monthly_credit_cap, retention_days, processing_paused, description, recall_min_relevance FROM projects WHERE id = %(pid)s",
+        "project": "SELECT slug, name, tags, monthly_credit_cap, retention_days, processing_paused, description, recall_min_relevance, "
+                   "recall_half_life_days, memory_instructions FROM projects WHERE id = %(pid)s",
+        "categories": "SELECT slug, name, description FROM project_categories WHERE project_id = %(pid)s ORDER BY slug",
         "memories": "SELECT id, statement, status, review, assertion, superseded_by, valid_to FROM memory_items WHERE project_id = %(pid)s ORDER BY id",
         "episodes": "SELECT id, content, audience FROM episodes WHERE project_id = %(pid)s ORDER BY id",
         "sessions": "SELECT id, status, turns FROM sessions WHERE project_id = %(pid)s ORDER BY id",
@@ -164,6 +171,10 @@ async def test_no_route_reaches_another_organization(client):
     pb = (await client.post("/v1/projects", json={"name": f"Quokka project {tag}", "slug": f"b-{tag}", "description": "quokka billing"}, headers=hb)).json()
     kb = (await client.post(f"/v1/projects/{pb['slug']}/keys", json={"name": "quokka key"}, headers=hb)).json()
     okb = (await client.post("/v1/org/keys", json={"name": "quokka org key"}, headers=hb)).json()
+    assert (await client.patch(f"/v1/projects/{pb['slug']}", json={"memory_instructions": "Never keep quokka feeding times."},
+                               headers=hb)).status_code == 200
+    assert (await client.post(f"/v1/projects/{pb['slug']}/categories", json={"slug": "quokka-notes", "name": "Quokka notes",
+                              "description": "quokka husbandry"}, headers=hb)).status_code == 201
     hk = {**bearer(kb["key"]), "User-Agent": "quokka-agent/1.0"}  # stored on B's key
     assert (await client.post("/v1/sample", headers=hk)).status_code == 200
     assert (await client.post("/v1/ingest", json={"items": [{"id": f"ep-{tag}", "content": "The quokka ledger closes on Fridays.", "timestamp": "2026-10-01T10:00:00Z"}]},
@@ -186,11 +197,11 @@ async def test_no_route_reaches_another_organization(client):
     ids = {
         "slug": pb["slug"], "episode_id": f"ep-{tag}", "session_id": f"sess-{tag}", "identity": f"ident-{tag}",
         "memory_id": mem["id"], "thread_id": threads[0]["id"] if threads else uuid.uuid4(), "job_id": jobs[0]["id"],
-        "user_id": members[0]["id"], "invite_id": invite["id"], "invite_token": "mv_in_not-a-real-invite",
+        "user_id": members[0]["id"], "invite_id": invite["id"], "invite_token": "mv_in_not-a-real-invite", "category": "quokka-notes",
     }
     project_key_id = (await client.get(f"/v1/projects/{pb['slug']}/keys", headers=hb)).json()[0]["id"]
     before = await snapshot(settings.database_url, b)
-    assert before["memories"] and before["threads"] and before["identities"] and before["sessions"]
+    assert before["memories"] and before["threads"] and before["identities"] and before["sessions"] and before["categories"]
 
     # Organization A: an owner, a project, a project key, an organization key.
     sa = (await client.post("/v1/auth/signup", json=signup("a-owner", "Org A"))).json()

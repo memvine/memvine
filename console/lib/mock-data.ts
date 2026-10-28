@@ -35,7 +35,9 @@ export interface ProjectData {
 
 export const seedProjects: Project[] = [
   { slug: "coding-team", name: "Coding team", createdAt: "2026-10-01T09:30:00Z", memoryCount: 0, tags: ["engineering"], sourceCount: 0, keyCount: 0, lastActivityAt: "2026-10-26T07:12:03Z", monthlyCreditCap: null, retentionDays: null, monthCredits: 0,
-    description: "The billing app team: releases, review fixes and the gotchas of our payments sandbox and CI setup." },
+    description: "The billing app team: releases, review fixes and the gotchas of our payments sandbox and CI setup.",
+    memoryInstructions: "Also keep: on-call runbook steps for the Northwind billing service.\nNever keep: customer names or ticket text from the support desk.",
+    categories: [{ slug: "runbook", name: "Runbook step", description: "What on-call does when a billing alert fires.", createdAt: "2026-10-02T09:00:00Z" }] },
   { slug: "support-agent", name: "Support agent", createdAt: "2026-09-02T10:00:00Z", memoryCount: 0, tags: ["production", "support"], sourceCount: 0, keyCount: 0, lastActivityAt: "2026-10-25T08:41:12Z", monthlyCreditCap: 20000, retentionDays: 90, monthCredits: 0,
     description: "The customer support bot: refund policy, escalations and the public launch." },
   { slug: "docs-bot", name: "Docs bot", createdAt: "2026-08-12T09:00:00Z", memoryCount: 0, tags: ["support"], sourceCount: 0, keyCount: 0, lastActivityAt: "2026-10-26T06:58:00Z", monthlyCreditCap: null, retentionDays: null, monthCredits: 0,

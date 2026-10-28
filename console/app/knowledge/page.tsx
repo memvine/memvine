@@ -2,19 +2,20 @@ import { BookMarked } from "lucide-react";
 import { MemoryDrawer } from "@/components/MemoryPanel";
 import { ReceiptList } from "@/components/Receipt";
 import {
-  Card, CATEGORY_LABEL, FilterBar, PageHeader, SearchField, Tabs,
+  Card, categoryLabel, FilterBar, PageHeader, SearchField, Tabs,
 } from "@/components/ui";
 import { currentProject, getMemory, listMemories, listThreads } from "@/lib/api";
-import type { KnowledgeCategory } from "@/lib/types";
+import { BUILTIN_CATEGORIES, type KnowledgeCategory } from "@/lib/types";
 import { href } from "@/lib/url";
-
-const CATEGORIES: KnowledgeCategory[] = ["decision", "rule", "gotcha", "fact", "preference"];
 
 export default async function KnowledgePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const params = await searchParams;
-  const category = CATEGORIES.find((c) => c === params.category);
   const q = params.q?.trim().toLowerCase() || "";
   const project = await currentProject();
+  // The built-ins, then the project's own categories (Settings → Memory rules).
+  const custom = project.categories ?? [];
+  const CATEGORIES: KnowledgeCategory[] = [...BUILTIN_CATEGORIES, ...custom.map((c) => c.slug)];
+  const category = CATEGORIES.find((c) => c === params.category);
   const [memories, threads, detail] = await Promise.all([
     listMemories(project.slug),
     listThreads(project.slug),
@@ -49,7 +50,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
         label="Category"
         items={[
           { href: href("/knowledge", { q: params.q, scope: all ? "all" : undefined }), label: "All", count: count(), active: !category },
-          ...CATEGORIES.map((c) => ({ href: href("/knowledge", { category: c, q: params.q, scope: all ? "all" : undefined }), label: CATEGORY_LABEL[c].many, count: count(c), active: category === c })),
+          ...CATEGORIES.map((c) => ({ href: href("/knowledge", { category: c, q: params.q, scope: all ? "all" : undefined }), label: categoryLabel(c, custom, true), count: count(c), active: category === c })),
         ]}
       />
 
@@ -80,7 +81,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
             <p className="px-5 py-14 text-center text-[13px] text-text-3">
               {knowledge.length === 0
                 ? "No knowledge yet. Decisions, rules and gotchas appear here as sessions settle them."
-                : q ? "Nothing matches that search." : `No ${category ? CATEGORY_LABEL[category].many.toLowerCase() : "knowledge"} yet.`}
+                : q ? "Nothing matches that search." : `No ${category ? categoryLabel(category, custom, true).toLowerCase() : "knowledge"} yet.`}
             </p>
           }
         />

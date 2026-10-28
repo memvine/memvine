@@ -31,7 +31,23 @@ export interface Project {
   unusedDays?: number;
   /** Current memories awaiting review (review "new"). */
   reviewCount?: number;
+  /** What this project's memory should and should not keep, added to extraction (≤1500 chars); null for none. */
+  memoryInstructions?: string | null;
+  /** The project's own categories (at most five), besides the built-ins. */
+  categories?: ProjectCategory[];
 }
+
+/** A category of the project's own (POST /v1/projects/{slug}/categories): extraction may file a kept item under it. */
+export interface ProjectCategory {
+  slug: string;
+  name: string;
+  description: string;
+  createdAt: string;
+}
+
+export const MAX_MEMORY_INSTRUCTIONS = 1500;
+export const MAX_PROJECT_CATEGORIES = 5;
+export const BUILTIN_CATEGORIES: BuiltinCategory[] = ["decision", "rule", "gotcha", "fact", "preference"];
 
 /** POST /v1/ingest with `instant: true` (server/memvine_server/instant.py). status "done": every
  *  memory the source is now evidence for, each with its edges (GET /v1/memories/{id}/related's
@@ -134,7 +150,9 @@ export interface MemoryItem {
   review?: "new" | "kept";
 }
 
-export type KnowledgeCategory = "decision" | "rule" | "gotcha" | "fact" | "preference";
+export type BuiltinCategory = "decision" | "rule" | "gotcha" | "fact" | "preference";
+/** A built-in category, or the slug of one of the project's own. */
+export type KnowledgeCategory = BuiltinCategory | (string & {});
 
 export type ThreadKind = "release" | "task" | "pr" | "ticket" | "topic";
 export type ThreadStatus = "open" | "blocked" | "done" | "abandoned";
@@ -393,7 +411,7 @@ export interface MemoryDetail {
 
 export const MEMORY_EVENT_KINDS = [
   "created", "restated", "superseded", "supersedes", "contradicted", "extended", "confirmed", "forgotten", "restored",
-  "expired", "corrected", "merged", "anchored", "stale", "revalidated", "category_changed", "refused", "deleted",
+  "expired", "corrected", "merged", "anchored", "stale", "revalidated", "category_changed", "refused", "deleted", "project_settings",
 ] as const;
 export type MemoryEventKind = (typeof MEMORY_EVENT_KINDS)[number];
 
@@ -555,7 +573,10 @@ export interface MemvineApi {
   listProjects(): Promise<Project[]>;
   /** Creates the project and its first API key; the clear key is returned once. */
   createProject(name: string, tags: string[], options?: { description?: string | null; sample?: boolean }): Promise<{ project: Project; secret: string }>;
-  updateProject(slug: string, patch: { name?: string; tags?: string[]; monthlyCreditCap?: number | null; retentionDays?: number | null; recallMinRelevance?: number | null; recallHalfLifeDays?: number | null }): Promise<void>;
+  updateProject(slug: string, patch: { name?: string; tags?: string[]; monthlyCreditCap?: number | null; retentionDays?: number | null; recallMinRelevance?: number | null; recallHalfLifeDays?: number | null; memoryInstructions?: string | null }): Promise<void>;
+  createCategory(project: string, category: { slug: string; name: string; description: string }): Promise<ProjectCategory>;
+  updateCategory(project: string, slug: string, patch: { name?: string; description?: string }): Promise<void>;
+  deleteCategory(project: string, slug: string): Promise<void>;
   deleteProject(slug: string): Promise<void>;
   listKeys(project: string): Promise<ApiKey[]>;
   createKey(project: string, name: string): Promise<{ key: ApiKey; secret: string }>;

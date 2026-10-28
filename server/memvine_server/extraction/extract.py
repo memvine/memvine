@@ -160,7 +160,7 @@ def end_date(value, valid_from: datetime | None) -> datetime | None:
     return end
 
 
-def candidates_from(raw, source: str) -> ExtractionResult:
+def candidates_from(raw, source: str, custom: frozenset[str] = frozenset()) -> ExtractionResult:
     result = ExtractionResult(items=[], raw=raw if isinstance(raw, str) else "")
     data = parse_json(raw) if isinstance(raw, str) else raw
     if isinstance(data, dict) and isinstance(data.get("items"), list):
@@ -212,7 +212,7 @@ def candidates_from(raw, source: str) -> ExtractionResult:
                 valid_until=end_date(entry.get("valid_until"), parse_date(entry.get("valid_from"))),
                 quote=quote,
                 standing=is_standing(entry.get("standing"), kind, statement),
-                category=category if category in CATEGORY_KIND else None,
+                category=category if category in CATEGORY_KIND or category in custom else None,
                 why=why[:300] or None,
                 thread_key=thread_key[:200] or None,
                 scope=scope if scope in SCOPES else None,
@@ -252,26 +252,58 @@ def gated(statement: str) -> bool:
     return bool(PROGRESS.search(statement) or TRIVIA.search(statement))
 
 
-def knowledge_from(raw, source: str) -> ExtractionResult:
+# A project's own categories (project_categories) describe documents of knowledge, stored as semantic.
+CUSTOM_KIND = "semantic"
+_SLUGISH = re.compile(r"[\s_/]+")
+
+
+def resolve_category(value, custom: dict[str, str] | None = None) -> str | None:
+    """The category to store for what the model gave: a built-in, or one of the project's own
+    categories (`custom` maps slug and lowercased name to slug; "Runbook step", "runbook_step" find
+    "runbook-step"). Anything else, when the project has categories of its own, is the model reaching
+    for one that does not exist: it falls back to the built-in "fact". Without custom categories an
+    unknown category is None (invalid), as it was: a model writing "progress" is saying it is not
+    knowledge."""
+    category = str(value or "").strip().lower()
+    if category in CATEGORY_KIND:
+        return category
+    if not custom or not category:
+        return None
+    return custom.get(category) or custom.get(_SLUGISH.sub("-", category)) or "fact"
+
+
+def custom_lookup(categories: list[tuple[str, str, str]] | None) -> dict[str, str]:
+    """slug and lowercased name -> slug, for resolve_category."""
+    out: dict[str, str] = {}
+    for slug, name, _ in categories or []:
+        out[slug] = slug
+        out.setdefault(name.strip().lower(), slug)
+        out.setdefault(_SLUGISH.sub("-", name.strip().lower()), slug)
+    return out
+
+
+def knowledge_from(raw, source: str, categories: list[tuple[str, str, str]] | None = None) -> ExtractionResult:
     """Knowledge candidates: a verbatim quote, claims downgraded, and the gate:
-    a known category, and no progress event, status snapshot or run-specific trivia (gated)."""
+    a known category, and no progress event, status snapshot or run-specific trivia (gated).
+    `categories`: the project's own (slug, name, description), accepted besides the built-ins."""
     data = parse_json(raw) if isinstance(raw, str) else raw
     if isinstance(data, dict) and isinstance(data.get("items"), list):
         data = data["items"]
     if not isinstance(data, list):
         raise ValueError("knowledge output is not a list")
+    custom = custom_lookup(categories)
     kept, invalid, refused = [], 0, 0
     for entry in data:
-        category = str(entry.get("category") or "").strip().lower() if isinstance(entry, dict) else ""
-        if category not in CATEGORY_KIND:
+        category = resolve_category(entry.get("category"), custom) if isinstance(entry, dict) else None
+        if category is None:
             invalid += 1
             continue
         if gated(str(entry.get("statement", ""))):
             refused += 1
             continue
-        kept.append({**entry, "category": category, "kind": CATEGORY_KIND[category],
+        kept.append({**entry, "category": category, "kind": CATEGORY_KIND.get(category, CUSTOM_KIND),
                      "assertion": entry.get("assertion") or "stated"})
-    result = candidates_from(kept, source)
+    result = candidates_from(kept, source, frozenset(slug for slug, _, _ in categories or []))
     result.raw = raw if isinstance(raw, str) else ""
     result.dropped_invalid += invalid
     result.dropped_gate = refused
@@ -279,10 +311,13 @@ def knowledge_from(raw, source: str) -> ExtractionResult:
 
 
 async def extract_knowledge(llm: LLM, *, label: str, occurred_at: datetime, content: str, project: str,
-                            threads: list[tuple[str, str]], context: str = "") -> ExtractionResult:
+                            threads: list[tuple[str, str]], context: str = "", instructions: str | None = None,
+                            categories: list[tuple[str, str, str]] | None = None) -> ExtractionResult:
     """Durable knowledge from `content`, judged against the project profile. `threads`: (key, title)
-    of the work this episode touched, so an item can name the one it belongs to."""
-    raw = await llm.complete(KNOWLEDGE_SYSTEM, knowledge_user(label, occurred_at.isoformat(), content, project, threads, context),
+    of the work this episode touched, so an item can name the one it belongs to. `instructions` and
+    `categories`: the project's memory instructions and its own (slug, name, description) categories."""
+    raw = await llm.complete(KNOWLEDGE_SYSTEM, knowledge_user(label, occurred_at.isoformat(), content, project, threads, context,
+                                                              instructions=instructions, categories=categories),
                              max_tokens=8192)
-    return knowledge_from(raw, content)
+    return knowledge_from(raw, content, categories)
 

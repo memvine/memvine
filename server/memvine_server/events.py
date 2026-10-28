@@ -46,6 +46,8 @@ KINDS = (
     "category_changed",  # detail.before / detail.after
     "refused",        # synthesis dropped a candidate matching this forgotten memory (detail.reason)
     "deleted",        # its last source was deleted (memory_id NULL; detail.memory_id)
+    "project_settings",  # memory rules changed (memory_id NULL): detail.field 'memory_instructions' with
+                         # before_len / after_len (never the text), or 'category' with action and slug
 )
 SYSTEM = "system"
 SYNTHESIS = "synthesis"

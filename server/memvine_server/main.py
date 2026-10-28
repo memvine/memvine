@@ -48,6 +48,8 @@ from .db import open_pool
 from .embeddings import make_embedder
 from .extraction.llm import LLMError, make_llm
 from .models import (
+    BUILTIN_CATEGORIES,
+    MAX_PROJECT_CATEGORIES,
     CodeCheck,
     EventFeed,
     GraphOut,
@@ -63,6 +65,9 @@ from .models import (
     MemoryPatch,
     MemoryRelated,
     OrgCreate,
+    ProjectCategoryCreate,
+    ProjectCategoryOut,
+    ProjectCategoryPatch,
     ProjectCreate,
     ProjectOut,
     ProjectPatch,
@@ -460,6 +465,10 @@ async def create_memory(body: MemoryCreate, request: Request, principal: Princip
     async with state.pool.connection() as conn, conn.transaction():
         if not await access.audience_exists(conn, principal.project_id, body.audience):
             raise HTTPException(400, {"code": "audience-unknown", "message": f"No audience {body.audience!r} in this project"})
+        if body.category and body.category not in BUILTIN_CATEGORIES and not await (await conn.execute(
+                "SELECT 1 FROM project_categories WHERE project_id = %s AND slug = %s", (principal.project_id, body.category))).fetchone():
+            raise HTTPException(400, {"code": "category-unknown",
+                                      "message": f"No category {body.category!r}: use a built-in one or one of this project's"})
         try:
             decision = await remember(conn, state.llm, state.embedder, principal.project_id, statement=body.statement,
                                       kind=body.kind, subjects=body.subjects, assertion=body.assertion,
@@ -605,7 +614,8 @@ async def export_project(request: Request, principal: Principal = Depends(requir
 
     async with request.app.state.pool.connection() as conn:
         project = await (await conn.execute(
-            "SELECT slug, name, tags, created_at, monthly_credit_cap, retention_days, description FROM projects WHERE id = %s",
+            "SELECT slug, name, tags, created_at, monthly_credit_cap, retention_days, description, memory_instructions "
+            "FROM projects WHERE id = %s",
             (pid,))).fetchone()
         memories = await rows(f"SELECT {MEMORY_COLUMNS} FROM memory_items WHERE project_id = %s ORDER BY recorded_at")
         evidence = await rows("SELECT memory_id, episode_id, quote FROM evidence WHERE project_id = %s")
@@ -624,6 +634,8 @@ async def export_project(request: Request, principal: Principal = Depends(requir
             "format": "memvine-export/1",
             "exported_at": datetime.now(UTC),
             "project": project,
+            "categories": await rows("SELECT slug, name, description, created_at FROM project_categories WHERE project_id = %s "
+                                     "ORDER BY created_at, slug"),
             "episodes": await rows("SELECT id, content, occurred_at, identity, label, metadata, audience, code, created_at "
                                    "FROM episodes WHERE project_id = %s ORDER BY occurred_at"),
             "memories": [{**m, **by_memory.get(m["id"], {"evidence": [], "anchors": []})} for m in memories],
@@ -821,7 +833,10 @@ async def charge(conn, project_id, kind: str, chars: int) -> None:
 
 PROJECT_SELECT = """
     SELECT p.id, p.slug, p.name, p.created_at, p.tags, p.monthly_credit_cap, p.retention_days, p.processing_paused,
-           p.description, p.recall_min_relevance, p.recall_half_life_days,
+           p.description, p.recall_min_relevance, p.recall_half_life_days, p.memory_instructions,
+           (SELECT coalesce(jsonb_agg(jsonb_build_object('slug', c.slug, 'name', c.name, 'description', c.description,
+                                                         'created_at', c.created_at) ORDER BY c.created_at, c.slug), '[]'::jsonb)
+              FROM project_categories c WHERE c.project_id = p.id) AS categories,
            (SELECT coalesce(sum(u.credits), 0) FROM usage_events u WHERE u.project_id = p.id
              AND u.at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS month_credits,
            (SELECT count(*) FROM memory_items m WHERE m.project_id = p.id) AS memory_count,
@@ -901,10 +916,13 @@ async def projects(request: Request, admin: Admin = Depends(require_management))
 
 @app.patch("/v1/projects/{slug}", response_model=ProjectOut)
 async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: Admin = Depends(require_manager)):
-    """Rename, retag, pause, describe, or change the cap, retention, recall
-    relevance threshold or recall recency half-life of a project. The slug never changes."""
-    async with request.app.state.pool.connection() as conn:
+    """Rename, retag, pause, describe, or change the cap, retention, recall relevance threshold,
+    recall recency half-life or memory instructions of a project. The slug never changes."""
+    async with request.app.state.pool.connection() as conn, conn.transaction():
         project = await _owned(conn, admin, slug)
+        before = await (await conn.execute("SELECT memory_instructions FROM projects WHERE id = %s FOR UPDATE",
+                                           (project["id"],))).fetchone()
+        instructions = (body.memory_instructions or "").strip() or None
         await conn.execute(
             """
             UPDATE projects SET name = COALESCE(%s, name), tags = COALESCE(%s, tags),
@@ -913,7 +931,8 @@ async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: 
                 processing_paused = COALESCE(%s, processing_paused),
                 description = CASE WHEN %s THEN %s ELSE description END,
                 recall_min_relevance = CASE WHEN %s THEN %s ELSE recall_min_relevance END,
-                recall_half_life_days = CASE WHEN %s THEN %s ELSE recall_half_life_days END
+                recall_half_life_days = CASE WHEN %s THEN %s ELSE recall_half_life_days END,
+                memory_instructions = CASE WHEN %s THEN %s ELSE memory_instructions END
             WHERE id = %s
             """,
             (body.name, sorted(set(body.tags)) if body.tags is not None else None,
@@ -921,8 +940,14 @@ async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: 
              "retention_days" in body.model_fields_set, body.retention_days, body.processing_paused,
              "description" in body.model_fields_set, (body.description or "").strip() or None,
              "recall_min_relevance" in body.model_fields_set, body.recall_min_relevance,
-             "recall_half_life_days" in body.model_fields_set, body.recall_half_life_days, project["id"]),
+             "recall_half_life_days" in body.model_fields_set, body.recall_half_life_days,
+             "memory_instructions" in body.model_fields_set, instructions, project["id"]),
         )
+        if "memory_instructions" in body.model_fields_set and instructions != before["memory_instructions"]:
+            # The activity feed says the rules changed and by whom; the text itself stays out of events.
+            await event_ops.record(conn, project["id"], "project_settings", actor=event_ops.actor_of(request),
+                                   detail={"field": "memory_instructions", "before_len": len(before["memory_instructions"] or ""),
+                                           "after_len": len(instructions or "")})
         updated = await (await conn.execute(PROJECT_SELECT + " WHERE p.id = %s", (project["id"],))).fetchone()
     return ProjectOut(**updated)
 
@@ -940,6 +965,80 @@ async def delete_project(slug: str, request: Request, admin: Admin = Depends(req
         # Tables without a foreign key to projects.
         for table in ("passages", "session_events", "request_log", "evidence"):
             await conn.execute(f"DELETE FROM {table} WHERE project_id = %s", (project["id"],))
+
+
+# ------------------------------------------------------------------ the project's own categories
+# Up to five per project, besides the built-ins: extraction may file a kept item under one
+# (prompts.categories_block); memories keep their category when it is later deleted here.
+CATEGORY_COLUMNS = "slug, name, description, created_at"
+
+
+@app.get("/v1/projects/{slug}/categories", response_model=list[ProjectCategoryOut])
+async def categories(slug: str, request: Request, admin: Admin = Depends(require_management)):
+    async with request.app.state.pool.connection() as conn:
+        project = await _owned(conn, admin, slug)
+        rows = await (await conn.execute(f"SELECT {CATEGORY_COLUMNS} FROM project_categories WHERE project_id = %s "
+                                         "ORDER BY created_at, slug", (project["id"],))).fetchall()
+    return [ProjectCategoryOut(**r) for r in rows]
+
+
+@app.post("/v1/projects/{slug}/categories", response_model=ProjectCategoryOut, status_code=201)
+async def create_category(slug: str, body: ProjectCategoryCreate, request: Request, admin: Admin = Depends(require_manager)):
+    """Add a category of the project's own. Its slug is 2-24 of a-z, 0-9 and -, and is not a built-in."""
+    if body.slug in BUILTIN_CATEGORIES:
+        raise HTTPException(400, {"code": "category-builtin", "message": f"{body.slug!r} is a built-in category"})
+    async with request.app.state.pool.connection() as conn, conn.transaction():
+        project = await _owned(conn, admin, slug)
+        # One writer at a time per project, so two requests cannot both take the fifth place.
+        await conn.execute("SELECT 1 FROM projects WHERE id = %s FOR UPDATE", (project["id"],))
+        existing = await (await conn.execute("SELECT slug FROM project_categories WHERE project_id = %s",
+                                             (project["id"],))).fetchall()
+        if any(r["slug"] == body.slug for r in existing):
+            raise HTTPException(409, {"code": "category-exists", "message": f"This project already has a category {body.slug!r}"})
+        if len(existing) >= MAX_PROJECT_CATEGORIES:
+            raise HTTPException(409, {"code": "category-limit",
+                                      "message": f"A project has at most {MAX_PROJECT_CATEGORIES} categories of its own; delete one first"})
+        row = await (await conn.execute(
+            f"INSERT INTO project_categories (project_id, slug, name, description) VALUES (%s, %s, %s, %s) RETURNING {CATEGORY_COLUMNS}",
+            (project["id"], body.slug, body.name.strip(), body.description.strip()))).fetchone()
+        await event_ops.record(conn, project["id"], "project_settings", actor=event_ops.actor_of(request),
+                               detail={"field": "category", "action": "created", "slug": body.slug})
+    request.state.audit_target = f"{slug}/categories/{body.slug}"
+    return ProjectCategoryOut(**row)
+
+
+@app.patch("/v1/projects/{slug}/categories/{category}", response_model=ProjectCategoryOut)
+async def patch_category(slug: str, category: str, body: ProjectCategoryPatch, request: Request,
+                         admin: Admin = Depends(require_manager)):
+    """Rename or re-describe a category. Its slug never changes (memories carry it)."""
+    async with request.app.state.pool.connection() as conn, conn.transaction():
+        project = await _owned(conn, admin, slug)
+        row = await (await conn.execute(
+            f"UPDATE project_categories SET name = COALESCE(%s, name), description = COALESCE(%s, description) "
+            f"WHERE project_id = %s AND slug = %s RETURNING {CATEGORY_COLUMNS}",
+            (body.name.strip() if body.name else None, body.description.strip() if body.description is not None else None,
+             project["id"], category))).fetchone()
+        if row:
+            await event_ops.record(conn, project["id"], "project_settings", actor=event_ops.actor_of(request),
+                                   detail={"field": "category", "action": "updated", "slug": category})
+    if not row:
+        raise HTTPException(404, {"code": "not-found", "message": "No such category"})
+    request.state.audit_target = f"{slug}/categories/{category}"
+    return ProjectCategoryOut(**row)
+
+
+@app.delete("/v1/projects/{slug}/categories/{category}", status_code=204)
+async def delete_category(slug: str, category: str, request: Request, admin: Admin = Depends(require_manager)):
+    """Remove a category. Memories already filed under it keep it; extraction stops offering it."""
+    async with request.app.state.pool.connection() as conn, conn.transaction():
+        project = await _owned(conn, admin, slug)
+        cur = await conn.execute("DELETE FROM project_categories WHERE project_id = %s AND slug = %s", (project["id"], category))
+        if cur.rowcount:
+            await event_ops.record(conn, project["id"], "project_settings", actor=event_ops.actor_of(request),
+                                   detail={"field": "category", "action": "deleted", "slug": category})
+    if not cur.rowcount:
+        raise HTTPException(404, {"code": "not-found", "message": "No such category"})
+    request.state.audit_target = f"{slug}/categories/{category}"
 
 
 @app.get("/v1/projects/{slug}/keys", response_model=list[KeyOut])
