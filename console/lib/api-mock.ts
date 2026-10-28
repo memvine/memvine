@@ -39,8 +39,16 @@ function projectData(slug: string): ProjectData {
   const data = store().data[slug];
   if (!data) throw new Error(`unknown project: ${slug}`);
   withSpeakers(data);
+  withReview(data);
   return data;
 }
+
+/** Seeded memories carry no review state: the last week's are new (awaiting review), older ones kept. */
+function withReview(data: ProjectData) {
+  for (const m of data.memories) if (m.review === undefined) m.review = m.recordedAt >= "2026-10-21" ? "new" : "kept";
+}
+
+const awaitingReview = (m: MemoryItem) => m.review === "new" && (m.status === "active" || m.status === "stale");
 
 /** Evidence carries who said it, as the server reports it: the identity of the quote's source. */
 function withSpeakers(data: ProjectData) {
@@ -87,7 +95,7 @@ export const mockApi: MemvineApi = {
     return store().projects.map((p) => {
       const d = projectData(p.slug);
       const monthCredits = d.usage.reduce((s, u) => s + u.ingestCredits + u.recallCredits, 0);
-      return { ...p, unusedCount: d.memories.filter((m) => isUnused(m)).length, unusedDays: UNUSED_DAYS, memoryCount: d.memories.length, sourceCount: d.episodes.length, sampleSourceCount: d.episodes.filter((e) => e.id.startsWith(SAMPLE_PREFIX)).length, keyCount: d.keys.filter((k) => !k.revokedAt).length, monthCredits };
+      return { ...p, unusedCount: d.memories.filter((m) => isUnused(m)).length, unusedDays: UNUSED_DAYS, reviewCount: d.memories.filter(awaitingReview).length, memoryCount: d.memories.length, sourceCount: d.episodes.length, sampleSourceCount: d.episodes.filter((e) => e.id.startsWith(SAMPLE_PREFIX)).length, keyCount: d.keys.filter((k) => !k.revokedAt).length, monthCredits };
     });
   },
   async createProject(name, tags, options = {}) {
@@ -139,6 +147,8 @@ export const mockApi: MemvineApi = {
         : m.status === filter.status && !((filter.status === "active" || filter.status === "stale") && isExpired(m))))
       .filter((m) => !filter.unused || isUnused(m))
       .filter((m) => !filter.category || m.category === filter.category)
+      .filter((m) => filter.review !== "new" || awaitingReview(m))
+      .filter((m) => filter.review !== "kept" || m.review === "kept")
       .filter((m) => !q || m.statement.toLowerCase().includes(q))
       .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))
       .map(withAging);
@@ -235,6 +245,7 @@ export const mockApi: MemvineApi = {
       ...old, id: `mem_${randomBytes(6).toString("hex")}`, statement, validFrom: now, validTo: null, recordedAt: now,
       status: "active", supersedes: old.id, supersededBy: null, assertion: "stated", confidence: "high",
       evidence: [{ episodeId: "console", quote: statement, identity: "you@example.com" }], conflictsWith: [], staleReason: null, why: null,
+      review: "kept",
     };
     Object.assign(old, { status: "superseded", supersededBy: next.id, validTo: now });
     data.memories.push(next);
@@ -251,6 +262,7 @@ export const mockApi: MemvineApi = {
     if (memory) {
       memory.assertion = "observed";
       memory.confidence = "high";
+      memory.review = "kept";
     }
   },
 

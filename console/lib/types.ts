@@ -27,6 +27,8 @@ export interface Project {
   /** Memories no recall served in the last `unusedDays` days (listed for review, never hidden). */
   unusedCount?: number;
   unusedDays?: number;
+  /** Current memories awaiting review (review "new"). */
+  reviewCount?: number;
 }
 
 /** POST /v1/ingest with `instant: true` (server/memvine_server/instant.py). status "done": every
@@ -109,6 +111,8 @@ export interface MemoryItem {
   why?: string | null;
   /** The thread of work this came from, if any. */
   threadId?: string | null;
+  /** "new" until a person keeps it (Keep / Still true); synthesis writes "new", a person's own memory starts "kept". */
+  review?: "new" | "kept";
 }
 
 export type KnowledgeCategory = "decision" | "rule" | "gotcha" | "fact" | "preference";
@@ -332,6 +336,8 @@ export interface MemoryFilter {
   category?: KnowledgeCategory;
   /** Only memories no recall served in the project's unusedDays. */
   unused?: boolean;
+  /** "new": current memories no person has kept yet. */
+  review?: "new" | "kept";
 }
 
 export interface MemoryDetail {

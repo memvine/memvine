@@ -13,7 +13,7 @@ MEMORY_COLUMNS = """
     id, kind, statement, subjects, valid_from, valid_to, recorded_at, status,
     supersedes, superseded_by, assertion, confidence, audience, conflicts_with, standing, stale_reason,
     category, why, thread_id, scope,
-    last_recalled_at, recall_count
+    last_recalled_at, recall_count, review, origin
 """
 # Expired: still active or stale, past the end it stated (valid_to). Unused: old enough and not
 # served by a recall within memory_unused_days. Both take the day count, then nothing else.
@@ -30,20 +30,22 @@ def unused_clause(days: int) -> str:
 
 
 async def insert_item(conn, project_id: UUID, cand: Candidate, embedding: list[float], *, recorded_at: datetime,
-                      episode_id: str, supersedes: UUID | None = None, audience: str = "project") -> UUID:
+                      episode_id: str, supersedes: UUID | None = None, audience: str = "project",
+                      origin: str = "synthesis", review: str = "new") -> UUID:
+    """`origin`: who made it (synthesis, person, sample); `review`: 'new' until a person keeps it."""
     row = await (
         await conn.execute(
             f"""
             INSERT INTO memory_items
                 (project_id, kind, statement, subjects, valid_from, recorded_at, assertion, confidence, embedding, supersedes, audience, standing,
-                 category, why, valid_to)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 category, why, valid_to, origin, review)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING {MEMORY_COLUMNS}
             """,
             (
                 project_id, cand.kind, cand.statement, cand.subjects, cand.valid_from or recorded_at, recorded_at,
                 cand.assertion, cand.confidence, embedding, supersedes, audience, cand.standing,
-                cand.category, cand.why, cand.valid_until,
+                cand.category, cand.why, cand.valid_until, origin, review,
             ),
         )
     ).fetchone()
@@ -92,6 +94,8 @@ def memory_out(row, evidence: list[Evidence] | None = None) -> MemoryOut:
         and row["valid_to"] <= datetime.now(timezone.utc),
         last_recalled_at=row.get("last_recalled_at"),
         recall_count=row.get("recall_count") or 0,
+        review=row.get("review") or "kept",
+        origin=row.get("origin"),
     )
 
 
@@ -127,12 +131,18 @@ async def get_memory(conn, project_id: UUID, memory_id: UUID) -> MemoryOut | Non
 
 async def list_memories(conn, project_id: UUID, *, status: str | None, kind: str | None, q: str | None,
                         limit: int, offset: int, category: str | None = None, thread_id: UUID | None = None,
-                        scope: str | None = None, unused: bool = False) -> list[MemoryOut]:
+                        scope: str | None = None, unused: bool = False, review: str | None = None) -> list[MemoryOut]:
     """status "expired" is not a stored status: active or stale items past their valid_to. "active"
-    leaves those out. unused: what has not been recalled in settings.memory_unused_days."""
+    leaves those out. unused: what has not been recalled in settings.memory_unused_days. review "new":
+    current items no person has kept yet (review.py)."""
     clauses, params = ["project_id = %s"], [project_id]
     if unused:
         clauses.append(unused_clause(settings.memory_unused_days))
+    if review == "new":
+        clauses.append("review = 'new' AND status IN ('active', 'stale')")
+    elif review:
+        clauses.append("review = %s")
+        params.append(review)
     if scope == "project":  # items stored before scopes existed are project-wide
         clauses.append("scope IS DISTINCT FROM 'thread'")
     elif scope:

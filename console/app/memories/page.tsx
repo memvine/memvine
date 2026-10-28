@@ -17,16 +17,17 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const kind = KINDS.find((k) => k === params.kind);
   const status = STATUSES.find((s) => s === params.status);
   const unused = params.unused === "true" ? "true" : undefined;
+  const review = params.review === "new" ? "new" as const : undefined;
   const project = await currentProject();
   const unusedDays = project.unusedDays ?? 60;
   const [memories, all, threads, detail] = await Promise.all([
-    listMemories(project.slug, { q: params.q, kind, status, unused: Boolean(unused) }),
-    params.q || kind || status || unused ? listMemories(project.slug) : null,
+    listMemories(project.slug, { q: params.q, kind, status, unused: Boolean(unused), review }),
+    params.q || kind || status || unused || review ? listMemories(project.slug) : null,
     listThreads(project.slug),
     params.open ? getMemory(project.slug, params.open) : null,
   ]);
-  const filtered = Boolean(params.q || kind || status || unused);
-  const base = { q: params.q, kind, status, unused };
+  const filtered = Boolean(params.q || kind || status || unused || review);
+  const base = { q: params.q, kind, status, unused, review };
   const link = (id: string) => href("/memories", { ...base, open: id });
   const total = all?.length ?? memories.length;
 
@@ -53,6 +54,10 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
           <option value="">Any use</option>
           <option value="true">Not used in {unusedDays} days</option>
         </Select>
+        <Select name="review" defaultValue={review ?? ""} aria-label="Review" wrapperClassName="w-[150px]" className="h-9">
+          <option value="">Reviewed or not</option>
+          <option value="new">Needs review</option>
+        </Select>
       </FilterBar>
 
       {unused && (
@@ -69,9 +74,10 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
           followParam="open"
           selected={params.open}
           threads={Object.fromEntries(threads.map((t) => [t.id, t.title]))}
+          reviewing={Boolean(review)}
           empty={
             <div className="px-5 py-14 text-center text-[13px] text-text-3">
-              {filtered ? "No memories match these filters." : (
+              {review && !params.q && !kind && !status && !unused ? "Nothing to review: every current memory has been kept or forgotten." : filtered ? "No memories match these filters." : (
                 <div className="flex flex-col items-center gap-4">
                   <p>No memories yet. They appear a minute or two after the first conversation is sent, or load a sample to try recall right now.</p>
                   {project.sourceCount === 0 && <SampleOffer />}

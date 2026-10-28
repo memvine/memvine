@@ -83,7 +83,7 @@ interface ServerMemory {
   recorded_at: string; status: MemoryItem["status"]; supersedes: string | null; superseded_by: string | null;
   assertion: MemoryItem["assertion"]; confidence: MemoryItem["confidence"]; audience: string;
   evidence: { episode_id: string; quote: string; identity?: string | null }[]; conflicts_with?: string[]; stale_reason?: string | null; scope?: "project" | "thread" | null;
-  category?: MemoryItem["category"]; why?: string | null; thread_id?: string | null;
+  category?: MemoryItem["category"]; why?: string | null; thread_id?: string | null; review?: "new" | "kept";
   expired?: boolean; last_recalled_at?: string | null; recall_count?: number;
 }
 
@@ -101,6 +101,7 @@ const toMemory = (m: ServerMemory): MemoryItem => ({
   expired: m.expired ?? false,
   lastRecalledAt: m.last_recalled_at ?? null,
   recallCount: m.recall_count ?? 0,
+  review: m.review ?? "kept",
 });
 
 interface ServerThread {
@@ -125,7 +126,7 @@ interface ServerProject {
   slug: string; name: string; created_at: string; tags: string[]; memory_count: number; source_count: number;
   key_count: number; last_activity_at: string | null; monthly_credit_cap: string | null; retention_days: number | null;
   month_credits: string; recall_min_relevance?: number | null; sample_source_count?: number;
-  description?: string | null; unused_count?: number; unused_days?: number;
+  description?: string | null; unused_count?: number; unused_days?: number; review_count?: number;
 }
 
 const toProject = (p: ServerProject): Project => ({
@@ -138,6 +139,7 @@ const toProject = (p: ServerProject): Project => ({
   description: p.description ?? null,
   unusedCount: Number(p.unused_count ?? 0),
   unusedDays: Number(p.unused_days ?? 60),
+  reviewCount: Number(p.review_count ?? 0),
 });
 
 // ---- the memory graph (server/memvine_server/edges.py): GET /v1/graph, GET /v1/memories/{id}/related
@@ -236,9 +238,13 @@ export const liveApi: MemvineApi = {
     if (filter.status) params.set("status", filter.status);
     if (filter.category) params.set("category", filter.category);
     if (filter.unused) params.set("unused", "true");
+    if (filter.review) params.set("review", filter.review);
     const rows = (await call<ServerMemory[]>(`/v1/memories?${params}`, { project })).map(toMemory);
-    // A server that predates categories ignores the parameter; filter here so the answer is still right.
-    return filter.category ? rows.filter((m) => m.category === filter.category) : rows;
+    // A server that predates categories (or review) ignores the parameter; filter here so the answer is still right.
+    return rows
+      .filter((m) => !filter.category || m.category === filter.category)
+      .filter((m) => filter.review !== "new" || (m.review === "new" && (m.status === "active" || m.status === "stale")))
+      .filter((m) => filter.review !== "kept" || m.review === "kept");
   },
   async listThreads(project, filter = {}): Promise<ThreadSummary[]> {
     const params = new URLSearchParams();

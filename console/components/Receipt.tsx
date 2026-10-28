@@ -27,6 +27,8 @@ export interface ReceiptProps {
   open?: boolean;
   /** The thread it was decided in, shown under the why (lists that span threads). */
   thread?: { id: string; title: string } | null;
+  /** In the review queue: Still true reads Keep (it keeps the memory, review "kept"). */
+  reviewing?: boolean;
   className?: string;
 }
 
@@ -39,7 +41,7 @@ function sourceOf(m: MemoryItem): { label: string; href?: string } | null {
     : { label: `${ids.length} sources`, href: `/sources/${encodeURIComponent(ids[0])}` };
 }
 
-export function Receipt({ m, href, showCategory = false, readOnly = false, followParam, size = "md", open: pinned = false, thread, className = "" }: ReceiptProps) {
+export function Receipt({ m, href, showCategory = false, readOnly = false, followParam, size = "md", open: pinned = false, thread, reviewing = false, className = "" }: ReceiptProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(pinned);
@@ -141,8 +143,9 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
                   <>
                     <form action={confirmAction}>
                       <input type="hidden" name="id" value={m.id} />
-                      <button type="submit" disabled={confirming} className={button("secondary", "sm")} title="It still holds: confirm it, and anchor it to the code as it is now">
-                        <Check aria-hidden /> {confirming ? "Saving…" : "Still true"}
+                      <button type="submit" disabled={confirming} className={button("secondary", "sm")}
+                              title={reviewing ? "Worth keeping: confirm it, and take it out of review" : "It still holds: confirm it, and anchor it to the code as it is now"}>
+                        <Check aria-hidden /> {confirming ? "Saving…" : reviewing ? "Keep" : "Still true"}
                       </button>
                     </form>
                     <button type="button" onClick={() => setWrong(true)} className={button("secondary", "sm")} title="Say what is true instead">
@@ -187,7 +190,7 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
 }
 
 /** A list of receipts with dividers, for a card or a page. */
-export function ReceiptList({ items, hrefFor, showCategory = false, followParam, threads, selected, empty }: {
+export function ReceiptList({ items, hrefFor, showCategory = false, followParam, threads, selected, empty, reviewing = false }: {
   items: MemoryItem[];
   hrefFor?: Record<string, string>;
   showCategory?: boolean;
@@ -197,13 +200,15 @@ export function ReceiptList({ items, hrefFor, showCategory = false, followParam,
   /** The id whose drawer is open, highlighted. */
   selected?: string;
   empty?: ReactNode;
+  /** The review queue: Still true reads Keep. */
+  reviewing?: boolean;
 }) {
   if (items.length === 0) return <>{empty ?? null}</>;
   return (
     <ul className="divide-y divide-border">
       {items.map((m) => (
         <li key={m.id} className={cx("px-4 py-3 transition-colors sm:px-5", selected === m.id ? "bg-surface-2" : "hover:bg-surface-2/50")}>
-          <Receipt m={m} href={hrefFor?.[m.id]} showCategory={showCategory} followParam={followParam} readOnly={m.status === "superseded"}
+          <Receipt m={m} href={hrefFor?.[m.id]} showCategory={showCategory} followParam={followParam} readOnly={m.status === "superseded"} reviewing={reviewing}
                    thread={m.threadId && threads?.[m.threadId] ? { id: m.threadId, title: threads[m.threadId] } : null} />
         </li>
       ))}
