@@ -33,6 +33,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PLUGIN = ROOT / "plugins" / "claude-code"
 MODEL = os.environ.get("MEMVINE_CHECK_AGENT_MODEL", "sonnet")
 MAX_TURNS = os.environ.get("MEMVINE_CHECK_AGENT_TURNS", "8")
+# Each task runs this many times with and without memory; a single run says little about a model.
+REPEATS = int(os.environ.get("MEMVINE_CHECK_AGENT_REPEATS", "3"))
 
 # The gotcha the October episodes do not carry; ingested here like any other conversation.
 TEST_PORT_EPISODE = {"id": "ep5", "timestamp": "2026-10-26T10:00:00Z", "content": (
@@ -69,6 +71,9 @@ test:
 .PHONY: deploy test
 """
 
+# The repository points the wrong way on purpose: its README deploys with kubectl and its
+# .env.example still holds the old database port. Only memory knows the team's rule and the
+# current port, so a right answer shows memory changed what the agent did.
 README = """\
 # muse
 
@@ -77,6 +82,18 @@ A small web app: SvelteKit frontend, Postgres behind it, running on Kubernetes.
 - `src/` the app
 - `k8s/` Kubernetes manifests (`k8s/prod`, `k8s/staging`)
 - `Makefile` build and release targets
+
+## Deploying
+
+```
+kubectl apply -f k8s/prod
+```
+"""
+
+ENV_EXAMPLE = """\
+# Production database (see the runbook)
+DATABASE_HOST=muse-prod-db.internal
+DATABASE_PORT=5544
 """
 
 KUBECTL = """\
@@ -105,6 +122,7 @@ def _scratch(base: Path) -> tuple[Path, Path, Path]:
     bin_dir.mkdir()
     (repo / "Makefile").write_text(MAKEFILE.format(log=log, ok=TEST_PORT_SUM))
     (repo / "README.md").write_text(README)
+    (repo / ".env.example").write_text(ENV_EXAMPLE)
     (repo / "src" / "app.js").write_text("export const name = 'muse';\n")
     for env in ("prod", "staging"):
         (repo / "k8s" / env / "deployment.yaml").write_text(
@@ -188,6 +206,17 @@ def _outcome(task: str, run: dict) -> str:
     return ",".join(dict.fromkeys(ports)) or "no port"
 
 
+def _right(task: str, run: dict) -> bool:
+    """Whether a run did what the team's memory says, judged from what ran and the answer."""
+    calls = run["calls"]
+    if task == "deploy":
+        return "make deploy ENV=prod" in calls and not any(c.startswith("kubectl apply") for c in calls)
+    if task == "tests":
+        return "make test TEST_DB_PORT=5433" in calls
+    ports = re.findall(r"\b\d{4,5}\b", run["answer"])
+    return "6432" in ports and "5544" not in ports
+
+
 def _describe(run: dict) -> str:
     cmds = " | ".join(run["commands"]) or "no commands"
     extra = f"; denied: {', '.join(run['denied'])}" if run["denied"] else ""
@@ -221,31 +250,29 @@ def run_section(call, check, key: str, port: int, wait_synthesized, report_dir: 
         check("the plugin connects the scratch folder (connect --here, temporary HOME)",
               any(Path(p).resolve() == repo.resolve() for p in bound), connect.stdout.strip()[:120])
 
-        outcomes: dict[str, dict[str, str]] = {}
+        right: dict[str, dict[str, int]] = {t: {"with": 0, "without": 0} for t, _ in TASKS}
+        loaded = {"with": 0, "without": 0}
         for task, prompt in TASKS:
-            for mode in ("without", "with"):
-                run = _run(prompt, repo, bin_dir, log, plugin if mode == "with" else None)
-                report["runs"][f"{task}/{mode}"] = run
-                outcomes.setdefault(task, {})[mode] = _outcome(task, run)
-                print(f"      {task} {mode.upper()} memory: {outcomes[task][mode]} — {_describe(run)}", flush=True)
-                if mode == "without":
-                    check(f"{task} WITHOUT: no memvine plugin loaded", "memvine" not in run["plugins"], ",".join(run["plugins"]))
-                else:
-                    check(f"{task} WITH: the plugin is loaded", "memvine" in run["plugins"], ",".join(run["plugins"]))
-
-        w = {t: report["runs"][f"{t}/with"] for t, _ in TASKS}
-        deploy_calls = w["deploy"]["calls"]
-        check("WITH memory the agent deploys with make deploy ENV=prod",
-              "make deploy ENV=prod" in deploy_calls, outcomes["deploy"]["with"])
-        check("WITH memory the agent never runs kubectl apply", not any(c.startswith("kubectl apply") for c in deploy_calls),
-              outcomes["deploy"]["with"])
-        ports = outcomes["port"]["with"].split(",")
-        check("WITH memory the agent answers port 6432 (not the superseded 5544)",
-              "6432" in ports and "5544" not in ports, w["port"]["answer"].strip()[:100].replace("\n", " "))
-        check("WITH memory the agent runs the tests with TEST_DB_PORT=5433",
-              "make test TEST_DB_PORT=5433" in w["tests"]["calls"], outcomes["tests"]["with"])
-        differs = [t for t, _ in TASKS if outcomes[t]["with"] != outcomes[t]["without"]]
-        check("memory mattered: WITH and WITHOUT differ on at least one task", bool(differs), ", ".join(differs) or "identical")
+            for i in range(REPEATS):
+                for mode in ("without", "with"):
+                    run = _run(prompt, repo, bin_dir, log, plugin if mode == "with" else None)
+                    report["runs"][f"{task}/{mode}/{i + 1}"] = run
+                    right[task][mode] += _right(task, run)
+                    loaded[mode] += ("memvine" in run["plugins"])
+                    print(f"      {task} {mode.upper()} #{i + 1}: {'right' if _right(task, run) else 'wrong'}: "
+                          f"{_outcome(task, run)} — {_describe(run)}", flush=True)
+        check("WITHOUT runs had no memvine plugin; WITH runs had it",
+              loaded["without"] == 0 and loaded["with"] == len(TASKS) * REPEATS,
+              f"loaded in {loaded['with']}/{len(TASKS) * REPEATS} WITH runs, {loaded['without']} WITHOUT runs")
+        need = -(-2 * REPEATS // 3)  # at least two thirds
+        names = {"deploy": "deploys with make deploy ENV=prod, never kubectl apply (the README says kubectl)",
+                 "port": "answers port 6432, not the 5544 in .env.example",
+                 "tests": "runs the tests with TEST_DB_PORT=5433"}
+        for task, _ in TASKS:
+            w, wo = right[task]["with"], right[task]["without"]
+            check(f"WITH memory the agent {names[task]}", w >= need, f"{w}/{REPEATS} right with memory, {wo}/{REPEATS} without")
+            check(f"memory mattered on {task}", w > wo, f"{w}/{REPEATS} vs {wo}/{REPEATS}")
+        w = {t: report["runs"][f"{t}/with/1"] for t, _ in TASKS}
 
         # The round trip: each WITH session's turns reached the server through the plugin's hooks.
         for task, _ in TASKS:
