@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
+from . import events
 from .config import settings
 from .extraction.extract import Candidate
 from .models import Evidence, MemoryOut
@@ -99,7 +100,7 @@ def memory_out(row, evidence: list[Evidence] | None = None) -> MemoryOut:
     )
 
 
-async def retire(conn, project_id: UUID, memory_id: UUID) -> bool:
+async def retire(conn, project_id: UUID, memory_id: UUID, *, actor: str = events.SYSTEM) -> bool:
     """Forget a memory: it is retired (never recalled again, its evidence kept). When it had replaced
     an older fact that is still marked as replaced by it, that fact is current again: forgetting a
     wrong update leaves what was known before it. False when there is no such current memory
@@ -110,10 +111,13 @@ async def retire(conn, project_id: UUID, memory_id: UUID) -> bool:
     if not row:
         return False
     if row["supersedes"]:
-        await conn.execute(
+        back = await (await conn.execute(
             "UPDATE memory_items SET status = 'active', valid_to = NULL, superseded_by = NULL "
-            "WHERE project_id = %s AND id = %s AND status = 'superseded' AND superseded_by = %s",
-            (project_id, row["supersedes"], memory_id))
+            "WHERE project_id = %s AND id = %s AND status = 'superseded' AND superseded_by = %s RETURNING id",
+            (project_id, row["supersedes"], memory_id))).fetchone()
+        if back:
+            await events.record(conn, project_id, "restored", memory_id=back["id"], actor=actor,
+                                detail={"reason": "replacement retired", "related": memory_id})
     return True
 
 

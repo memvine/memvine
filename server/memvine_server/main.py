@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from . import access, accounts, audit, billing, mcp_app
 from . import code as code_ops
 from . import edges as edge_ops
+from . import events as event_ops
 from . import health as health_ops
 from . import ingest as ingest_ops
 from . import instant as instant_ops
@@ -48,6 +49,7 @@ from .embeddings import make_embedder
 from .extraction.llm import LLMError, make_llm
 from .models import (
     CodeCheck,
+    EventFeed,
     GraphOut,
     IngestRequest,
     IngestResponse,
@@ -56,6 +58,7 @@ from .models import (
     KeyOut,
     MemoryCreate,
     MemoryCreated,
+    MemoryEvent,
     MemoryOut,
     MemoryPatch,
     MemoryRelated,
@@ -461,7 +464,8 @@ async def create_memory(body: MemoryCreate, request: Request, principal: Princip
             decision = await remember(conn, state.llm, state.embedder, principal.project_id, statement=body.statement,
                                       kind=body.kind, subjects=body.subjects, assertion=body.assertion,
                                       audience=body.audience, standing=body.standing, category=body.category, why=body.why,
-                                      supersedes=body.supersedes, given=set(body.model_fields_set))
+                                      supersedes=body.supersedes, given=set(body.model_fields_set),
+                                      actor=event_ops.actor_of(request))
         except billing.CapReached as exc:
             raise HTTPException(429, {"code": "project-cap-reached", "message": str(exc)}) from exc
         except SupersedeError as exc:
@@ -512,27 +516,64 @@ async def memory_graph(request: Request, principal: Principal = Depends(require_
 
 @app.patch("/v1/memories/{memory_id}", response_model=MemoryOut)
 async def patch_memory(memory_id: UUID, body: MemoryPatch, request: Request, principal: Principal = Depends(require_project)):
-    async with request.app.state.pool.connection() as conn:
+    actor = event_ops.actor_of(request)
+    async with request.app.state.pool.connection() as conn, conn.transaction():
         current = await get_memory(conn, principal.project_id, memory_id)
         if not current:
             raise HTTPException(404, {"code": "not-found", "message": "No such memory"})
         if body.status == "retired":
             # A person forgets it: an older fact it replaced is current again; synthesis will not
             # learn it again; a synthesis-made one becomes a feedback case (review.py).
-            await review_ops.forget(conn, principal.project_id, memory_id)
+            await review_ops.forget(conn, principal.project_id, memory_id, actor=actor)
         elif body.status and current.status != "superseded":
             await conn.execute(
                 "UPDATE memory_items SET status = %s, valid_to = CASE WHEN %s = 'retired' THEN now() ELSE NULL END WHERE id = %s",
                 (body.status, body.status, memory_id),
             )
             if body.status == "active" and current.status == "retired":
-                await review_ops.restore(conn, principal.project_id, memory_id)
+                await review_ops.restore(conn, principal.project_id, memory_id, actor=actor)
+            elif body.status == "active" and current.status == "stale":
+                await event_ops.record(conn, principal.project_id, "revalidated", memory_id=memory_id, actor=actor,
+                                       detail={"reason": "marked active"})
         if body.confirm:
             await conn.execute(
                 "UPDATE memory_items SET assertion = 'observed', confidence = 'high', review = 'kept' WHERE id = %s", (memory_id,)
             )
-            await code_ops.revalidate(conn, principal.project_id, memory_id)
+            await event_ops.record(conn, principal.project_id, "confirmed", memory_id=memory_id, actor=actor)
+            await code_ops.revalidate(conn, principal.project_id, memory_id, actor=actor)
         return await get_memory(conn, principal.project_id, memory_id)
+
+
+@app.get("/v1/memories/{memory_id}/history", response_model=list[MemoryEvent])
+async def memory_history(memory_id: UUID, request: Request, principal: Principal = Depends(require_project)):
+    """Everything that happened to one memory, oldest first: created (with its evidence quotes),
+    restated, superseded and supersedes (with the other memory's statement), contradicted, extended,
+    confirmed, forgotten, restored, corrected, anchored, stale, revalidated, and expired (computed)."""
+    async with request.app.state.pool.connection() as conn:
+        out = await event_ops.history(conn, principal.project_id, memory_id)
+    if out is None:
+        raise HTTPException(404, {"code": "not-found", "message": "No such memory"})
+    return out
+
+
+@app.get("/v1/events", response_model=EventFeed)
+async def memory_events(request: Request, principal: Principal = Depends(require_project), since: datetime | None = None,
+                        kind: list[str] | None = Query(None, description="one or more event kinds"),
+                        memory_id: UUID | None = None, limit: int = Query(50, ge=1, le=200),
+                        cursor: str | None = Query(None, max_length=200)):
+    """The project's activity: memory events, newest first. Pass `next_cursor` back as `cursor` for
+    the next page."""
+    if since is not None and since.tzinfo is None:
+        since = since.replace(tzinfo=UTC)
+    unknown = [k for k in kind or [] if k not in event_ops.KINDS]
+    if unknown:
+        raise HTTPException(400, {"code": "unknown-kind", "message": f"Unknown event kind {unknown[0]!r}"})
+    async with request.app.state.pool.connection() as conn:
+        try:
+            return await event_ops.feed(conn, principal.project_id, since=since, kinds=kind, memory_id=memory_id,
+                                        limit=limit, cursor=cursor)
+        except ValueError as exc:
+            raise HTTPException(400, {"code": "bad-cursor", "message": "Not a cursor from this feed"}) from exc
 
 
 @app.get("/v1/code/anchors")
@@ -547,7 +588,7 @@ async def code_anchors(repo: str, request: Request, principal: Principal = Depen
 async def code_check(body: CodeCheck, request: Request, principal: Principal = Depends(require_project)):
     """Report the current versions of files; memories about files that changed turn stale (and back)."""
     async with request.app.state.pool.connection() as conn, conn.transaction():
-        result = await code_ops.check(conn, principal.project_id, body.repo, body.files)
+        result = await code_ops.check(conn, principal.project_id, body.repo, body.files, actor=event_ops.actor_of(request))
     return {"checked": result["checked"], "stale": len(result["stale"]), "fresh": len(result["fresh"])}
 
 
@@ -598,6 +639,8 @@ async def export_project(request: Request, principal: Principal = Depends(requir
             "identities": await rows("SELECT identity, traits, origin, created_at, last_seen_at FROM identities WHERE project_id = %s ORDER BY identity"),
             "audiences": await rows("SELECT * FROM audiences WHERE project_id = %s"),
             "feedback_cases": await rows(f"SELECT {review_ops.CASE_COLUMNS} FROM feedback_cases WHERE project_id = %s ORDER BY created_at"),
+            "memory_events": await rows("SELECT id, memory_id, kind, actor, detail, episode_id, at FROM memory_events "
+                                        "WHERE project_id = %s ORDER BY at, id"),
         }
     request.state.audit_target = principal.project_slug
     filename = f"memvine-{principal.project_slug}-{datetime.now(UTC):%Y%m%d}.json"
@@ -620,7 +663,7 @@ async def feedback_cases(request: Request, principal: Principal = Depends(requir
 async def delete_episode(episode_id: str, request: Request, principal: Principal = Depends(require_project)):
     ensure_manager(request)
     async with request.app.state.pool.connection() as conn, conn.transaction():
-        found = await ingest_ops.delete_episode(conn, principal.project_id, episode_id)
+        found = await ingest_ops.delete_episode(conn, principal.project_id, episode_id, actor=event_ops.actor_of(request))
     if not found:
         raise HTTPException(404, {"code": "not-found", "message": "No such episode"})
 

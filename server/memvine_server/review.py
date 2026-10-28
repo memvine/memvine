@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 from uuid import UUID
 
+from . import events
 from .extraction.extract import normalize
 from .store import retire
 
@@ -71,19 +72,21 @@ async def _record(conn, project_id: UUID, memory_id: UUID, kind: str, correction
     return row["id"]
 
 
-async def forget(conn, project_id: UUID, memory_id: UUID) -> bool:
+async def forget(conn, project_id: UUID, memory_id: UUID, *, actor: str = events.SYSTEM) -> bool:
     """A person forgets a memory: it is retired (store.retire), marked forgotten so synthesis never
     re-creates it, and, when synthesis made it, recorded as a feedback case. False when it was not
     current (nothing forgotten)."""
-    if not await retire(conn, project_id, memory_id):
+    if not await retire(conn, project_id, memory_id, actor=actor):
         return False
     await conn.execute("UPDATE memory_items SET forgotten_at = now() WHERE project_id = %s AND id = %s", (project_id, memory_id))
+    await events.record(conn, project_id, "forgotten", memory_id=memory_id, actor=actor)
     await _record(conn, project_id, memory_id, "forgotten")
     return True
 
 
-async def restore(conn, project_id: UUID, memory_id: UUID) -> None:
+async def restore(conn, project_id: UUID, memory_id: UUID, *, actor: str = events.SYSTEM) -> None:
     """A forgotten memory brought back: no longer forgotten, and its forget is no longer feedback."""
+    await events.record(conn, project_id, "restored", memory_id=memory_id, actor=actor)
     await conn.execute("UPDATE memory_items SET forgotten_at = NULL WHERE project_id = %s AND id = %s", (project_id, memory_id))
     await conn.execute("DELETE FROM feedback_cases WHERE project_id = %s AND memory_id = %s AND kind = 'forgotten'",
                        (project_id, memory_id))
@@ -94,8 +97,9 @@ async def record_wrong(conn, project_id: UUID, memory_id: UUID, correction: str)
     return await _record(conn, project_id, memory_id, "wrong", correction)
 
 
-async def keep(conn, project_id: UUID, memory_id: UUID) -> None:
+async def keep(conn, project_id: UUID, memory_id: UUID, *, actor: str = events.SYSTEM) -> None:
     await conn.execute("UPDATE memory_items SET review = 'kept' WHERE project_id = %s AND id = %s", (project_id, memory_id))
+    await events.record(conn, project_id, "confirmed", memory_id=memory_id, actor=actor)
 
 
 async def has_forgotten(conn, project_id: UUID) -> bool:

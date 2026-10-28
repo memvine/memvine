@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from uuid import UUID
 
+from . import events
+
 STALEABLE_KINDS = ("semantic", "procedural")
 # A bare file name counts as a mention only if it is specific: has an extension and isn't tiny.
 MIN_NAME_CHARS = 5
@@ -48,7 +50,8 @@ async def code_for_episode(conn, project_id: UUID, episode) -> dict | None:
     return {"repo": repo, "files": {r["path"]: r["blob"] for r in rows if r["repo"] == repo}}
 
 
-async def anchor(conn, project_id: UUID, memory_id: UUID, *, kind: str, text: str, code: dict | None, relation: str) -> int:
+async def anchor(conn, project_id: UUID, memory_id: UUID, *, kind: str, text: str, code: dict | None, relation: str,
+                 actor: str = events.SYNTHESIS) -> int:
     """Anchor a just-reconciled fact to the files it names. A restated fact ('same') is
     re-validated: anchored to the versions of this conversation, and active again if stale."""
     if not code or kind not in STALEABLE_KINDS:
@@ -59,10 +62,16 @@ async def anchor(conn, project_id: UUID, memory_id: UUID, *, kind: str, text: st
             "INSERT INTO memory_anchors (project_id, memory_id, repo, path, blob) VALUES (%s, %s, %s, %s, %s) "
             "ON CONFLICT (memory_id, repo, path) DO UPDATE SET blob = EXCLUDED.blob, anchored_at = now()",
             (project_id, memory_id, code["repo"], path, blob))
-    if hits and relation == "same":
-        await conn.execute(
-            "UPDATE memory_items SET status = 'active', stale_reason = NULL WHERE id = %s AND status = 'stale' AND stale_reason IS NOT NULL",
-            (memory_id,))
+    if not hits:
+        return 0
+    rows = [{"kind": "anchored", "memory_id": memory_id, "detail": {"repo": code["repo"], "files": sorted(hits)[:20]}}]
+    if relation == "same":
+        back = await (await conn.execute(
+            "UPDATE memory_items SET status = 'active', stale_reason = NULL WHERE id = %s AND status = 'stale' AND stale_reason IS NOT NULL "
+            "RETURNING id", (memory_id,))).fetchone()
+        if back:
+            rows.append({"kind": "revalidated", "memory_id": memory_id, "detail": {"reason": "restated against the current code"}})
+    await events.record_batch(conn, project_id, rows, actor=actor)
     return len(hits)
 
 
@@ -74,7 +83,7 @@ async def anchored_paths(conn, project_id: UUID, repo: str, limit: int = 2000) -
     return [r["path"] for r in rows]
 
 
-async def check(conn, project_id: UUID, repo: str, files: dict[str, str | None]) -> dict:
+async def check(conn, project_id: UUID, repo: str, files: dict[str, str | None], *, actor: str = events.SYSTEM) -> dict:
     """Record the versions a client has now, and mark memories stale or fresh against them."""
     for path, blob in files.items():
         await conn.execute(
@@ -94,7 +103,7 @@ async def check(conn, project_id: UUID, repo: str, files: dict[str, str | None])
             ORDER BY a.memory_id, a.path
         ) s
         WHERE m.id = s.memory_id AND m.status = 'active'
-        RETURNING m.id
+        RETURNING m.id, s.reason
         """, (project_id, repo, list(files)))).fetchall()
     # Fresh again: a memory made stale by code whose anchored files all match what was reported.
     fresh = await (await conn.execute(
@@ -107,15 +116,22 @@ async def check(conn, project_id: UUID, repo: str, files: dict[str, str | None])
               WHERE a.memory_id = m.id AND (f.path IS NULL OR f.blob IS DISTINCT FROM a.blob))
         RETURNING m.id
         """, (project_id, repo, list(files)))).fetchall()
+    await events.record_batch(
+        conn, project_id,
+        [{"kind": "stale", "memory_id": r["id"], "detail": {"reason": r["reason"], "repo": repo}} for r in stale]
+        + [{"kind": "revalidated", "memory_id": r["id"], "detail": {"reason": "code matches again", "repo": repo}} for r in fresh],
+        actor=actor)
     return {"checked": len(files), "stale": [r["id"] for r in stale], "fresh": [r["id"] for r in fresh]}
 
 
-async def revalidate(conn, project_id: UUID, memory_id: UUID) -> None:
+async def revalidate(conn, project_id: UUID, memory_id: UUID, *, actor: str = events.SYSTEM) -> None:
     """A person confirmed the memory: anchor it to the versions last reported, and clear staleness."""
     await conn.execute(
         "UPDATE memory_anchors a SET blob = f.blob, anchored_at = now() FROM code_files f "
         "WHERE a.memory_id = %s AND f.project_id = a.project_id AND f.repo = a.repo AND f.path = a.path AND f.blob IS NOT NULL",
         (memory_id,))
-    await conn.execute(
-        "UPDATE memory_items SET status = 'active', stale_reason = NULL WHERE id = %s AND project_id = %s AND status = 'stale'",
-        (memory_id, project_id))
+    back = await (await conn.execute(
+        "UPDATE memory_items SET status = 'active', stale_reason = NULL WHERE id = %s AND project_id = %s AND status = 'stale' "
+        "RETURNING id", (memory_id, project_id))).fetchone()
+    if back:
+        await events.record(conn, project_id, "revalidated", memory_id=memory_id, actor=actor, detail={"reason": "confirmed"})

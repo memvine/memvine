@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from . import code
+from . import code, events
 from .checkpoints import mark_processed
 from .embeddings import Embedder
 from .extraction.extract import extract_knowledge
@@ -45,8 +45,10 @@ async def synthesize_episode(conn, llm: LLM, embedder: Embedder, project, ep, co
     forgotten = await has_forgotten(conn, project_id) and bool(extraction.items)
     vectors = await embedder.embed([c.statement for c in extraction.items]) if forgotten else []
     for i, cand in enumerate(extraction.items):
-        if forgotten and await matches_forgotten(conn, project_id, cand.statement, vectors[i]):
+        if forgotten and (match := await matches_forgotten(conn, project_id, cand.statement, vectors[i])):
             dropped_forgotten += 1
+            await events.record(conn, project_id, "refused", memory_id=match, actor=events.SYNTHESIS,
+                                detail={"reason": "forgotten"}, episode_id=ep["id"])
             continue
         decision = await reconcile(conn, llm, embedder, project_id, cand, recorded_at=ep["occurred_at"], episode_id=ep["id"],
                                    audience=ep["audience"])
@@ -55,9 +57,15 @@ async def synthesize_episode(conn, llm: LLM, embedder: Embedder, project, ep, co
         # Thread-scoped knowledge is shown only beside its page; without a page it is everyone's.
         scope = "thread" if cand.scope == "thread" and thread_id else "project"
         # A restated item ('same') keeps what it had and gains what it lacked.
-        await conn.execute(
-            "UPDATE memory_items SET category = COALESCE(category, %s), why = COALESCE(why, %s), thread_id = COALESCE(thread_id, %s), "
-            "scope = COALESCE(scope, %s) WHERE id = %s", (cand.category, cand.why, thread_id, scope, decision.memory_id))
+        filled = await (await conn.execute(
+            "WITH before AS (SELECT id, category FROM memory_items WHERE id = %s) "
+            "UPDATE memory_items m SET category = COALESCE(m.category, %s), why = COALESCE(m.why, %s), "
+            "thread_id = COALESCE(m.thread_id, %s), scope = COALESCE(m.scope, %s) FROM before WHERE m.id = before.id "
+            "RETURNING before.category AS was, m.category AS now",
+            (decision.memory_id, cand.category, cand.why, thread_id, scope))).fetchone()
+        if filled and filled["was"] != filled["now"] and decision.relation == "same":
+            await events.record(conn, project_id, "category_changed", memory_id=decision.memory_id, actor=events.SYNTHESIS,
+                                detail={"before": filled["was"], "after": filled["now"]}, episode_id=ep["id"])
         anchored += await code.anchor(conn, project_id, decision.memory_id, kind=cand.kind,
                                       text=" ".join([cand.statement, cand.quote, *cand.subjects]), code=code_context,
                                       relation=decision.relation)
