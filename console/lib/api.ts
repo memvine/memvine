@@ -94,6 +94,7 @@ export const deleteProject = forward("deleteProject");
 export const listKeys = forward("listKeys", []);
 export const createKey = forward("createKey");
 export const revokeKey = forward("revokeKey");
+export const keyConnection = forward("keyConnection", null);
 export const listMemories = forward("listMemories", []);
 export const listThreads = forward("listThreads", []);
 export const getThread = forward("getThread", null);

@@ -51,6 +51,7 @@ from .models import (
     GraphOut,
     IngestRequest,
     IngestResponse,
+    KeyConnection,
     KeyCreate,
     KeyOut,
     MemoryCreate,
@@ -902,8 +903,9 @@ async def keys(slug: str, request: Request, admin: Admin = Depends(require_manag
         project = await _owned(conn, admin, slug)
         rows = await (
             await conn.execute(
-                "SELECT id, name, key_suffix AS suffix, created_at, last_used_at, last_used_ip, revoked_at FROM api_keys "
-                "WHERE project_id = %s ORDER BY created_at DESC",
+                "SELECT k.id, k.name, k.key_suffix AS suffix, k.created_at, k.last_used_at, k.last_used_ip, k.revoked_at, "
+                "k.last_user_agent, u.email AS created_by_email FROM api_keys k LEFT JOIN users u ON u.id = k.created_by "
+                "WHERE k.project_id = %s ORDER BY k.created_at DESC",
                 (project["id"],),
             )
         ).fetchall()
@@ -917,13 +919,39 @@ async def create_key(slug: str, body: KeyCreate, request: Request, admin: Admin 
         project = await _owned(conn, admin, slug)
         row = await (
             await conn.execute(
-                "INSERT INTO api_keys (project_id, name, key_hash, key_suffix) VALUES (%s, %s, %s, %s) "
+                "INSERT INTO api_keys (project_id, name, key_hash, key_suffix, created_by) VALUES (%s, %s, %s, %s, %s) "
                 "RETURNING id, name, key_suffix AS suffix, created_at, last_used_at, last_used_ip, revoked_at",
-                (project["id"], body.name, hash_key(key), key[-4:]),
+                (project["id"], body.name, hash_key(key), key[-4:], admin.user_id),
             )
         ).fetchone()
     request.state.audit_target = f"{slug}/keys/{row['id']}"
-    return KeyOut(**row, key=key)
+    return KeyOut(**row, key=key, created_by_email=admin.user_email if admin.user_id else None)
+
+
+@app.get("/v1/projects/{slug}/keys/{key_id}/connection", response_model=KeyConnection)
+async def key_connection(slug: str, key_id: UUID, request: Request, admin: Admin = Depends(require_management)):
+    """Whether an agent has connected with this key: its first call, first conversation sent and first
+    recall (from the request log), and the User-Agent of its last call (the plugin's version)."""
+    async with request.app.state.pool.connection() as conn:
+        project = await _owned(conn, admin, slug)
+        row = await (
+            await conn.execute(
+                """
+                SELECT k.id AS key_id, k.last_used_at, k.last_user_agent,
+                       min(r.at) AS first_call_at,
+                       min(r.at) FILTER (WHERE r.method = 'POST' AND r.path LIKE '/v1/sessions/%%/events' AND r.status < 300) AS first_session_at,
+                       min(r.at) FILTER (WHERE (r.path = '/v1/recall' OR r.path LIKE '/v1/sessions/%%/brief') AND r.status < 300) AS first_recall_at,
+                       count(r.id) AS calls
+                FROM api_keys k LEFT JOIN request_log r ON r.key_id = k.id AND r.project_id = k.project_id
+                WHERE k.project_id = %s AND k.id = %s
+                GROUP BY k.id
+                """,
+                (project["id"], key_id),
+            )
+        ).fetchone()
+    if not row:
+        raise HTTPException(404, {"code": "not-found", "message": "No such key"})
+    return KeyConnection(**row)
 
 
 @app.delete("/v1/projects/{slug}/keys/{key_id}", status_code=204)

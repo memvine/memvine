@@ -180,10 +180,11 @@ const toGraphNode = (n: ServerGraphNode): GraphNode => ({
 /** A 404 the route itself gave ("not-found": no such thread or memory), as against a server
  *  without the route at all (FastAPI's bare 404). */
 const isMissingRoute = (e: unknown) => e instanceof ApiError && e.status === 404 && e.code !== "not-found";
-interface ServerKey { id: string; name: string; key?: string | null; suffix: string; created_at: string; last_used_at: string | null; last_used_ip?: string | null; revoked_at: string | null }
+interface ServerKey { id: string; name: string; key?: string | null; suffix: string; created_at: string; last_used_at: string | null; last_used_ip?: string | null; revoked_at: string | null; last_user_agent?: string | null; created_by_email?: string | null }
 
 const toKey = (k: ServerKey): ApiKey => ({
   id: k.id, name: k.name, masked: `mv_sk_••••${k.suffix}`, createdAt: k.created_at, lastUsedAt: k.last_used_at, lastUsedIp: k.last_used_ip ?? null, revokedAt: k.revoked_at,
+  lastUserAgent: k.last_user_agent ?? null, createdByEmail: k.created_by_email ?? null,
 });
 
 const notFoundAsNull = async <T>(p: Promise<T>): Promise<T | null> => {
@@ -229,6 +230,12 @@ export const liveApi: MemvineApi = {
   },
   async revokeKey(project, id) {
     await call(`/v1/projects/${project}/keys/${id}`, { method: "DELETE" });
+  },
+  async keyConnection(project, id) {
+    const c = await notFoundAsNull(call<{ first_call_at: string | null; first_session_at: string | null; first_recall_at: string | null; last_used_at: string | null; last_user_agent: string | null; calls: number }>(
+      `/v1/projects/${project}/keys/${encodeURIComponent(id)}/connection`));
+    return c && { firstCallAt: c.first_call_at, firstSessionAt: c.first_session_at, firstRecallAt: c.first_recall_at,
+                  lastUsedAt: c.last_used_at, lastUserAgent: c.last_user_agent, calls: c.calls };
   },
 
   async listMemories(project, filter: MemoryFilter = {}) {
