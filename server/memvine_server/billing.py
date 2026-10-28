@@ -69,4 +69,6 @@ async def apply_retention(conn) -> int:
         """)).fetchall()
     for r in rows:
         await conn.execute("DELETE FROM passages WHERE project_id = %s AND episode_id = %s", (r["project_id"], r["id"]))
+        # A feedback case's excerpt is source text too (review.py).
+        await conn.execute("UPDATE feedback_cases SET excerpt = '' WHERE project_id = %s AND episode_id = %s", (r["project_id"], r["id"]))
     return len(rows)

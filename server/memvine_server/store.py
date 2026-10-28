@@ -11,25 +11,27 @@ from .models import Evidence, MemoryOut
 MEMORY_COLUMNS = """
     id, kind, statement, subjects, valid_from, valid_to, recorded_at, status,
     supersedes, superseded_by, assertion, confidence, audience, conflicts_with, standing, stale_reason,
-    category, why, thread_id, scope
+    category, why, thread_id, scope, review, origin
 """
 
 
 async def insert_item(conn, project_id: UUID, cand: Candidate, embedding: list[float], *, recorded_at: datetime,
-                      episode_id: str, supersedes: UUID | None = None, audience: str = "project") -> UUID:
+                      episode_id: str, supersedes: UUID | None = None, audience: str = "project",
+                      origin: str = "synthesis", review: str = "new") -> UUID:
+    """`origin`: who made it (synthesis, person, sample); `review`: 'new' until a person keeps it."""
     row = await (
         await conn.execute(
             f"""
             INSERT INTO memory_items
                 (project_id, kind, statement, subjects, valid_from, recorded_at, assertion, confidence, embedding, supersedes, audience, standing,
-                 category, why)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 category, why, origin, review)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING {MEMORY_COLUMNS}
             """,
             (
                 project_id, cand.kind, cand.statement, cand.subjects, cand.valid_from or recorded_at, recorded_at,
                 cand.assertion, cand.confidence, embedding, supersedes, audience, cand.standing,
-                cand.category, cand.why,
+                cand.category, cand.why, origin, review,
             ),
         )
     ).fetchone()
@@ -74,6 +76,8 @@ def memory_out(row, evidence: list[Evidence] | None = None) -> MemoryOut:
         why=row.get("why"),
         thread_id=row.get("thread_id"),
         scope=row.get("scope"),
+        review=row.get("review") or "kept",
+        origin=row.get("origin"),
     )
 
 
@@ -109,8 +113,13 @@ async def get_memory(conn, project_id: UUID, memory_id: UUID) -> MemoryOut | Non
 
 async def list_memories(conn, project_id: UUID, *, status: str | None, kind: str | None, q: str | None,
                         limit: int, offset: int, category: str | None = None, thread_id: UUID | None = None,
-                        scope: str | None = None) -> list[MemoryOut]:
+                        scope: str | None = None, review: str | None = None) -> list[MemoryOut]:
     clauses, params = ["project_id = %s"], [project_id]
+    if review == "new":  # awaiting review: current items no person has kept yet
+        clauses.append("review = 'new' AND status IN ('active', 'stale')")
+    elif review:
+        clauses.append("review = %s")
+        params.append(review)
     if scope == "project":  # items stored before scopes existed are project-wide
         clauses.append("scope IS DISTINCT FROM 'thread'")
     elif scope:

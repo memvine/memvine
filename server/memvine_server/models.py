@@ -99,6 +99,9 @@ class MemoryOut(BaseModel):
     thread_id: UUID | None = None
     # "project" (anyone in the project), "thread" (only beside its thread's page); None reads as project.
     scope: Literal["project", "thread"] | None = None
+    # Review loop (review.py): 'new' until a person keeps it; synthesis writes 'new', a person's own 'kept'.
+    review: Literal["new", "kept"] = "kept"
+    origin: Literal["synthesis", "person", "sample"] | None = None
 
 
 # Edges between memories (edges.py). supersedes, contradicts, extends and derived join two facts;
@@ -419,6 +422,7 @@ class ProjectOut(BaseModel):
     processing_paused: bool = False
     description: str | None = None
     recall_min_relevance: float | None = None  # null: the server default for its embedding model
+    review_count: int = 0  # current memories awaiting review (GET /v1/memories?review=new)
 
 
 class ThreadItemEvidence(BaseModel):

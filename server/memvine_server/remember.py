@@ -17,6 +17,7 @@ from .extraction.llm import LLM
 from .ingest import ingest_episode
 from .models import EpisodeIn
 from .reconcile import Decision, reconcile
+from .review import record_wrong
 from .store import insert_item
 
 
@@ -78,8 +79,16 @@ async def remember(conn, llm: LLM, embedder: Embedder, project_id: UUID, *, stat
     # The statement is its own source; the item is written directly, so no extraction job runs.
     await conn.execute("DELETE FROM jobs WHERE project_id = %s AND episode_id = %s AND status = 'queued'", (project_id, episode_id))
     if old is None:
-        return await reconcile(conn, llm, embedder, project_id, cand, recorded_at=now, episode_id=episode_id, audience=audience)
-    return await _supersede(conn, embedder, project_id, cand, old, recorded_at=now, episode_id=episode_id, audience=audience)
+        decision = await reconcile(conn, llm, embedder, project_id, cand, recorded_at=now, episode_id=episode_id, audience=audience)
+        # A person said it: the item is theirs and kept (a restatement keeps the item it merged into).
+        await conn.execute(
+            "UPDATE memory_items SET review = 'kept', origin = CASE WHEN %s THEN 'person' ELSE origin END WHERE id = %s",
+            (decision.relation != "same", decision.memory_id))
+        return decision
+    decision = await _supersede(conn, embedder, project_id, cand, old, recorded_at=now, episode_id=episode_id, audience=audience)
+    # "Wrong": when synthesis made the replaced fact, that is feedback for extraction.
+    await record_wrong(conn, project_id, old["id"], statement)
+    return decision
 
 
 async def _supersede(conn, embedder: Embedder, project_id: UUID, cand: Candidate, old, *, recorded_at: datetime,
@@ -90,7 +99,7 @@ async def _supersede(conn, embedder: Embedder, project_id: UUID, cand: Candidate
     cand.confidence = "high"
     embedding = (await embedder.embed([cand.statement]))[0]
     new_id = await insert_item(conn, project_id, cand, embedding, recorded_at=recorded_at, episode_id=episode_id,
-                               supersedes=old["id"], audience=audience)
+                               supersedes=old["id"], audience=audience, origin="person", review="kept")
     await conn.execute("UPDATE memory_items SET thread_id = %s, scope = %s WHERE id = %s",
                        (old["thread_id"], old["scope"], new_id))
     await conn.execute(
