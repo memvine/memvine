@@ -346,6 +346,11 @@ export async function updateProject(_prev: ProjectFormState, formData: FormData)
   if (minRelevance !== null && !(minRelevance >= 0 && minRelevance <= 1)) {
     return { error: "The recall threshold is a number from 0 to 1, or empty for the server default." };
   }
+  const halfLifeRaw = String(formData.get("halfLife") ?? "").trim();
+  const halfLife = halfLifeRaw === "" ? null : Number(halfLifeRaw);
+  if (halfLife !== null && !(halfLife >= 0 && halfLife <= 36500)) {
+    return { error: "The recency half-life is a number of days (0 turns it off), or empty for the server default." };
+  }
   const cap = capRaw === "" ? null : Number(capRaw);
   const retention = retentionRaw === "" ? null : Number(retentionRaw);
   if (cap !== null && !(cap >= 0)) return { error: "The cap is a number of credits, or empty for uncapped." };
@@ -353,7 +358,7 @@ export async function updateProject(_prev: ProjectFormState, formData: FormData)
     return { error: "Retention is 1 to 3,650 days, or empty to keep sources forever." };
   }
   try {
-    await api.updateProject(slug, { name, tags, monthlyCreditCap: cap, retentionDays: retention, recallMinRelevance: minRelevance });
+    await api.updateProject(slug, { name, tags, monthlyCreditCap: cap, retentionDays: retention, recallMinRelevance: minRelevance, recallHalfLifeDays: halfLife });
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not save." };
   }
