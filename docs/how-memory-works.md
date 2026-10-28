@@ -266,8 +266,10 @@ Memory forgets in four ways:
 - **No schema.** You send text; tending decides what is a decision, a rule or a gotcha.
 - **No tags.** Threads come from branches, PR numbers, ticket ids and release versions in the
   text; subjects come from the statements.
-- **No pruning.** Superseded, stale and noisy memories leave the answer by themselves, with their
-  history kept.
+- **No pruning.** Superseded, stale, expired and noisy memories leave the answer by themselves, with their
+  history kept. A fact that said when it ends ("the scratch org expires on 28 Oct") stops being
+  served as current after that day; memories no recall has used in 60 days are listed for review,
+  never deleted on their own.
 - **No prompt engineering.** Recall returns a briefing written to be handed to a model as is, sized
   to the token budget you give it.
 

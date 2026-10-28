@@ -50,7 +50,7 @@ curl -s localhost:8400/v1/recall -H "Authorization: Bearer $KEY" -H 'content-typ
 | `POST /v1/ingest` | Batch of episodes (`id`, `content`, `timestamp`, optional `identity`, `label`, `metadata`, `audience`, `code`). Same id + same content: no-op and free. Same id + new content: replaces it and everything derived from it. With `instant: true` (one episode, at most 4,000 characters, else 400): learned from within the request and returned as `instant.memories`, each with its edges; billed the same. |
 | `POST /v1/recall` | `query`, optional `budget` (tokens), `identity`, `as_of`, `exclude`, `include_history`, `session_id`, `branch`. Returns `briefing` plus `standing`, `pages`, `threads`, `items`, `passages`, `pending`, `tokens`, `abstained`, `abstain_reason`, `min_relevance`, `top_relevance` (see Recall below). |
 | `POST /v1/memories` | Store one fact directly (`statement`, `kind`, `subjects`, `assertion`, `audience`, `standing`, `category`, `why`); reconciled like extracted facts. With `supersedes: <memory id>` the caller says which fact this replaces (a person's correction): no judge is asked, it supersedes that memory (`relation: "update"`, `related: <old id>`) and inherits its kind, subjects, category, thread, scope and audience unless given. The old memory must be the project's, active or stale (else 404 `not-found` / 400 `memory-not-current`), and in the same audience (400 `audience-mismatch`). |
-| `GET /v1/memories`, `GET /v1/memories/{id}` | Browse items with evidence; filters `status`, `kind`, `category`, `scope`, `review`, `q`. Each item has `review` (`new` until a person keeps it; a person's own memories start `kept`) and `origin` (`synthesis`, `person`, `sample`). `review=new` lists current memories awaiting review; projects carry `review_count`. |
+| `GET /v1/memories`, `GET /v1/memories/{id}` | Browse items with evidence; filters `status`, `kind`, `category`, `scope`, `q`, `unused`, `review`. `status=expired`: items past the end they stated (`valid_to`; `expired: true`), which `status=active` leaves out. `unused=true`: items older than `MEMVINE_MEMORY_UNUSED_DAYS` (60) that no recall served in that time (`last_recalled_at`, `recall_count`), for review; nothing is hidden or deleted for it. Each item has `review` (`new` until a person keeps it; a person's own memories start `kept`) and `origin` (`synthesis`, `person`, `sample`); `review=new` lists current memories awaiting review, and projects carry `review_count`. |
 | `GET /v1/memories/{id}/related` | The memory and every edge, both directions, as `{kind, direction}` plus `item`, `file` or `thread`. |
 | `GET /v1/graph?since=&thread=&subject=&all=` | A neighbourhood of the memory graph for the console: `nodes` (facts, threads, files, people), `edges`, `truncated`; at most 300 nodes. Without `thread`/`subject` it is the open threads and the most recent facts; `all=true` adds every thread whatever its status (`truncated` when the cap left something out). |
 | `GET /v1/threads`, `GET /v1/threads/{id}` | Thread pages, one per piece of work; filters `status`, `kind`, `q`. One thread adds its `sections`, `related`, `knowledge` and `sources`. |
@@ -177,10 +177,14 @@ pages for the work in progress, plus a small set of durable knowledge (`synthesi
    shown only beside that page.
 3. **Reconcile.** Each knowledge item is compared with active items sharing a subject
    and close in embedding space. Near-identical wording merges without a model
-   call; otherwise the LLM says `same` (merge evidence; a restated preference strengthens one
+   call, and so does a near-duplicate (cosine ≥ 0.92, same kind and category, same numbers, no
+   change words such as "now" or "moved"): it keeps the existing wording and adds evidence; otherwise the LLM says `same` (merge evidence; a restated preference strengthens one
    step: low, medium, high), `update` (the old item is superseded, `valid_to` set, both linked;
    also when the new item settles something the old one called pending), `contradiction` (both
    kept, side by side), `extends` (both kept, linked) or `different`.
+   An item that states its own end ("the scratch org expires on 28 Oct") is stored with that end
+   as `valid_to`; past it, it keeps its status but is expired: recall no longer serves it as
+   current (a historical question or an earlier `as_of` still sees it, marked "ended").
 4. **Recall.** Standing rules, then the one or two thread pages the question is about (within 45%
    of the budget, withheld for an `as_of` earlier than anything the page knows), then knowledge
    (`[decision 21 Oct] ...`): vector and keyword search fused by reciprocal rank, then weighted;

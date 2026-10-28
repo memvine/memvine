@@ -171,6 +171,8 @@ export default async function HomePage() {
             </div>
 
             <div className="min-w-0 space-y-6">
+              {(project.unusedCount ?? 0) > 0 && <UnusedCard count={project.unusedCount!} days={project.unusedDays ?? 60} />}
+
               <Section title="Possibly outdated" description="Memories whose ground moved; confirm, correct or forget them."
                        more={stale.length > OUTDATED ? { href: "/memories?status=stale", label: `All ${stale.length}` } : undefined}>
                 {stale.length === 0 ? <Quiet>Nothing looks outdated.</Quiet> : (
@@ -199,6 +201,21 @@ export default async function HomePage() {
         </>
       )}
     </>
+  );
+}
+
+/** Memories no agent's recall served lately: a nudge to review them, never hidden or deleted for it. */
+function UnusedCard({ count, days }: { count: number; days: number }) {
+  return (
+    <Card>
+      <Link href="/memories?unused=true" className="flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-surface-2/50 sm:px-5">
+        <p className="text-[13px] leading-snug text-text-2">
+          <span className="font-semibold tabular-nums text-text">{count.toLocaleString()}</span>{" "}
+          {count === 1 ? "memory hasn't" : "memories haven't"} been used in {days} days
+        </p>
+        <span className="inline-flex shrink-0 items-center gap-1 text-[12.5px] text-text-3">Review <ArrowRight className="size-3.5" aria-hidden /></span>
+      </Link>
+    </Card>
   );
 }
 

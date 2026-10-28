@@ -62,6 +62,9 @@ export function MemoryFacts({ m, thread }: { m: MemoryItem; thread?: ThreadSumma
       <KeyValue label="Confidence">{m.confidence}</KeyValue>
       <KeyValue label="Valid">{formatDate(m.validFrom)} <span className="text-text-3">→</span> {m.validTo ? formatDate(m.validTo) : "still true"}</KeyValue>
       <KeyValue label="Learned">{formatDate(m.recordedAt, true)}</KeyValue>
+      <KeyValue label="Last recalled">
+        {m.lastRecalledAt ? `${formatDate(m.lastRecalledAt, true)} · ${m.recallCount ?? 0} time${m.recallCount === 1 ? "" : "s"}` : "never"}
+      </KeyValue>
       {m.subjects.length > 0 && (
         <KeyValue label="About"><span className="flex flex-wrap gap-1">{m.subjects.map((s) => <Badge key={s}>{s}</Badge>)}</span></KeyValue>
       )}
@@ -127,6 +130,11 @@ export function MemoryDrawer({ detail, closeHref, linkFor, thread }: {
       }
     >
       <div className="space-y-5">
+        {m.expired && (
+          <Callout tone="warn" title="Expired">
+            It said it holds until {m.validTo ? formatDate(m.validTo) : "a date that has passed"}. Recall no longer serves it as current; a question about the past still finds it.
+          </Callout>
+        )}
         {m.status === "stale" && m.staleReason && (
           <Callout tone="warn" title="May be outdated">{m.staleReason}. Confirm it if it still holds, or retire it.</Callout>
         )}

@@ -462,6 +462,14 @@ BEGIN
                OR id = nullif(current_setting('memvine.project_id', true), '')::uuid);
 END $$;
 
+-- memory aging
+-- Expired: valid_to on an active (or stale) item is the moment it said it stops being true
+-- (extraction's valid_until, "the scratch org expires on 28 Oct"). Past it the item keeps its status;
+-- recall stops serving it as current (recall.py NOT_EXPIRED) and the console shows it as Expired.
+-- Unused: when a briefing last served an item, and how many times. Items older than
+-- memory_unused_days not served in that window are listed for review, never hidden or deleted.
+ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS last_recalled_at timestamptz;
+ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS recall_count int NOT NULL DEFAULT 0;
 -- review loop ------------------------------------------------------------------------------------
 -- (review.py) Kept together so it can move into a migration as one piece.
 -- review: 'new' until a person keeps it (Still true / Keep); synthesis writes 'new', a person's own

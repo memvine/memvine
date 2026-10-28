@@ -10,22 +10,24 @@ import type { MemoryKind, MemoryStatus } from "@/lib/types";
 import { href } from "@/lib/url";
 
 const KINDS: MemoryKind[] = ["semantic", "episodic", "procedural", "prospective", "preference"];
-const STATUSES: MemoryStatus[] = ["active", "superseded", "retired", "stale"];
+const STATUSES: (MemoryStatus | "expired")[] = ["active", "superseded", "retired", "stale", "expired"];
 
 export default async function MemoriesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const params = await searchParams;
   const kind = KINDS.find((k) => k === params.kind);
   const status = STATUSES.find((s) => s === params.status);
+  const unused = params.unused === "true" ? "true" : undefined;
   const review = params.review === "new" ? "new" as const : undefined;
   const project = await currentProject();
+  const unusedDays = project.unusedDays ?? 60;
   const [memories, all, threads, detail] = await Promise.all([
-    listMemories(project.slug, { q: params.q, kind, status, review }),
-    params.q || kind || status || review ? listMemories(project.slug) : null,
+    listMemories(project.slug, { q: params.q, kind, status, unused: Boolean(unused), review }),
+    params.q || kind || status || unused || review ? listMemories(project.slug) : null,
     listThreads(project.slug),
     params.open ? getMemory(project.slug, params.open) : null,
   ]);
-  const filtered = Boolean(params.q || kind || status || review);
-  const base = { q: params.q, kind, status, review };
+  const filtered = Boolean(params.q || kind || status || unused || review);
+  const base = { q: params.q, kind, status, unused, review };
   const link = (id: string) => href("/memories", { ...base, open: id });
   const total = all?.length ?? memories.length;
 
@@ -48,11 +50,21 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
           <option value="">Any status</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </Select>
+        <Select name="unused" defaultValue={unused ?? ""} aria-label="Use" wrapperClassName="w-[190px]" className="h-9">
+          <option value="">Any use</option>
+          <option value="true">Not used in {unusedDays} days</option>
+        </Select>
         <Select name="review" defaultValue={review ?? ""} aria-label="Review" wrapperClassName="w-[150px]" className="h-9">
           <option value="">Reviewed or not</option>
           <option value="new">Needs review</option>
         </Select>
       </FilterBar>
+
+      {unused && (
+        <p className="mb-3 text-[12.5px] leading-relaxed text-text-3">
+          No agent&apos;s recall has served these in {unusedDays} days. Keep what still matters, correct or forget the rest; nothing is hidden or deleted for being unused.
+        </p>
+      )}
 
       <Card>
         <ReceiptList
@@ -65,7 +77,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
           reviewing={Boolean(review)}
           empty={
             <div className="px-5 py-14 text-center text-[13px] text-text-3">
-              {review && !params.q && !kind && !status ? "Nothing to review: every current memory has been kept or forgotten." : filtered ? "No memories match these filters." : (
+              {review && !params.q && !kind && !status && !unused ? "Nothing to review: every current memory has been kept or forgotten." : filtered ? "No memories match these filters." : (
                 <div className="flex flex-col items-center gap-4">
                   <p>No memories yet. They appear a minute or two after the first conversation is sent, or load a sample to try recall right now.</p>
                   {project.sourceCount === 0 && <SampleOffer />}
