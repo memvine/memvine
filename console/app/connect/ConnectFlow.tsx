@@ -271,8 +271,10 @@ print(r.briefing)                          # hand this to your model as backgrou
   return (
     <ol className="space-y-4">
       <Sub n={1} code={`export MEMVINE_KEY=${keyValue}\nexport MEMVINE_URL=${apiUrl}`}>Set the key and address in your environment:</Sub>
-      <Sub n={2} code={lang === "ts" ? "npm install @memvine/sdk" : "pip install memvine-sdk"}
-           after={<>Not on the registry where you are? Install from a checkout of memvine/memvine: {lang === "ts" ? <code className="font-mono">npm install ./sdk/typescript</code> : <code className="font-mono">pip install -e sdk/python</code>}.</>}>
+      <Sub n={2} code={lang === "ts"
+             ? "git clone https://github.com/memvine/memvine.git && npm install ./memvine/sdk/typescript"
+             : "git clone https://github.com/memvine/memvine.git && pip install ./memvine/sdk/python"}
+           after={<>The SDKs are not on {lang === "ts" ? "npm" : "PyPI"} yet, so they install from the repository.</>}>
         Install the SDK{" "}
         <span className="ml-1 inline-flex rounded-lg border border-border p-0.5 align-middle">
           {(["ts", "py"] as const).map((l) => (
