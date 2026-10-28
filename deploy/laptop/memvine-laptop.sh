@@ -5,7 +5,9 @@
 #
 #   deploy/laptop/memvine-laptop.sh start     start the database, API and console
 #   deploy/laptop/memvine-laptop.sh share     publish them on https://<this machine>.ts.net
-#   deploy/laptop/memvine-laptop.sh restart   pick up new code (API and console), staying shared
+#   deploy/laptop/memvine-laptop.sh restart   pick up new code (API and console), staying shared;
+#                                             backs up first when the new code has schema migrations
+#   deploy/laptop/memvine-laptop.sh migrations   list applied and pending schema migrations
 #   deploy/laptop/memvine-laptop.sh status    what is running and where
 #   deploy/laptop/memvine-laptop.sh unshare   stop publishing (local use keeps working)
 #   deploy/laptop/memvine-laptop.sh stop      unshare and stop everything
@@ -171,6 +173,18 @@ status() {
   log "Operator key (administers every organization; keep it to yourself): $STATE/operator-key"
 }
 
+# Schema migrations apply when the API starts. `restart` checks first and, when any are pending,
+# takes a backup before stopping the old API (a failed migration rolls back, but a backup is the
+# way back from one that succeeded and was wrong).
+backup_if_migrating() {
+  local plan
+  plan="$(cd "$ROOT/server" && .venv/bin/memvine-server migrate --dry-run 2>&1)" || {
+    log "$plan"; log "Not restarting: the new code cannot run on this database (see above)."; exit 1; }
+  grep -q "up to date" <<< "$plan" && return 0
+  log "Schema migrations will apply on restart:"; log "$plan"
+  backup
+}
+
 # Backups: custom-format pg_dump files in ~/.memvine/backups, the newest BACKUP_KEEP kept.
 BACKUPS="$HOME/.memvine/backups"
 BACKUP_KEEP="${BACKUP_KEEP:-14}"
@@ -229,7 +243,8 @@ unschedule_backups() {
 
 case "${1:-}" in
   start) start ;;
-  restart) stop_one console; stop_one api; start ;;
+  restart) backup_if_migrating; stop_one console; stop_one api; start ;;
+  migrations) (cd "$ROOT/server" && .venv/bin/memvine-server migrations) ;;
   share) share ;;
   unshare) unshare ;;
   stop) stop ;;

@@ -8,7 +8,7 @@ import { buildSample, SAMPLE_PREFIX } from "./sample-data";
 import { simulateInstant } from "./mock-instant";
 import { INSTANT_MAX_CHARS } from "./types";
 import type {
-  ApiKey, Episode, EpisodeSummary, GraphQuery, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project, RecallResult, SampleResult, ThreadDetail, ThreadSummary,
+  ApiKey, Episode, EpisodeSummary, GraphQuery, SynthesisHealth, SynthesisIssue, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project, RecallResult, SampleResult, ThreadDetail, ThreadSummary,
 } from "./types";
 
 function threadSummary(data: ProjectData, t: MockThread): ThreadSummary {
@@ -299,6 +299,23 @@ export const mockApi: MemvineApi = {
     // Synthesize again over the next 20 seconds, so the Sources screen shows the progress.
     const elapsed = (Date.now() - store().startedAt) / 1000;
     data.pendingEpisodes = { ...data.pendingEpisodes, [target.id]: [elapsed + 8, elapsed + 20] };
+  },
+  async synthesisHealth(project): Promise<SynthesisHealth> {
+    // The mock worker is always polling; seeded failures and long waits read as the server reports them.
+    const episodes = await mockApi.listEpisodes(project);
+    const failed = episodes.filter((e) => e.jobStatus === "failed").length;
+    const elapsedMin = (Date.now() - store().startedAt) / 60_000;
+    const oldest = episodes.some((e) => e.jobStatus === "queued") ? elapsedMin : null;
+    const issues: SynthesisIssue[] = [];
+    if (failed) {
+      issues.push({ condition: "failed", count: failed,
+                    message: `${failed} source${failed === 1 ? "" : "s"} failed to synthesize in the last day — see Sources` });
+    }
+    if (oldest !== null && oldest > 30) {
+      issues.push({ condition: "stuck", minutes: oldest, message: `Synthesis is stuck: the oldest source has waited ${Math.floor(oldest)} min` });
+    }
+    return { healthy: issues.length === 0, scope: "project", issues, failedCount: failed, oldestQueuedMinutes: oldest,
+             workerLastPollAt: new Date().toISOString() };
   },
 
   async listRequests(project) {

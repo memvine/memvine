@@ -113,6 +113,7 @@ export const confirmMemory = forward("confirmMemory");
 export const listEpisodes = forward("listEpisodes", []);
 export const getEpisode = forward("getEpisode", null);
 export const retryJob = forward("retryJob");
+export const synthesisHealth = forward("synthesisHealth", null);
 export const listRequests = forward("listRequests", []);
 export const getUsage = forward("getUsage", []);
 export const listMembers = forward("listMembers");

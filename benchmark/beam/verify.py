@@ -18,9 +18,8 @@ import re
 import sys
 from pathlib import Path
 
-import httpx
-
 import exabase_prompts
+import httpx
 import scoring
 from dataset import build_conversation, load_rows
 

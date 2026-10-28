@@ -7,6 +7,7 @@ import { ArrowRight, MessageCircleQuestion } from "lucide-react";
 import { AutoRefresh } from "@/components/client";
 import { EmptyProject, SetupSteps, type SetupStep } from "@/components/EmptyProject";
 import { Receipt } from "@/components/Receipt";
+import { SynthesisBanner } from "@/components/SynthesisBanner";
 import { Badge, ButtonLink, Card, CardHeader, cx, shortDate, timeAgo } from "@/components/ui";
 import { currentProject, getUsage, listEpisodes, listKeys, listMemories, listRequests, listSessions, listThreads } from "@/lib/api";
 import { SAMPLE_PREFIX } from "@/lib/sample-data";
@@ -105,6 +106,8 @@ export default async function HomePage() {
         </div>
         <ButtonLink href="/playground" variant="primary"><MessageCircleQuestion aria-hidden /> Ask memory</ButtonLink>
       </header>
+
+      {project.slug && <SynthesisBanner project={project.slug} />}
 
       {!hasMemory ? (
         <EmptyProject connect={connect} tending={tending} />

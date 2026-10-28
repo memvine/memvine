@@ -1,6 +1,7 @@
 import { FileText, RotateCcw } from "lucide-react";
 import { retryJob } from "@/app/actions";
 import { AutoRefresh } from "@/components/client";
+import { SynthesisBanner } from "@/components/SynthesisBanner";
 import { Badge, button, Mono, PageHeader, plural, RowLink, shortDate, Table, TableEmpty, TBody, Td, Th, THead, Tr } from "@/components/ui";
 import { currentProject, listEpisodes } from "@/lib/api";
 import type { EpisodeSummary } from "@/lib/types";
@@ -54,6 +55,7 @@ export default async function SourcesPage() {
           </>
         }
       />
+      {project.slug && <SynthesisBanner project={project.slug} onSources />}
       <Table minWidth={760} footer={episodes.length ? `${episodes.length} sources · open one to read what was sent` : undefined}>
         <THead>
           <Th>Source</Th>

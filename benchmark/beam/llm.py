@@ -11,11 +11,10 @@ otherwise score every question 0.
 
 import asyncio
 import json
-import re
 import os
+import re
 
 import httpx
-
 from log import log
 
 # BEAM_FAKE_MODEL=1 replaces the model with canned replies, to exercise the harness and a memory

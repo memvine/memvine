@@ -14,7 +14,10 @@ class Settings(BaseSettings):
     # Who may create an account: open (anyone who can reach the server; a new user gets their own
     # organization), invite (only with an invite link from an organization admin), closed.
     signup: str = "open"
-    # Postgres row-level security beneath the application's own project filters (schema.sql).
+    # Apply pending schema migrations on start (migrate.py). Off: a server whose database needs
+    # migrations refuses to start until `memvine-server migrate` has run.
+    auto_migrate: bool = True
+    # Postgres row-level security beneath the application's own project filters (migrations/rls.sql).
     row_security: bool = True
     # A console sign-in lasts this long.
     session_days: int = 30
@@ -44,6 +47,18 @@ class Settings(BaseSettings):
     worker_concurrency: int = 4
     # On shutdown, how long a running job may finish before it is cancelled and requeued.
     worker_shutdown_seconds: float = 10.0
+
+    # Synthesis health (health.py, GET /v1/health/synthesis, console banners). Unhealthy when a job
+    # failed in the last alert_failed_hours, when a project's oldest waiting live job is older than
+    # alert_queue_minutes (paused projects excepted), or when no worker polled within alert_worker_minutes.
+    alert_failed_hours: int = 24
+    alert_queue_minutes: int = 30
+    alert_worker_minutes: int = 10
+    # Slack-compatible incoming webhook ({"text": ...}); the worker posts each unhealthy condition
+    # at most once per alert_repeat_minutes. Empty: no webhook.
+    alert_webhook_url: str = ""
+    alert_repeat_minutes: int = 60
+    alert_check_seconds: float = 60.0
 
     # A live session with no event for this long is over: its turns become episodes.
     session_idle_minutes: int = 30

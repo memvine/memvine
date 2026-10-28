@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { buildGraph, relatedFromDetail } from "./graph";
 import type {
   AddResult, ApiKey, Audience, EdgeDirection, EdgeKind, GraphEdge, GraphFile, GraphNode, MemoryGraph, MemoryRelated, RelatedEdge, RelatedRef, RelatedThread, AuditEvent, Invite, Role, Episode, Identity, OrgInfo, OrgKey, OrgSummary, SessionSummary, EpisodeSummary, Member, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project,
-  RecallResult, RequestLog, SampleResult, ThreadDetail, ThreadSummary, UsageDay,
+  RecallResult, RequestLog, SampleResult, SynthesisHealth, SynthesisIssue, ThreadDetail, ThreadSummary, UsageDay,
 } from "./types";
 
 const BASE = (process.env.MEMVINE_API_URL ?? "").replace(/\/$/, "");
@@ -406,6 +406,19 @@ export const liveApi: MemvineApi = {
   },
   async retryJob(project, jobId) {
     await call(`/v1/jobs/${jobId}/retry`, { method: "POST", project });
+  },
+  async synthesisHealth(project): Promise<SynthesisHealth | null> {
+    let r: { healthy: boolean; scope: SynthesisHealth["scope"]; issues: SynthesisIssue[]; failed_count: number;
+             oldest_queued_minutes: number | null; worker_last_poll_at: string | null };
+    try {
+      r = await call(`/v1/health/synthesis?project=${encodeURIComponent(project)}`);
+    } catch (e) {
+      // Members may not see it, and a server from before the route has none: no banner either way.
+      if (e instanceof ApiError && (e.status === 403 || e.status === 404)) return null;
+      throw e;
+    }
+    return { healthy: r.healthy, scope: r.scope, issues: r.issues, failedCount: r.failed_count,
+             oldestQueuedMinutes: r.oldest_queued_minutes, workerLastPollAt: r.worker_last_poll_at };
   },
 
   async listRequests(project): Promise<RequestLog[]> {

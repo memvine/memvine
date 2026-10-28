@@ -2,6 +2,7 @@
 (or MEMVINE_TEST_DATABASE_URL); they are skipped when it is not reachable."""
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 
@@ -33,9 +34,15 @@ def _db_available() -> bool:
     try:
         _ensure_test_database()
         with psycopg.connect(TEST_DSN, connect_timeout=2):
-            return True
+            pass
     except Exception:  # noqa: BLE001
         return False
+    # The suite's schema comes from the migrations, as a server's does; a migration error fails
+    # loudly rather than skipping every test.
+    from memvine_server.migrate import migrate_database
+
+    asyncio.run(migrate_database(TEST_DSN))
+    return True
 
 
 needs_db = pytest.mark.skipif(not _db_available(), reason="Postgres not reachable; run `docker compose up -d` in server/")

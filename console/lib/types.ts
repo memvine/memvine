@@ -163,6 +163,25 @@ export interface Episode {
 
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
+/** One reason synthesis is not keeping up (GET /v1/health/synthesis). */
+export interface SynthesisIssue {
+  /** failed: jobs failed recently; stuck: a live source waited too long; worker: no worker is polling. */
+  condition: "failed" | "stuck" | "worker";
+  message: string;
+  count?: number;
+  minutes?: number | null;
+  projects?: { slug: string; name: string; count: number; minutes?: number }[];
+}
+
+export interface SynthesisHealth {
+  healthy: boolean;
+  scope: "project" | "organization" | "server";
+  issues: SynthesisIssue[];
+  failedCount: number;
+  oldestQueuedMinutes: number | null;
+  workerLastPollAt: string | null;
+}
+
 /** A source as the Sources screen lists it: the episode plus its synthesis outcome. */
 export interface EpisodeSummary {
   id: string;
@@ -500,6 +519,8 @@ export interface MemvineApi {
   listEpisodes(project: string): Promise<EpisodeSummary[]>;
   getEpisode(project: string, id: string): Promise<Episode | null>;
   retryJob(project: string, jobId: number): Promise<void>;
+  /** Whether synthesis keeps up in this project; null when the viewer may not see it (members). */
+  synthesisHealth(project: string): Promise<SynthesisHealth | null>;
   listRequests(project: string): Promise<RequestLog[]>;
   getUsage(project: string): Promise<UsageDay[]>;
   listMembers(): Promise<Member[]>;

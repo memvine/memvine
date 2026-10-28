@@ -67,8 +67,9 @@ Settings page will grow a screen for it.
 - **Logs.** `docker compose logs -f api`. Each job's result and error are also visible per project
   in the console (Sources) and at `GET /v1/jobs`.
 - **Backups.** `docker compose exec db pg_dump -U memvine memvine > backup.sql`.
-- **Upgrades.** `git pull && docker compose up -d --build`. The schema applies itself at startup
-  (statements are idempotent and skipped when unchanged).
+- **Upgrades.** Back up, then `git pull && docker compose up -d --build`. Pending schema migrations
+  apply at startup, each in a transaction (`docker compose exec api memvine-server migrations`
+  lists them; see "Schema and migrations" in `server/README.md`).
 
 ## Not in the beta yet
 

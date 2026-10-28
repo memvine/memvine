@@ -351,7 +351,7 @@ class RagBackend:
             for piece in chunk_message(m):
                 chunks.append(Chunk(conversation.id, piece, m.timestamp, len(chunks), words=words_of(piece)))
         vectors = await self._embed([c.text for c in chunks])
-        for chunk, vector in zip(chunks, vectors):
+        for chunk, vector in zip(chunks, vectors, strict=False):
             chunk.vector = vector
         self._chunks[handle.conversation_id] = chunks
         log(f"embedded {len(chunks)} chunks from {len(conversation.messages)} turns", conversation.id)
@@ -401,7 +401,7 @@ def chunks_by_ordinal(chunks: list[Chunk], ordinal: int) -> Chunk:
 
 
 def dot(a: list[float], b: list[float]) -> float:
-    return sum(x * y for x, y in zip(a, b)) if a and b else 0.0
+    return sum(x * y for x, y in zip(a, b, strict=False)) if a and b else 0.0
 
 
 def overlap(query: Counter, doc: Counter) -> float:

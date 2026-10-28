@@ -28,9 +28,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
-
 import exabase_prompts
+import httpx
 import llm
 import scoring
 from dataset import (

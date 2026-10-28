@@ -13,6 +13,7 @@ import logging
 import traceback
 from uuid import UUID
 
+from . import health
 from .billing import apply_retention
 from .config import settings
 from .embeddings import Embedder
@@ -203,6 +204,7 @@ async def drain(pool, llm: LLM, embedder: Embedder, project_id: UUID | None = No
 async def _loop(pool, llm: LLM, embedder: Embedder, stop: asyncio.Event) -> None:
     while not stop.is_set():
         try:
+            await health.beat(pool)  # throttled; tells /v1/health/synthesis a worker is polling
             busy = await run_one(pool, llm, embedder)
         except Exception:
             log.exception("worker loop error")
@@ -223,5 +225,11 @@ async def _loop(pool, llm: LLM, embedder: Embedder, stop: asyncio.Event) -> None
 
 
 async def run_forever(pool, llm: LLM, embedder: Embedder, stop: asyncio.Event) -> None:
-    """`worker_concurrency` loops share the queue; claim_job keeps each project to one at a time."""
-    await asyncio.gather(*(_loop(pool, llm, embedder, stop) for _ in range(max(1, settings.worker_concurrency))))
+    """`worker_concurrency` loops share the queue; claim_job keeps each project to one at a time.
+    Beside them, the alert check posts broken synthesis to the webhook (health.py)."""
+    try:
+        await health.beat(pool, force=True)
+    except Exception:
+        log.exception("worker heartbeat error")
+    await asyncio.gather(health.alert_loop(pool, stop),
+                         *(_loop(pool, llm, embedder, stop) for _ in range(max(1, settings.worker_concurrency))))

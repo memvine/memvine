@@ -13,12 +13,11 @@ import math
 import re
 from collections import defaultdict
 
-from scipy.stats import kendalltau
-
 import exabase_prompts
 import llm
-from log import log
 from dataset import Question
+from log import log
+from scipy.stats import kendalltau
 
 
 async def score_question(question: Question, answer: str) -> tuple[float, dict]:
