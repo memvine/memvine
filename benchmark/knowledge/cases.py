@@ -5,7 +5,12 @@
 Uses the configured LLM backend (MEMVINE_LLM_BACKEND; claude-cli or anthropic). Every case must
 print OK: "keep" cases must yield an item, "drop" cases none. prompt_file tries a draft of
 KNOWLEDGE_SYSTEM without changing the server. benchmark/memory/check.py runs these too.
-Measured 2026-10-27: 8/8 with the current rules.
+Measured 2026-10-27: 8/8 with the current rules; 2026-10-28: 10/10 with the two instructed cases (claude-cli, sonnet).
+
+A case is (name, excerpt) or (name, excerpt, project instructions): the third element is a
+project's memory instructions (projects.memory_instructions, prompts.instructions_block), so a case
+can check that "never keep X" drops what would otherwise be kept and "also keep Y" keeps what would
+otherwise be dropped.
 
 Private drop cases. Memories people forgot or marked wrong in their own projects are exported with
 `memvine-server feedback-export <slug> >> ~/.memvine/eval/drop-cases.jsonl` (one JSON object per
@@ -33,6 +38,14 @@ CASES = [
     ("drop: code description", "Assistant: I read src/export/worker.py. The export worker retries 3 times with exponential backoff starting at 2s, then writes the failure to the dead_letter table. [tools] Read ok: src/export/worker.py"),
     ("drop: bug trace", "Assistant: Root cause found: OrderService.total() rounds before applying the discount (order_service.py:212), so totals are off by a cent on discounted orders. I'll fix it by rounding after. [tools] Bash `pytest tests/test_orders.py` failed (exit 1) ... then passed (exit 0): 12 passed"),
     ("keep: env gotcha", "[tools] Bash `make test` failed (exit 1): E could not connect to server: port 5432 ... Assistant: Port 5432 on the dev box is the legacy billing DB, not ours; our test DB is on 5433. Setting TEST_DB_PORT=5433 fixed it. [tools] Bash `TEST_DB_PORT=5433 make test` ok (exit 0): 230 passed"),
+    # Project instructions: a durable rule that would be kept, but it is about a named customer.
+    ("drop: instructed no customer names",
+     "User: For muse billing: Brightwater Dental's contract gives them 60-day payment terms instead of our usual 30, so never send them a dunning email before day 60. Assistant: Got it, no dunning emails to Brightwater Dental before day 60.",
+     "Never keep anything about customer names."),
+    # Project instructions: a step of incident work, which the default rules drop as the work itself.
+    ("keep: instructed runbook step",
+     "User: checkout is erroring again. Assistant: The 5xx rate on muse checkout recovered. What fixed it: I turned on the `payments_fallback` flag in the LaunchDarkly console, waited until the checkout 5xx rate was under 1%, and turned the flag off again once the payment provider's status page was green.",
+     "Also keep on-call runbook steps."),
 ]
 PROFILE = "muse — a web app (SvelteKit frontend, Postgres) and how it is deployed"
 DROP_CASES = Path(os.environ.get("MEMVINE_DROP_CASES", "~/.memvine/eval/drop-cases.jsonl")).expanduser()
@@ -106,13 +119,13 @@ async def run_cases(prompt_file: str | None = None) -> list[tuple[str, bool, lis
         ex.KNOWLEDGE_SYSTEM = open(prompt_file).read()
     llm = make_llm()
 
-    async def one(name, text):
+    async def one(name, text, instructions=None):
         r = await ex.extract_knowledge(llm, label="Claude Code · muse · main", occurred_at=datetime(2026, 10, 20, tzinfo=UTC),
-                                       content=text, project=PROFILE, threads=[])
+                                       content=text, project=PROFILE, threads=[], instructions=instructions)
         items = [f"[{c.category}] {c.statement}" for c in r.items]
         return name, bool(items) == name.startswith("keep"), items
 
-    return list(await asyncio.gather(*(one(n, t) for n, t in CASES)))
+    return list(await asyncio.gather(*(one(*case) for case in CASES)))
 
 
 if __name__ == "__main__":
