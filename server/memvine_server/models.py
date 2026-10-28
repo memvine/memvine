@@ -272,6 +272,9 @@ class RecallRequest(BaseModel):
     branch: str | None = Field(default=None, max_length=200)
     # Extra detail per served item: {"related": true} adds each item's edges.
     include: RecallInclude | None = None
+    # A session-start brief: also return the caller's person profile (by identity) and the project
+    # profile in `profiles`, counted in `profile_tokens` and taken out of the budget first.
+    profiles: bool = False
 
 
 class RecallItem(BaseModel):
@@ -323,6 +326,10 @@ class RecallResponse(BaseModel):
     # Best relevance of any candidate memory: its cosine similarity to the question, plus a small bonus
     # when it also matches the question's words. None when there was no candidate.
     top_relevance: float | None = None
+    # With profiles: true, the caller's person profile and the project profile ("=== memvine · about
+    # <identity> ===", "=== memvine · this project ==="), served whether or not recall abstained.
+    profiles: str = ""
+    profile_tokens: int = 0
 
 
 class SessionEventIn(BaseModel):
@@ -575,3 +582,26 @@ class KeyConnection(BaseModel):
     last_used_at: datetime | None       # any call, MCP included (MCP calls are not in the request log)
     last_user_agent: str | None
     calls: int
+
+
+class ProfileLine(BaseModel):
+    text: str
+    memory_ids: list[UUID]
+
+
+class ProfileOut(BaseModel):
+    """A short summary of one person or of the project, derived from memory (profiles.py). Every
+    line cites the memories it restates; lines whose memories are no longer current are left out."""
+    subject_kind: Literal["person", "project"]
+    subject: str  # the identity; "" for the project
+    lines: list[ProfileLine]
+    description: str | None = None  # the project's description (project profile only), shown first
+    text: str  # as a brief shows it; "" when there is nothing to say
+    tokens: int
+    dirty: bool  # memory changed since it was built; a rebuild is due (at most every 10 minutes)
+    built_at: datetime | None  # None: not built yet
+
+
+class ProfileRebuild(BaseModel):
+    subject_kind: Literal["person", "project"] | None = None  # None: every profile of the project
+    subject: str | None = Field(default=None, max_length=200)

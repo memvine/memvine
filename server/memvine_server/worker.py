@@ -13,7 +13,7 @@ import logging
 import traceback
 from uuid import UUID
 
-from . import health
+from . import health, profiles
 from .billing import apply_retention
 from .config import settings
 from .embeddings import Embedder
@@ -156,6 +156,8 @@ async def run_one(pool, llm: LLM, embedder: Embedder, project_id: UUID | None = 
                     result = await refresh_state(conn, llm, job["project_id"], job["episode_id"])
                 elif job["kind"] == "session_close":
                     result = await synthesize_session(conn, job["project_id"], job["episode_id"])
+                elif job["kind"] == "profile":
+                    result = await profiles.build(conn, llm, job["project_id"], *profiles.parse_key(job["episode_id"]))
                 else:
                     raise ValueError(f"unknown job kind {job['kind']}")
             await conn.execute(
@@ -218,6 +220,7 @@ async def _loop(pool, llm: LLM, embedder: Embedder, stop: asyncio.Event) -> None
                     await seal_due(conn)
                     await requeue_abandoned(conn)
                     await apply_retention(conn)
+                    await profiles.sweep(conn)  # throttled to once a minute
             except Exception:
                 log.exception("idle sweep error")
             try:

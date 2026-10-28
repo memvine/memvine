@@ -41,7 +41,7 @@ def all_routes(app) -> list[APIRoute]:
 BODIES: dict[tuple[str, str], dict | None] = {
     ("GET", "/v1/health/synthesis"): None,
     ("POST", "/v1/ingest"): {"items": [{"id": "{episode_id}", "content": "Attacker text about invoices.", "timestamp": "2026-10-02T10:00:00Z"}]},
-    ("POST", "/v1/recall"): {"query": "quokka invoices launch refunds"},
+    ("POST", "/v1/recall"): {"query": "quokka invoices launch refunds", "identity": "{identity}", "profiles": True},
     ("POST", "/v1/sessions/{session_id}/events"): {"events": [{"role": "user", "content": "attacker turn"}]},
     ("GET", "/v1/sessions"): None,
     ("DELETE", "/v1/sessions/{session_id}"): None,
@@ -49,6 +49,9 @@ BODIES: dict[tuple[str, str], dict | None] = {
     ("GET", "/v1/sessions/{session_id}/brief"): None,
     ("POST", "/v1/sessions/{session_id}/close"): None,
     ("GET", "/v1/sessions/{session_id}/kept"): None,
+    ("GET", "/v1/profiles"): None,
+    ("GET", "/v1/profiles/project"): None,
+    ("POST", "/v1/profiles/rebuild"): {"subject_kind": "person", "subject": "{identity}"},
     ("PUT", "/v1/identities/{identity}"): {"traits": {"team": "attackers"}},
     ("GET", "/v1/identities"): None,
     ("GET", "/v1/identities/{identity}"): None,
@@ -142,6 +145,7 @@ async def snapshot(dsn: str, b: dict) -> dict:
         "threads": "SELECT id, title, status FROM threads WHERE project_id = %(pid)s ORDER BY id",
         "feedback": "SELECT count(*) AS n FROM feedback_cases WHERE project_id = %(pid)s",
         "memory_events": "SELECT id, memory_id, kind, actor FROM memory_events WHERE project_id = %(pid)s ORDER BY id",
+        "profiles": "SELECT subject_kind, subject, lines, dirty, built_at FROM profiles WHERE project_id = %(pid)s ORDER BY subject_kind, subject",
         "projects": "SELECT id FROM projects WHERE org_id = %(oid)s ORDER BY id",
         "org": "SELECT slug, name FROM organizations WHERE id = %(oid)s",
         "members": "SELECT user_id, role FROM memberships WHERE org_id = %(oid)s ORDER BY user_id",
@@ -192,6 +196,10 @@ async def test_no_route_reaches_another_organization(client):
     members = (await client.get("/v1/org/members", headers=hb)).json()
     async with await psycopg.AsyncConnection.connect(settings.database_url, row_factory=dict_row, autocommit=True) as conn:
         await conn.execute("UPDATE jobs SET status = 'failed' WHERE id = %s", (jobs[0]["id"],))  # retryable
+        line = json.dumps([{"text": "Runs the quokka ledger.", "memory_ids": [mem["id"]]}])
+        await conn.execute("INSERT INTO profiles (project_id, subject_kind, subject, lines, dirty, built_at) "
+                           "SELECT id, k, s, %s, false, now() FROM projects, (VALUES ('person', %s), ('project', '')) v(k, s) "
+                           "WHERE slug = %s", (line, f"ident-{tag}", pb["slug"]))
         b = await (await conn.execute("SELECT p.id AS project_id, p.org_id, u.id AS user_id FROM projects p, users u "
                                       "WHERE p.slug = %s AND u.email = %s", (pb["slug"], f"quokka-owner-{tag}@example.com"))).fetchone()
     ids = {
@@ -234,6 +242,8 @@ async def test_no_route_reaches_another_organization(client):
                 params["confirm"] = pb["slug"]
             if path == "/v1/code/anchors":
                 params["repo"] = "northwind/billing"
+            if path == "/v1/profiles":
+                params.update(subject_kind="person", subject=ids["identity"])
             if path == "/v1/events":
                 params["memory_id"] = ids["memory_id"]
             r = await client.request(method, url, params=params, json=fill(template, route_ids), headers=headers)
