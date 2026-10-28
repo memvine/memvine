@@ -2,6 +2,7 @@
 to extraction, reconciliation or recall. Uses the real model; never runs in CI.
 
   cd server && .venv/bin/python ../benchmark/memory/check.py [--server-dir DIR] [--skip-cases] [--skip-agent] [--agent-e2e]
+                                                             [--consolidation | --consolidation-only]
 
 It starts a throwaway API server (from --server-dir, default this checkout's server/) on its own
 database, then:
@@ -17,6 +18,9 @@ database, then:
   5. (--agent-e2e) a real Claude Code agent, run headless with the plugin connected and again
      without memory, deploys, answers and tests the way memory says (benchmark/memory/agent_e2e.py:
      six short `claude -p` runs in a scratch repo, isolated from the person's own setup)
+  6. (--consolidation) background consolidation on the fast model: restatements merged, an unlinked
+     changed value superseded or flagged, a code description flagged, nothing deleted
+     (benchmark/memory/consolidation_check.py); --consolidation-only runs just this section
 and prints PASS/FAIL per check (exit 1 on any FAIL). Synthesis runs on MEMVINE_LLM_BACKEND
 (claude-cli by default here: a few minutes on a Claude subscription; anthropic with an API key).
 """
@@ -40,7 +44,7 @@ os.environ.setdefault("MEMVINE_CLAUDE_CLI_CONCURRENCY", "4")
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 ADMIN_DSN = os.environ.get("MEMVINE_CHECK_ADMIN_URL", "postgresql://memvine:memvine@localhost:5433/memvine")
-DB = "memvine_check"
+DB = os.environ.get("MEMVINE_CHECK_DB", "memvine_check")  # parallel runs: give each its own
 PORT = int(os.environ.get("MEMVINE_CHECK_PORT", "8411"))
 BRIEFING_CEILING = int(os.environ.get("MEMVINE_CHECK_TOKENS", "300"))  # tokens for a one-fact question
 
@@ -136,7 +140,11 @@ def main() -> int:
     ap.add_argument("--skip-cases", action="store_true")
     ap.add_argument("--skip-agent", action="store_true")
     ap.add_argument("--agent-e2e", action="store_true", help="section 5: six headless Claude Code runs with and without the plugin")
+    ap.add_argument("--consolidation", action="store_true", help="section 6: background consolidation on the real fast model")
+    ap.add_argument("--consolidation-only", action="store_true", help="only section 6")
     args = ap.parse_args()
+    if args.consolidation_only:
+        args.consolidation = args.skip_cases = args.skip_agent = True
 
     if not args.skip_cases:
         sys.path.insert(0, str(args.server_dir))
@@ -155,52 +163,17 @@ def main() -> int:
         for name, ok, items in private:
             check(f"case {name}", ok, ("re-learned: " + "; ".join(items))[:120] if items else "not re-learned")
 
-    print(f"== 2. the October test (server: {args.server_dir})", flush=True)
+    print(f"== server: {args.server_dir}", flush=True)
     mgmt = "mv_mk_check_" + secrets.token_hex(8)
-    proc = start_server(args.server_dir, reset_database(), mgmt)
+    dsn = reset_database()
+    proc = start_server(args.server_dir, dsn, mgmt)
     try:
-        call("POST", "/v1/projects", mgmt, {"name": "muse", "slug": "muse",
-                                             "description": "muse: a web app (SvelteKit frontend, Postgres) and how it is deployed"})
-        key = call("POST", "/v1/projects/muse/keys", mgmt, {"name": "check"})["key"]
-        call("POST", "/v1/ingest", key, {"items": EPISODES})
-        wait_synthesized(key)
-        mems = [m for m in call("GET", "/v1/memories", key) if m["status"] == "active"]
-        cats = sorted(m.get("category") or "" for m in mems)
-        check("three facts become three memories", len(mems) == 3, f"{len(mems)}: {cats}")
-        check("the deploy rule is standing", any(m.get("standing") and "make deploy" in m["statement"] for m in mems))
-        for q, want in [(DB_QUESTION, "5544"), ("Why does muse use SvelteKit?", "SvelteKit")]:
-            r = recall(key, q)
-            top = r["items"][0]["memory"]["statement"] if r["items"] else ""
-            check(f"recalled first: {q}", want in top, top[:80])
-        r = recall(key, "How do I deploy muse?")
-        check("recalled: How do I deploy muse?", "make deploy ENV=prod" in r["briefing"])
-        r = recall(key, "What is the weather in Paris?")
-        check("an unrelated question abstains", r["abstained"] and r["tokens"] == 0, f"{r.get('abstain_reason')} at {r.get('top_relevance')}")
-        again = call("POST", "/v1/ingest", key, {"items": EPISODES})
-        check("a re-send changes nothing", again["queued"] == 0 and all(i["outcome"] == "unchanged" for i in again["items"]))
-        call("POST", "/v1/ingest", key, {"items": [UPDATE]})
-        wait_synthesized(key)
-        mems = call("GET", "/v1/memories", key) or []
-        old = [m for m in mems if "5544" in m["statement"] and "6432" not in m["statement"]]
-        check("the contradiction supersedes the old value", bool(old) and all(m["status"] == "superseded" for m in old),
-              ", ".join(m["status"] for m in old) or "old value missing")
+        if not args.consolidation_only:
+            october(args, mgmt)
+        if args.consolidation:
+            from consolidation_check import run_section as consolidation_section
 
-        print("== 3. the briefing", flush=True)
-        r = recall(key, DB_QUESTION)
-        briefing_checks(r, "port question")
-        (HERE / "check-briefing.txt").write_text(r["briefing"])
-
-        if not args.skip_agent:
-            print("== 4. a fresh agent, briefing only", flush=True)
-            r = recall(key, "I need to connect to the muse production database and then ship a deploy. What port, and what is the deploy command?")
-            answer = fresh_agent(r["briefing"])
-            check("the fresh agent uses the current port", "6432" in answer, answer.replace("\n", " ")[:160])
-            check("the fresh agent uses the deploy command", "make deploy ENV=prod" in answer)
-
-        if args.agent_e2e:
-            from agent_e2e import run_section
-
-            run_section(call, check, key, PORT, wait_synthesized, HERE)
+            consolidation_section(call, check, mgmt, dsn, args.server_dir)
     finally:
         proc.terminate()
         proc.wait(timeout=20)
@@ -208,6 +181,53 @@ def main() -> int:
     failed = [n for n, ok, _ in results if not ok]
     print(f"\n{len(results) - len(failed)}/{len(results)} passed" + (f"; FAILED: {', '.join(failed)}" if failed else ""))
     return 1 if failed else 0
+
+
+def october(args, mgmt: str) -> None:
+    """Sections 2-5 on the project "muse"."""
+    print("== 2. the October test", flush=True)
+    call("POST", "/v1/projects", mgmt, {"name": "muse", "slug": "muse",
+                                         "description": "muse: a web app (SvelteKit frontend, Postgres) and how it is deployed"})
+    key = call("POST", "/v1/projects/muse/keys", mgmt, {"name": "check"})["key"]
+    call("POST", "/v1/ingest", key, {"items": EPISODES})
+    wait_synthesized(key)
+    mems = [m for m in call("GET", "/v1/memories", key) if m["status"] == "active"]
+    cats = sorted(m.get("category") or "" for m in mems)
+    check("three facts become three memories", len(mems) == 3, f"{len(mems)}: {cats}")
+    check("the deploy rule is standing", any(m.get("standing") and "make deploy" in m["statement"] for m in mems))
+    for q, want in [(DB_QUESTION, "5544"), ("Why does muse use SvelteKit?", "SvelteKit")]:
+        r = recall(key, q)
+        top = r["items"][0]["memory"]["statement"] if r["items"] else ""
+        check(f"recalled first: {q}", want in top, top[:80])
+    r = recall(key, "How do I deploy muse?")
+    check("recalled: How do I deploy muse?", "make deploy ENV=prod" in r["briefing"])
+    r = recall(key, "What is the weather in Paris?")
+    check("an unrelated question abstains", r["abstained"] and r["tokens"] == 0, f"{r.get('abstain_reason')} at {r.get('top_relevance')}")
+    again = call("POST", "/v1/ingest", key, {"items": EPISODES})
+    check("a re-send changes nothing", again["queued"] == 0 and all(i["outcome"] == "unchanged" for i in again["items"]))
+    call("POST", "/v1/ingest", key, {"items": [UPDATE]})
+    wait_synthesized(key)
+    mems = call("GET", "/v1/memories", key) or []
+    old = [m for m in mems if "5544" in m["statement"] and "6432" not in m["statement"]]
+    check("the contradiction supersedes the old value", bool(old) and all(m["status"] == "superseded" for m in old),
+          ", ".join(m["status"] for m in old) or "old value missing")
+
+    print("== 3. the briefing", flush=True)
+    r = recall(key, DB_QUESTION)
+    briefing_checks(r, "port question")
+    (HERE / "check-briefing.txt").write_text(r["briefing"])
+
+    if not args.skip_agent:
+        print("== 4. a fresh agent, briefing only", flush=True)
+        r = recall(key, "I need to connect to the muse production database and then ship a deploy. What port, and what is the deploy command?")
+        answer = fresh_agent(r["briefing"])
+        check("the fresh agent uses the current port", "6432" in answer, answer.replace("\n", " ")[:160])
+        check("the fresh agent uses the deploy command", "make deploy ENV=prod" in answer)
+
+    if args.agent_e2e:
+        from agent_e2e import run_section
+
+        run_section(call, check, key, PORT, wait_synthesized, HERE)
 
 
 if __name__ == "__main__":
