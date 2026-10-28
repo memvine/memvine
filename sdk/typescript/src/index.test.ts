@@ -74,3 +74,23 @@ test("history and the events feed call their routes", async () => {
 test("refuses to construct without a key", () => {
   assert.throws(() => new Memvine({ apiKey: "" }));
 });
+
+test("profiles: a person's, the project's, and recall that asks for them", async () => {
+  const calls: { url: string; body: unknown }[] = [];
+  const fake = (async (url: URL, init: RequestInit) => {
+    calls.push({ url: String(url), body: init.body ? JSON.parse(String(init.body)) : undefined });
+    const path = new URL(String(url)).pathname;
+    const profile = { subject_kind: "person", subject: "priya@northwind.dev", lines: [{ text: "Prefers async review.", memory_ids: ["m-1"] }],
+      description: null, text: "=== memvine · about priya@northwind.dev ===\n- Prefers async review.", tokens: 12, dirty: false, built_at: null };
+    const body = path === "/v1/profiles" ? [profile] : path === "/v1/profiles/project" ? { ...profile, subject_kind: "project", subject: "" }
+      : { briefing: "", abstained: true, profiles: profile.text, profile_tokens: 12 };
+    return new Response(JSON.stringify(body), { status: 200 });
+  }) as unknown as typeof fetch;
+  const mv = new Memvine({ apiKey: "mv_sk_x", baseUrl: "http://memvine.test", fetch: fake });
+  assert.equal((await mv.profile("priya@northwind.dev")).lines[0].memory_ids[0], "m-1");
+  assert.equal(calls[0].url, "http://memvine.test/v1/profiles?subject_kind=person&subject=priya%40northwind.dev");
+  assert.equal((await mv.projectProfile()).subject_kind, "project");
+  const r = await mv.recall("start", { identity: "priya@northwind.dev", profiles: true });
+  assert.equal((calls[2].body as { profiles: boolean }).profiles, true);
+  assert.match(r.profiles ?? "", /about priya/);
+});

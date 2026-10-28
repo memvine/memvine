@@ -42,6 +42,8 @@ class Recall:
     threads: list[dict] = field(default_factory=list)
     passages: list[dict] = field(default_factory=list)
     pending: list[dict] = field(default_factory=list)
+    profiles: str = ""  # with profiles=True: the person and project profiles, as a brief shows them
+    profile_tokens: int = 0
 
     def __str__(self) -> str:
         return self.briefing
@@ -98,16 +100,27 @@ class Memvine:
     def recall(self, query: str, *, budget: int | None = None, identity: str | None = None,
                as_of: datetime | str | None = None, session_id: str | None = None,
                include_history: bool | None = None, exclude: list[str] | None = None, include: dict | None = None,
-               branch: str | None = None) -> Recall:
+               branch: str | None = None, profiles: bool | None = None) -> Recall:
         """include={"related": True}: each item lists its edges in item["related"], as
-        {kind, direction, id, statement} (at most 6)."""
+        {kind, direction, id, statement} (at most 6). profiles=True (a session-start brief): also the
+        person profile of `identity` and the project profile, in .profiles."""
         body = {"query": query, "budget": budget, "identity": identity, "as_of": _iso(as_of), "session_id": session_id,
                 "include_history": include_history, "exclude": exclude or [], "branch": branch,
-                "include": include}
+                "include": include, "profiles": profiles}
         data = self._call("POST", "/v1/recall", {k: v for k, v in body.items() if v is not None})
         return Recall(**{k: data.get(k, default) for k, default in
                          (("briefing", ""), ("tokens", 0), ("abstained", True), ("items", []), ("standing", []),
-                          ("threads", []), ("passages", []), ("pending", []))})
+                          ("threads", []), ("passages", []), ("pending", []), ("profiles", ""), ("profile_tokens", 0))})
+
+    def profile(self, identity: str) -> dict | None:
+        """A person's profile: {"subject_kind", "subject", "lines": [{"text", "memory_ids"}], "text",
+        "tokens", "dirty", "built_at"}. Derived from memory; the first ask queues its first build."""
+        found = self._call("GET", "/v1/profiles", params={"subject_kind": "person", "subject": identity})
+        return found[0] if found else None
+
+    def project_profile(self) -> dict:
+        """The project profile: its description, standing rules and most durable decisions."""
+        return self._call("GET", "/v1/profiles/project")
 
     def remember(self, statement: str, *, kind: str | None = None, subjects: list[str] | None = None,
                  assertion: str = "stated", audience: str | None = None, standing: bool | None = None,

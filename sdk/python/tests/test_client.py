@@ -68,3 +68,24 @@ def test_history_and_events_requests():
                        "&memory_id=m-1&limit=20&cursor=c0")
     assert seen[2] == "http://memvine.test/v1/events?kind=stale"
     assert seen[3:] == ["http://memvine.test/v1/events?limit=1", "http://memvine.test/v1/events?limit=1&cursor=c1"]
+
+
+def test_profiles():
+    seen = []
+    profile = {"subject_kind": "person", "subject": "priya@northwind.dev", "lines": [{"text": "Prefers async review.", "memory_ids": ["m-1"]}],
+               "text": "=== memvine · about priya@northwind.dev ===\n- Prefers async review.", "tokens": 12, "dirty": False, "built_at": None}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, str(request.url), json.loads(request.content) if request.content else None))
+        if request.url.path == "/v1/profiles":
+            return httpx.Response(200, json=[profile])
+        if request.url.path == "/v1/profiles/project":
+            return httpx.Response(200, json={**profile, "subject_kind": "project", "subject": ""})
+        return httpx.Response(200, json={"briefing": "", "tokens": 0, "abstained": True, "profiles": profile["text"], "profile_tokens": 12})
+
+    mv = Memvine("mv_sk_x", http=httpx.Client(base_url="http://memvine.test", transport=httpx.MockTransport(handler)))
+    assert mv.profile("priya@northwind.dev")["lines"][0]["memory_ids"] == ["m-1"]
+    assert seen[0][1] == "http://memvine.test/v1/profiles?subject_kind=person&subject=priya%40northwind.dev"
+    assert mv.project_profile()["subject_kind"] == "project"
+    r = mv.recall("start", identity="priya@northwind.dev", profiles=True)
+    assert seen[2][2]["profiles"] is True and "about priya" in r.profiles and r.profile_tokens == 12

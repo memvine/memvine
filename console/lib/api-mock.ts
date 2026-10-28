@@ -10,7 +10,7 @@ import { BUILTIN_CATEGORIES, INSTANT_MAX_CHARS, MAX_PROJECT_CATEGORIES } from ".
 
 const CATEGORY_SLUG = /^[a-z0-9-]{2,24}$/;
 import type {
-  ApiKey, Episode, EpisodeSummary, EventPage, GraphQuery, MemoryEventItem, SynthesisHealth, SynthesisIssue, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project, RecallResult, SampleResult, ThreadDetail, ThreadSummary,
+  ApiKey, Episode, EpisodeSummary, EventPage, GraphQuery, MemoryEventItem, Profile, SynthesisHealth, SynthesisIssue, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project, RecallResult, SampleResult, ThreadDetail, ThreadSummary,
 } from "./types";
 
 function threadSummary(data: ProjectData, t: MockThread): ThreadSummary {
@@ -130,6 +130,31 @@ const HISTORY_WORDS = /\b(was|were|before|previous|previously|changed|history|us
 const STOP = new Set(["the", "a", "an", "is", "are", "what", "when", "who", "how", "do", "does", "we", "our", "of", "to", "for", "in", "on", "and", "or", "it", "this", "that"]);
 const terms = (text: string) => text.toLowerCase().split(/[^a-z0-9$#-]+/).filter((t) => t.length > 1 && !STOP.has(t));
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+/** A profile as the server would build it, derived from the mock's memories: their statements stand
+ *  in for the model's restatement (each line cites the one memory it came from). */
+function mockProfile(slug: string, subjectKind: "person" | "project", subject: string): Profile {
+  const data = projectData(slug);
+  const project = store().projects.find((p) => p.slug === slug);
+  const current = data.memories.filter((m) => (m.status === "active" || m.status === "stale") && !m.expired && m.audience === "project"
+    && m.scope !== "thread" && m.kind !== "episodic" && m.kind !== "prospective");
+  const durable = (m: MemoryItem) => m.kind === "preference" || ["preference", "rule", "decision"].includes(m.category ?? "");
+  let picked: MemoryItem[];
+  if (subjectKind === "person") {
+    const name = subject.split("@")[0].split(/[._-]/)[0];
+    const named = name.length >= 3 ? new RegExp(`\\b${name}\\b`, "i") : null;
+    picked = current.filter((m) => (durable(m) && m.evidence.some((e) => e.identity === subject)) || (named && named.test(m.statement))).slice(0, 6);
+  } else {
+    picked = current.filter((m) => m.category === "rule" || m.category === "decision")
+      .sort((a, b) => Number(b.category === "rule") - Number(a.category === "rule")).slice(0, 7);
+  }
+  const lines = picked.map((m) => ({ text: m.statement + (m.status === "stale" ? " (may be outdated)" : ""), memoryIds: [m.id] }));
+  const description = subjectKind === "project" ? project?.description ?? null : null;
+  const body = [...(description ? [`- ${description}`] : []), ...lines.map((l) => `- ${l.text}`)];
+  const head = subjectKind === "person" ? `=== memvine · about ${subject} ===` : "=== memvine · this project ===";
+  const text = body.length ? [head, ...body].join("\n") : "";
+  return { subjectKind, subject, lines, description, text, tokens: Math.ceil(text.length / 4), dirty: false, builtAt: "2026-10-27T09:00:00Z" };
+}
 
 export const mockApi: MemvineApi = {
   async listProjects() {
@@ -319,6 +344,18 @@ export const mockApi: MemvineApi = {
   },
   async listIdentities(project) {
     return projectData(project).identities;
+  },
+  async listProfiles(project) {
+    return [mockProfile(project, "project", ""), ...projectData(project).identities.map((i) => mockProfile(project, "person", i.identity))];
+  },
+  async getProfile(project, identity) {
+    return mockProfile(project, "person", identity);
+  },
+  async getProjectProfile(project) {
+    return mockProfile(project, "project", "");
+  },
+  async rebuildProfiles(project, target) {
+    return target ? 1 : 1 + projectData(project).identities.length;
   },
   async putIdentity(project, identity, traits) {
     const data = projectData(project);

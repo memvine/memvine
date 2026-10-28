@@ -23,6 +23,7 @@ export const EVENT_LABEL: Record<MemoryEventKind, string> = {
   refused: "Not learned again",
   deleted: "Deleted with its source",
   project_settings: "Memory rules changed",
+  profile_rebuilt: "Profile rebuilt",
 };
 
 /** Events that end or question a memory's currency, drawn in the warning color. */
@@ -49,6 +50,9 @@ export function eventNote(e: MemoryEventItem): string | null {
   if (e.kind === "project_settings") {
     if (d.field === "memory_instructions") return `instructions ${d.after_len ? `set (${d.after_len} characters)` : "cleared"}`;
     if (d.field === "category") return `category ${d.slug} ${d.action}`;
+  }
+  if (e.kind === "profile_rebuilt") {
+    return `${d.subject_kind === "project" ? "the project" : String(d.subject)}: ${d.lines} line${d.lines === 1 ? "" : "s"} from ${d.from_memories} memor${d.from_memories === 1 ? "y" : "ies"}`;
   }
   if (e.kind === "category_changed") return `${d.before ?? "none"} → ${d.after ?? "none"}`;
   if (e.kind === "restated" && typeof d.confidence === "string") return `confidence now ${d.confidence}`;

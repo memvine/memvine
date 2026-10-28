@@ -257,6 +257,24 @@ API: `PATCH /v1/projects/{slug}` with `memory_instructions`, and `/v1/projects/{
 
 Neither changes what is already stored; they apply to sources synthesized from then on.
 
+### Profiles
+
+A profile is a short summary of one person or of the project, derived from memory and never a
+source of its own (`profiles.py`). The fast model restates a handful of current, project-visible
+memories, and each line cites the memories it came from; a line citing nothing, a memory it was not
+given, or a number none of its memories has is dropped.
+
+- **Person** (by identity, ≤6 lines, ≤150 tokens): the preferences, rules and decisions in sources
+  they said, and memories that name them (what they own, decide or prefer).
+- **Project** (≤8 lines, ≤200 tokens): the description from settings, then standing rules and the
+  most durable decisions.
+
+The session-start brief opens with the caller's profile and the project's (`/v1/recall` with
+`profiles: true`, and the post-compaction brief); recall for each prompt does not repeat them.
+Serving re-checks every citation, so forgetting or replacing a memory takes its line out at once;
+the worker marks profiles dirty from the events log and rebuilds a dirty one at most every ten
+minutes. Console: People, and the project profile on Home.
+
 ## Forgetting
 
 Memory forgets in four ways:

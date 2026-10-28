@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   Activity, BookMarked, Brain, ChartColumn, ChevronsUpDown, Cog, FileText, FolderKanban, History, KeyRound,
-  House, LogOut, Menu, MessageCircleQuestion, MessagesSquare, Plug, PlugZap, Settings, Users, Waypoints, X,
+  House, LogOut, Menu, MessageCircleQuestion, MessagesSquare, Plug, PlugZap, Settings, UserRound, Users, Waypoints, X,
 } from "lucide-react";
 import { switchProject } from "@/app/actions";
 import type { Project } from "@/lib/types";
@@ -18,6 +18,7 @@ const NAV: { group: string; items: { href: string; label: string; icon: Icon }[]
     { href: "/threads", label: "Threads", icon: Waypoints },
     { href: "/knowledge", label: "Knowledge", icon: BookMarked },
     { href: "/memories", label: "Memories", icon: Brain },
+    { href: "/people", label: "People", icon: UserRound },
     { href: "/sessions", label: "Sessions", icon: MessagesSquare },
     { href: "/sources", label: "Sources", icon: FileText },
   ] },

@@ -71,7 +71,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
                 <Td className="max-w-0">
                   {e.memoryId && e.statement ? (
                     <Link href={href("/memories", { open: e.memoryId })} className="block truncate text-text hover:underline" title={e.statement}>{e.statement}</Link>
-                  ) : <span className="text-text-3">{e.kind === "project_settings" ? "this project's memory rules" : "a memory since deleted"}</span>}
+                  ) : <span className="text-text-3">{e.kind === "project_settings" ? "this project's memory rules" : e.kind === "profile_rebuilt" ? "a profile, rebuilt from memory" : "a memory since deleted"}</span>}
                   {note && <p className="mt-0.5 truncate text-[12px] text-text-3" title={note}>{note}</p>}
                 </Td>
                 <Td nowrap className="max-w-[200px] truncate">{actorLabel(e.actor)}</Td>

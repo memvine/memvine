@@ -2,7 +2,7 @@
 // memvine-claude-code/<v> and memvine-codex/<v>; the SDKs memvine-sdk-ts/<v> and memvine-sdk-python/<v>.
 
 /** The Claude Code plugin's current version (plugins/claude-code/.claude-plugin/plugin.json). */
-export const PLUGIN_VERSION = "0.7.1";
+export const PLUGIN_VERSION = "0.7.2";
 
 const CLIENTS: Record<string, string> = {
   "memvine-claude-code": "Claude Code plugin",

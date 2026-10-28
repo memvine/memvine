@@ -21,6 +21,7 @@ from .extraction.extract import parse_json
 from .extraction.llm import LLM, LLMError, fast
 from .extraction.prompts import SESSION_STATE_SYSTEM, session_state_user
 from .models import KeptMemory, RecallRequest, SessionEventsRequest, SessionKept, SessionOut, SessionState
+from .profiles import brief_sections
 from .recall import KIND_WORD, STANDING_HEADER, recall
 
 STATE_TURNS_WINDOW = 24  # turns handed to the state pass, besides the previous state
@@ -170,9 +171,13 @@ def render_state(session: SessionOut) -> str:
 
 
 async def brief(conn, embedder: Embedder, project_id: UUID, session: SessionOut, budget: int) -> tuple[str, int]:
-    """The session's state, then long-term memory relevant to its goal within the remaining budget."""
+    """The session's state, then who the caller is and what the project is (profiles), then
+    long-term memory relevant to its goal within the remaining budget."""
     text = render_state(session)
     spent = max(1, len(text) // 4)
+    about, about_tokens = await brief_sections(conn, project_id, session.identity)
+    if about and spent + about_tokens <= budget:
+        text, spent = f"{text}\n\n{about}", spent + about_tokens
     query = " ".join([session.state.goal, *session.state.in_play[:3], *session.open_questions_for_recall()]) if session.state.goal else ""
     if query.strip() and budget - spent > 200:
         audiences = await audiences_for(conn, project_id, session.identity) if session.identity else ["project"]

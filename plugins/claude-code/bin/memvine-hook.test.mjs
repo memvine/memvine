@@ -260,7 +260,9 @@ test("session start shows what the previous session kept once tended; forget ret
         res.end(JSON.stringify({ session_id: "prev", tending, kept, superseded: 1, contradictions: 0,
           summary: "Memory kept 1 decision and 1 gotcha; 1 fact superseded." }));
       } else if (req.url.startsWith("/v1/recall")) {
-        res.end(JSON.stringify({ briefing: "=== memvine · recalled ===\n[decision 15 Oct, supersedes 6 Oct] Launch is 12 Nov", abstained: false }));
+        const asked = body ? JSON.parse(body) : {};
+        res.end(JSON.stringify({ briefing: "=== memvine · recalled ===\n[decision 15 Oct, supersedes 6 Oct] Launch is 12 Nov", abstained: false,
+          profiles: asked.profiles ? "=== memvine · about you ===\n- Prefers async review." : "" }));
       } else if (req.method === "PATCH") {
         res.end(JSON.stringify({ id: req.url.split("/").pop(), statement: "Retries cap at 3 in src/queue.py.", status: "retired" }));
       } else res.end("{}");
@@ -290,7 +292,9 @@ test("session start shows what the previous session kept once tended; forget ret
     out = JSON.parse(await run(["brief"], start));
     assert.equal(out.systemMessage, 'memvine · last session here: Memory kept 1 decision and 1 gotcha; 1 fact superseded. To undo one, say "forget the last one" (or name it).');
     const context = out.hookSpecificOutput.additionalContext;
-    assert.ok(context.startsWith("=== memvine · recalled ===\n[decision 15 Oct, supersedes 6 Oct] Launch is 12 Nov\nBackground from memvine"), context);
+    // The session-start brief opens with the profiles, then what recall found.
+    assert.ok(context.startsWith("=== memvine · about you ===\n- Prefers async review.\n\n=== memvine · recalled ===\n[decision 15 Oct, supersedes 6 Oct] Launch is 12 Nov\nBackground from memvine"), context);
+    assert.equal(seen.find((s) => s.url === "/v1/recall").body.profiles, true);
     assert.match(context, /\n1\. \[decision\] Launch is 12 Nov \(superseded: Launch is 29 Oct\)\n2\. \[gotcha\] Retries cap at 3 in src\/queue\.py\n/);
     assert.match(context, /"forget the last one" is number 2\), run `node ".*memvine-hook\.mjs" forget <number>`/);
 
