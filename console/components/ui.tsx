@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { ChevronDown, Search, SlidersHorizontal } from "lucide-react";
-import type { Assertion, KnowledgeCategory, MemoryStatus, ThreadKind, ThreadStatus } from "@/lib/types";
+import type { Assertion, BuiltinCategory, KnowledgeCategory, MemoryStatus, ThreadKind, ThreadStatus } from "@/lib/types";
 
 export type Icon = ComponentType<{ className?: string; strokeWidth?: number; "aria-hidden"?: boolean }>;
 
@@ -133,15 +133,22 @@ export function ThreadStatusBadge({ status }: { status: ThreadStatus }) {
   return <Badge tone={threadTone[status]} dot>{status}</Badge>;
 }
 
-export const CATEGORY_LABEL: Record<KnowledgeCategory, { one: string; many: string }> = {
+export const CATEGORY_LABEL: Record<BuiltinCategory, { one: string; many: string }> = {
   decision: { one: "Decision", many: "Decisions" },
   rule: { one: "Rule", many: "Rules" },
   gotcha: { one: "Gotcha", many: "Gotchas" },
   fact: { one: "Fact", many: "Facts" },
   preference: { one: "Preference", many: "Preferences" },
 };
+/** The label of a built-in category, or of one of the project's own (its name when known, else its slug title-cased). */
+export function categoryLabel(category: KnowledgeCategory, custom: { slug: string; name: string }[] = [], plural = false): string {
+  const builtin = (CATEGORY_LABEL as Record<string, { one: string; many: string } | undefined>)[category];
+  if (builtin) return plural ? builtin.many : builtin.one;
+  const name = custom.find((c) => c.slug === category)?.name ?? category.replace(/-/g, " ").replace(/^./, (ch) => ch.toUpperCase());
+  return name;
+}
 export function CategoryBadge({ category }: { category: KnowledgeCategory }) {
-  return <Badge tone="outline">{CATEGORY_LABEL[category].one}</Badge>;
+  return <Badge tone="outline">{categoryLabel(category)}</Badge>;
 }
 
 export const THREAD_KIND_LABEL: Record<ThreadKind, string> = { release: "Release", task: "Task", pr: "Pull request", ticket: "Ticket", topic: "Topic" };

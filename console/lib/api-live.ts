@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { forwarded } from "./forwarded";
 import { buildGraph, relatedFromDetail } from "./graph";
 import type {
+  ProjectCategory,
   AddResult, ApiKey, Audience, EdgeDirection, EdgeKind, GraphEdge, GraphFile, GraphNode, MemoryGraph, MemoryRelated, RelatedEdge, RelatedRef, RelatedThread, AuditEvent, Invite, Role, Episode, Identity, OrgInfo, OrgKey, OrgSummary, SessionSummary, EpisodeSummary, Member, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project,
   RecallResult, RequestLog, SampleResult, SynthesisHealth, SynthesisIssue, ThreadDetail, ThreadSummary, UsageDay,
 } from "./types";
@@ -128,7 +129,11 @@ interface ServerProject {
   key_count: number; last_activity_at: string | null; monthly_credit_cap: string | null; retention_days: number | null;
   month_credits: string; recall_min_relevance?: number | null; recall_half_life_days?: number | null; sample_source_count?: number;
   description?: string | null; unused_count?: number; unused_days?: number; review_count?: number;
+  memory_instructions?: string | null; categories?: ServerCategory[];
 }
+
+interface ServerCategory { slug: string; name: string; description: string; created_at: string }
+const toCategory = (c: ServerCategory): ProjectCategory => ({ slug: c.slug, name: c.name, description: c.description ?? "", createdAt: c.created_at });
 
 const toProject = (p: ServerProject): Project => ({
   slug: p.slug, name: p.name, createdAt: p.created_at, tags: p.tags ?? [], memoryCount: Number(p.memory_count),
@@ -142,6 +147,8 @@ const toProject = (p: ServerProject): Project => ({
   unusedCount: Number(p.unused_count ?? 0),
   unusedDays: Number(p.unused_days ?? 60),
   reviewCount: Number(p.review_count ?? 0),
+  memoryInstructions: p.memory_instructions ?? null,
+  categories: (p.categories ?? []).map(toCategory),
 });
 
 // ---- the memory graph (server/memvine_server/edges.py): GET /v1/graph, GET /v1/memories/{id}/related
@@ -218,7 +225,17 @@ export const liveApi: MemvineApi = {
     if (patch.retentionDays !== undefined) body.retention_days = patch.retentionDays;
     if (patch.recallMinRelevance !== undefined) body.recall_min_relevance = patch.recallMinRelevance;
     if (patch.recallHalfLifeDays !== undefined) body.recall_half_life_days = patch.recallHalfLifeDays;
+    if (patch.memoryInstructions !== undefined) body.memory_instructions = patch.memoryInstructions;
     await call(`/v1/projects/${slug}`, { method: "PATCH", body });
+  },
+  async createCategory(project, category) {
+    return toCategory(await call<ServerCategory>(`/v1/projects/${project}/categories`, { method: "POST", body: category }));
+  },
+  async updateCategory(project, slug, patch) {
+    await call(`/v1/projects/${project}/categories/${encodeURIComponent(slug)}`, { method: "PATCH", body: patch });
+  },
+  async deleteCategory(project, slug) {
+    await call(`/v1/projects/${project}/categories/${encodeURIComponent(slug)}`, { method: "DELETE" });
   },
   async deleteProject(slug) {
     await call(`/v1/projects/${slug}?confirm=${encodeURIComponent(slug)}`, { method: "DELETE" });

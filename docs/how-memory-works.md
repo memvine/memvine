@@ -238,6 +238,25 @@ it is restated, with each restatement's quote kept as evidence. Progress is refu
 and the State and Next steps items it leaves on a thread page are dropped when the page is next
 rewritten, if their newest source is more than 30 days older than the one being written.
 
+### Per-project memory rules
+
+A project's owners and admins can adjust what its memory keeps (console: Settings → Memory rules;
+API: `PATCH /v1/projects/{slug}` with `memory_instructions`, and `/v1/projects/{slug}/categories`):
+
+- **Instructions** (up to 1,500 characters), e.g. "Also keep: on-call runbook steps. Never keep:
+  customer names." They go into the knowledge prompt's user message as a `<project_instructions>`
+  block: "never keep X" is followed strictly; "also keep Y" makes Y count as mattering beyond the
+  task (the first test), but an item must still pass the other two. They cannot switch off the three
+  tests or the never-memory list (secrets, progress, run trivia, descriptions of code). Thread pages
+  get the same text, but there only what it says to leave out applies.
+- **Categories** (up to five, slug `[a-z0-9-]{2,24}`, not a built-in): listed with their
+  descriptions in an `<extra_categories>` block; the model may file an item under one instead of a
+  built-in. They behave like a fact (kind semantic). In a project with categories of its own, a
+  category the model invents is stored as `fact`. Deleting a category leaves the memories filed
+  under it as they are.
+
+Neither changes what is already stored; they apply to sources synthesized from then on.
+
 ## Forgetting
 
 Memory forgets in four ways:

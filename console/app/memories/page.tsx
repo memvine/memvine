@@ -3,10 +3,10 @@ import { MemoryDrawer } from "@/components/MemoryPanel";
 import { ReceiptList } from "@/components/Receipt";
 import { SampleOffer } from "@/components/SampleData";
 import {
-  Card, FilterBar, PageHeader, SearchField, Select,
+  Card, categoryLabel, FilterBar, PageHeader, SearchField, Select,
 } from "@/components/ui";
 import { currentProject, getMemory, listMemories, listThreads } from "@/lib/api";
-import type { MemoryKind, MemoryStatus } from "@/lib/types";
+import { BUILTIN_CATEGORIES, type KnowledgeCategory, type MemoryKind, type MemoryStatus } from "@/lib/types";
 import { href } from "@/lib/url";
 
 const KINDS: MemoryKind[] = ["semantic", "episodic", "procedural", "prospective", "preference"];
@@ -19,15 +19,18 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const unused = params.unused === "true" ? "true" : undefined;
   const review = params.review === "new" ? "new" as const : undefined;
   const project = await currentProject();
+  const custom = project.categories ?? [];
+  const categories: KnowledgeCategory[] = [...BUILTIN_CATEGORIES, ...custom.map((c) => c.slug)];
+  const category = categories.find((c) => c === params.category);
   const unusedDays = project.unusedDays ?? 60;
   const [memories, all, threads, detail] = await Promise.all([
-    listMemories(project.slug, { q: params.q, kind, status, unused: Boolean(unused), review }),
-    params.q || kind || status || unused || review ? listMemories(project.slug) : null,
+    listMemories(project.slug, { q: params.q, kind, status, category, unused: Boolean(unused), review }),
+    params.q || kind || status || category || unused || review ? listMemories(project.slug) : null,
     listThreads(project.slug),
     params.open ? getMemory(project.slug, params.open) : null,
   ]);
-  const filtered = Boolean(params.q || kind || status || unused || review);
-  const base = { q: params.q, kind, status, unused, review };
+  const filtered = Boolean(params.q || kind || status || category || unused || review);
+  const base = { q: params.q, kind, status, category, unused, review };
   const link = (id: string) => href("/memories", { ...base, open: id });
   const total = all?.length ?? memories.length;
 
@@ -45,6 +48,10 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
         <Select name="kind" defaultValue={kind ?? ""} aria-label="Kind" wrapperClassName="w-[150px]" className="h-9">
           <option value="">All kinds</option>
           {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+        </Select>
+        <Select name="category" defaultValue={category ?? ""} aria-label="Category" wrapperClassName="w-[160px]" className="h-9">
+          <option value="">Any category</option>
+          {categories.map((c) => <option key={c} value={c}>{categoryLabel(c, custom)}</option>)}
         </Select>
         <Select name="status" defaultValue={status ?? ""} aria-label="Status" wrapperClassName="w-[140px]" className="h-9">
           <option value="">Any status</option>
@@ -77,7 +84,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
           reviewing={Boolean(review)}
           empty={
             <div className="px-5 py-14 text-center text-[13px] text-text-3">
-              {review && !params.q && !kind && !status && !unused ? "Nothing to review: every current memory has been kept or forgotten." : filtered ? "No memories match these filters." : (
+              {review && !params.q && !kind && !status && !category && !unused ? "Nothing to review: every current memory has been kept or forgotten." : filtered ? "No memories match these filters." : (
                 <div className="flex flex-col items-center gap-4">
                   <p>No memories yet. They appear a minute or two after the first conversation is sent, or load a sample to try recall right now.</p>
                   {project.sourceCount === 0 && <SampleOffer />}

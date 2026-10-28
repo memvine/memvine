@@ -9,7 +9,7 @@ import { Archive, Check, CircleAlert, RotateCcw, X } from "lucide-react";
 import { correctMemory, forgetMemory, stillTrue, type ReceiptState } from "@/app/actions";
 import type { MemoryItem } from "@/lib/types";
 import { trustWords } from "@/lib/trust";
-import { button, CATEGORY_LABEL, cx, FormError, inputClass, shortDate } from "./ui";
+import { button, categoryLabel, cx, FormError, inputClass, shortDate } from "./ui";
 
 export interface ReceiptProps {
   m: MemoryItem;
@@ -91,7 +91,7 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
       <div className="flex flex-col gap-1 @md:flex-row @md:items-start @md:gap-4">
         <div className="min-w-0 flex-1">
           {showCategory && (
-            <span className="mb-0.5 block text-[11px] font-medium uppercase tracking-[0.06em] text-text-3">{m.category ? CATEGORY_LABEL[m.category].one : m.kind}</span>
+            <span className="mb-0.5 block text-[11px] font-medium uppercase tracking-[0.06em] text-text-3">{m.category ? categoryLabel(m.category) : m.kind}</span>
           )}
           {href ? (
             <p className={statementCls}><Link href={href} scroll={false} className="decoration-text-3/60 underline-offset-2 hover:underline">{m.statement}</Link></p>

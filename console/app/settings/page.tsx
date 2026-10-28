@@ -5,7 +5,8 @@ import { changeRole, createOrg, createOrgKey, removeMember, revokeInvite, revoke
 import {
   Badge, button, Card, CardBody, formatDate, Mono, PageHeader, Select, Table, TableEmpty, TBody, Td, Th, THead, timeAgo, Tr,
 } from "@/components/ui";
-import { listAudit, listInvites, listMembers, listOrgKeys, listOrgs, listProjects, orgInfo } from "@/lib/api";
+import { currentProject, listAudit, listInvites, listMembers, listOrgKeys, listOrgs, listProjects, orgInfo } from "@/lib/api";
+import { CategoriesEditor, InstructionsForm } from "./MemoryRules";
 import { InviteForm, PasswordForm } from "./PeopleForms";
 import { SecretForm } from "./SecretForm";
 
@@ -22,7 +23,7 @@ function Section({ id, title, description, children }: { id: string; title: stri
 }
 
 export default async function SettingsPage() {
-  const [info, projects] = await Promise.all([orgInfo(), listProjects()]);
+  const [info, projects, project] = await Promise.all([orgInfo(), listProjects(), currentProject()]);
   const manager = info.operator || info.role === "owner" || info.role === "admin";
   const [keys, orgs, members, invites, audit] = await Promise.all([
     info.operator || !manager ? [] : listOrgKeys(),
@@ -70,6 +71,22 @@ export default async function SettingsPage() {
                   <p className="mb-2 text-[12.5px] font-medium text-text-2">Change password</p>
                   <PasswordForm />
                 </div>
+              </CardBody>
+            </Card>
+          </Section>
+        )}
+
+        {project.slug && (
+          <Section
+            id="memory-rules"
+            title={`Memory rules · ${project.name}`}
+            description={<>What memory keeps for this project, on top of the built-in rules. They apply to conversations synthesized from now on; switch project in the header to edit another.{!manager && " Only owners and admins can change them."}</>}
+          >
+            <Card>
+              <CardBody className="space-y-6">
+                {/* key: another project resets the field */}
+                <InstructionsForm key={project.slug} value={project.memoryInstructions ?? ""} canEdit={manager} />
+                <CategoriesEditor categories={project.categories ?? []} canEdit={manager} />
               </CardBody>
             </Card>
           </Section>
