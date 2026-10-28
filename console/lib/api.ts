@@ -119,6 +119,7 @@ export const getRelated = forward("getRelated", null);
 export const getGraph = forward("getGraph", { nodes: [], edges: [], since: null, truncated: false });
 export const correctMemory = forward("correctMemory");
 export const confirmMemory = forward("confirmMemory");
+export const dismissFlag = forward("dismissFlag");
 export const listEpisodes = forward("listEpisodes", []);
 export const getEpisode = forward("getEpisode", null);
 export const retryJob = forward("retryJob");

@@ -46,7 +46,7 @@ OUTDATED = " (may be outdated)"
 # Events that can change what a profile should say. 'expired' is never stored: a cited memory past
 # its valid_to is caught by the citation check instead.
 RELEVANT_KINDS = ["created", "superseded", "supersedes", "forgotten", "confirmed", "restored", "corrected",
-                  "merged", "stale", "revalidated", "category_changed", "contradicted", "extended", "deleted"]
+                  "merged", "unmerged", "stale", "revalidated", "category_changed", "contradicted", "extended", "deleted"]
 CURRENT = f"status IN ('active', 'stale') AND {NOT_EXPIRED}"
 CURRENT_M = "m.status IN ('active', 'stale') AND (m.valid_to IS NULL OR m.valid_to > now())"
 

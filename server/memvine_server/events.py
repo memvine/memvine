@@ -8,7 +8,7 @@ the same transaction as the change. Writers pass who acted (`actor`):
 - 'key:<name>': a project key (an agent plugin, an SDK, MCP), an organization key, or
   'key:operator' for the operator key;
 - 'system': the server on its own (code staleness, a source deleted, the sample, backfill);
-- 'consolidation': the background consolidation job (future).
+- 'consolidation': the background consolidation job (consolidation.py).
 
 Events hold ids, kinds, actors and small details, never customer text: evidence quotes and the
 statements of related memories are joined when history is read (`history`), so deleting a source
@@ -40,6 +40,9 @@ KINDS = (
     "expired",        # past its valid_to (computed on read, never stored)
     "corrected",      # on the old item: a person said it is wrong; detail.by is the correction
     "merged",         # consolidation: detail.into (on the merged-away item) / detail.from (on the kept one)
+    "unmerged",       # a merged-away item made current again: detail.from (on it) / detail.related (on the kept one)
+    "flagged",        # consolidation flagged it for a person: detail.flag, detail.related (no reason text)
+    "unflagged",      # its flag was dismissed or cleared (detail.flag, detail.reason: dismissed | kept)
     "anchored",       # tied to the code files it names (detail.files)
     "stale",          # its anchored code changed (detail.reason)
     "revalidated",    # stale no more: code matches again, restated, or confirmed

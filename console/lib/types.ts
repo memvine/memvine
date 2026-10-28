@@ -35,6 +35,11 @@ export interface Project {
   memoryInstructions?: string | null;
   /** The project's own categories (at most five), besides the built-ins. */
   categories?: ProjectCategory[];
+  /** Current memories consolidation flagged for review. */
+  flaggedCount?: number;
+  /** When background consolidation last finished, and what that run did; null before the first run. */
+  consolidatedAt?: string | null;
+  lastConsolidation?: ConsolidationStats | null;
 }
 
 /** A category of the project's own (POST /v1/projects/{slug}/categories): extraction may file a kept item under it. */
@@ -148,6 +153,24 @@ export interface MemoryItem {
   threadId?: string | null;
   /** "new" until a person keeps it (Keep / Still true); synthesis writes "new", a person's own memory starts "kept". */
   review?: "new" | "kept";
+  /** Background consolidation flagged it for a person, with the reason and the other memory it concerns. */
+  flag?: MemoryFlag | null;
+  flagReason?: string | null;
+  flagRelated?: string | null;
+  /** Why a retired memory is retired, and the memory a merged one went into (Restore un-merges it). */
+  retiredReason?: "forgotten" | "merged" | null;
+  mergedInto?: string | null;
+}
+
+/** What consolidation flags for a person: it seems to fail the bar, may repeat another memory, or may be replaced by one. */
+export type MemoryFlag = "no_longer_passes" | "possible_duplicate" | "possible_outdated";
+
+/** What one consolidation run did (GET /v1/projects/{slug}/consolidation-runs, a project's lastConsolidation). */
+export interface ConsolidationStats {
+  merged: number;
+  linked: number;
+  flagged: number;
+  skipped?: string;
 }
 
 export type BuiltinCategory = "decision" | "rule" | "gotcha" | "fact" | "preference";
@@ -412,6 +435,8 @@ export interface MemoryFilter {
   unused?: boolean;
   /** "new": current memories no person has kept yet. */
   review?: "new" | "kept";
+  /** Current memories consolidation flagged ("any": every flag). */
+  flag?: MemoryFlag | "any";
 }
 
 export interface MemoryDetail {
@@ -430,7 +455,7 @@ export interface MemoryDetail {
 export const MEMORY_EVENT_KINDS = [
   "created", "restated", "superseded", "supersedes", "contradicted", "extended", "confirmed", "forgotten", "restored",
   "expired", "corrected", "merged", "anchored", "stale", "revalidated", "category_changed", "refused", "deleted", "project_settings",
-  "profile_rebuilt",
+  "unmerged", "flagged", "unflagged", "profile_rebuilt",
 ] as const;
 export type MemoryEventKind = (typeof MEMORY_EVENT_KINDS)[number];
 
@@ -630,6 +655,8 @@ export interface MemvineApi {
   /** "Wrong": store what is true instead (POST /v1/memories) so it supersedes the old fact. Returns the new fact. */
   correctMemory(project: string, id: string, statement: string): Promise<MemoryItem>;
   confirmMemory(project: string, id: string): Promise<void>;
+  /** Dismiss what consolidation flagged (PATCH {flag: null}); the memory stays as it is. */
+  dismissFlag(project: string, id: string): Promise<void>;
   listEpisodes(project: string): Promise<EpisodeSummary[]>;
   getEpisode(project: string, id: string): Promise<Episode | null>;
   retryJob(project: string, jobId: number): Promise<void>;

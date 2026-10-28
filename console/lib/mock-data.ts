@@ -1,7 +1,7 @@
 // Seed data for the mock backend: two demo projects with realistic memory,
 // sessions, requests and usage. Used until the Memvine server exists.
 import type { FileAnchor, MemoryLink } from "./graph";
-import type { ApiKey, Audience, Episode, Identity, Member, MemoryEventItem, MemoryItem, Project, RequestLog, SessionSummary, ThreadDetail, UsageDay } from "./types";
+import type { ConsolidationStats, ApiKey, Audience, Episode, Identity, Member, MemoryEventItem, MemoryItem, Project, RequestLog, SessionSummary, ThreadDetail, UsageDay } from "./types";
 
 /** A thread as the mock stores it; related threads, knowledge and sources are resolved on read. */
 export interface MockThread extends Omit<ThreadDetail, "related" | "knowledge" | "knowledgeCount" | "sources"> {
@@ -26,6 +26,8 @@ export interface ProjectData {
   links?: MemoryLink[];
   /** Events recorded by the console's own actions; the seed's history is derived from its memories. */
   events?: MemoryEventItem[];
+  /** The last background consolidation (mock: one run, applied when the project is first read). */
+  consolidation?: { at: string; stats: ConsolidationStats };
   sessions: SessionSummary[];
   audiences: Audience[];
   identities: Identity[];

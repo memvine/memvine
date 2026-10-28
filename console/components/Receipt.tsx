@@ -5,8 +5,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Check, CircleAlert, RotateCcw, X } from "lucide-react";
-import { correctMemory, forgetMemory, stillTrue, type ReceiptState } from "@/app/actions";
+import { Archive, Check, CircleAlert, EyeOff, RotateCcw, X } from "lucide-react";
+import { correctMemory, dismissFlag, forgetMemory, stillTrue, type ReceiptState } from "@/app/actions";
 import type { MemoryItem } from "@/lib/types";
 import { trustWords } from "@/lib/trust";
 import { button, categoryLabel, cx, FormError, inputClass, shortDate } from "./ui";
@@ -32,6 +32,13 @@ export interface ReceiptProps {
   className?: string;
 }
 
+/** What background consolidation's flag says, before its reason. */
+const FLAG_TITLE: Record<NonNullable<MemoryItem["flag"]>, string> = {
+  no_longer_passes: "May no longer be worth keeping",
+  possible_duplicate: "May repeat another memory",
+  possible_outdated: "A newer memory may replace it",
+};
+
 function sourceOf(m: MemoryItem): { label: string; href?: string } | null {
   const ids = [...new Set(m.evidence.map((e) => e.episodeId))];
   if (ids.length === 0) return null;
@@ -49,6 +56,7 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
   const [confirmState, confirmAction, confirming] = useActionState<ReceiptState, FormData>(stillTrue, {});
   const [forgetState, forgetAction, forgetting] = useActionState<ReceiptState, FormData>(forgetMemory, {});
   const [wrongState, wrongAction, correcting] = useActionState<ReceiptState, FormData>(correctMemory, {});
+  const [dismissState, dismissAction, dismissing] = useActionState<ReceiptState, FormData>(dismissFlag, {});
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -72,7 +80,9 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
   const live = m.status === "active" || m.status === "stale";
   const quote = m.evidence[0]?.quote;
   const source = sourceOf(m);
-  const error = confirmState.error ?? forgetState.error ?? wrongState.error;
+  const error = confirmState.error ?? forgetState.error ?? wrongState.error ?? dismissState.error;
+  const merged = m.status === "retired" && m.retiredReason === "merged";
+  const flag = live && m.flag ? FLAG_TITLE[m.flag] : null;
   const statementCls = cx(
     size === "lg" ? "text-[15.5px] leading-snug font-medium" : "text-[13.5px] leading-snug",
     faded ? "text-text-3 line-through decoration-text-3/50" : expired ? "text-text-3" : "text-text",
@@ -104,6 +114,12 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
               decided in <Link href={`/threads/${thread.id}`} className="text-text-2 hover:text-text hover:underline">{thread.title}</Link>
             </p>
           )}
+          {flag && (
+            <p className="mt-1 flex items-start gap-1 text-[12px] leading-snug text-warn">
+              <CircleAlert className="mt-px size-3.5 shrink-0" aria-hidden />
+              <span>{flag}{m.flagReason ? `: ${m.flagReason}` : ""}</span>
+            </p>
+          )}
           {m.status === "stale" && (
             <p className="mt-1 inline-flex items-center gap-1 text-[12px] text-warn">
               <CircleAlert className="size-3.5 shrink-0" aria-hidden /> May be outdated{m.staleReason ? `: ${m.staleReason}` : ""}
@@ -121,7 +137,7 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
             </>
           )}
           {m.status === "superseded" && <span className="block">superseded {m.validTo ? shortDate(m.validTo) : ""}</span>}
-          {m.status === "retired" && <span className="block">forgotten</span>}
+          {m.status === "retired" && <span className="block">{merged ? "merged into another memory" : "forgotten"}</span>}
           {expired && <span className="block">Expired {m.validTo ? shortDate(m.validTo) : ""}</span>}
         </p>
       </div>
@@ -157,13 +173,24 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
                         <Archive aria-hidden /> {forgetting ? "Forgetting…" : "Forget"}
                       </button>
                     </form>
+                    {flag && (
+                      <form action={dismissAction}>
+                        <input type="hidden" name="id" value={m.id} />
+                        <button type="submit" disabled={dismissing} className={button("ghost", "sm")} title="It is fine as it is: clear the flag, change nothing else">
+                          <EyeOff aria-hidden /> {dismissing ? "Dismissing…" : "Dismiss"}
+                        </button>
+                      </form>
+                    )}
                   </>
                 )}
                 {m.status === "retired" && (
                   <form action={forgetAction}>
                     <input type="hidden" name="id" value={m.id} />
                     <input type="hidden" name="restore" value="1" />
-                    <button type="submit" disabled={forgetting} className={button("secondary", "sm")}><RotateCcw aria-hidden /> Restore</button>
+                    <button type="submit" disabled={forgetting} className={button("secondary", "sm")}
+                            title={merged ? "Un-merge: make it a memory of its own again" : undefined}>
+                      <RotateCcw aria-hidden /> {merged ? "Un-merge" : "Restore"}
+                    </button>
                   </form>
                 )}
               </div>

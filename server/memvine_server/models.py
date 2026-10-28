@@ -80,6 +80,9 @@ class Evidence(BaseModel):
     identity: str | None = None  # who said it: the identity of the source episode, when it names one
 
 
+Flag = Literal["no_longer_passes", "possible_duplicate", "possible_outdated"]
+
+
 class MemoryOut(BaseModel):
     id: UUID
     kind: Kind
@@ -114,6 +117,14 @@ class MemoryOut(BaseModel):
     # Review loop (review.py): 'new' until a person keeps it; synthesis writes 'new', a person's own 'kept'.
     review: Literal["new", "kept"] = "kept"
     origin: Literal["synthesis", "person", "sample"] | None = None
+    # Background consolidation (consolidation.py): a doubtful case flagged for a person, with the reason
+    # and the other memory it concerns; dismissed with PATCH {"flag": null}.
+    flag: Flag | None = None
+    flag_reason: str | None = None
+    flag_related: UUID | None = None
+    # Why a retired memory is retired ('forgotten', 'merged'), and the memory a merged one went into.
+    retired_reason: Literal["forgotten", "merged"] | None = None
+    merged_into: UUID | None = None
 
 
 # Edges between memories (edges.py). supersedes, contradicts, extends and derived join two facts;
@@ -427,6 +438,8 @@ class MemoryCreated(BaseModel):
 class MemoryPatch(BaseModel):
     status: Literal["active", "retired"] | None = None
     confirm: bool | None = None
+    # null dismisses consolidation's flag (the only value accepted); keeping (confirm) clears it too.
+    flag: None = None
 
 
 TAG = r"^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$|^[a-z0-9]$"
@@ -507,6 +520,11 @@ class ProjectOut(BaseModel):
     unused_count: int = 0  # memories not served by a recall in unused_days (GET /v1/memories?unused=true)
     unused_days: int = 60
     review_count: int = 0  # current memories awaiting review (GET /v1/memories?review=new)
+    # Background consolidation: when its last run finished, what that run did (stats), and how many
+    # current memories carry a flag for a person (GET /v1/memories?flag=any).
+    consolidated_at: datetime | None = None
+    last_consolidation: dict | None = None
+    flagged_count: int = 0
     memory_instructions: str | None = None
     categories: list[ProjectCategoryOut] = []  # the project's own categories, besides the built-ins
 

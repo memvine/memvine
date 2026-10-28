@@ -44,7 +44,13 @@ def near_duplicate(cand: Candidate, old) -> bool:
         return False
     if old.get("category") and cand.category and old["category"] != cand.category:
         return False
-    before, after = normalize(old["statement"]), normalize(cand.statement)
+    return same_values(old["statement"], cand.statement)
+
+
+def same_values(before: str, after: str) -> bool:
+    """The later wording (`after`) keeps every number and date of the earlier one and announces no
+    change: a reworded restatement, not an update. Consolidation reuses it for pairs already in memory."""
+    before, after = normalize(before), normalize(after)
     if set(_CHANGE.findall(after)) - set(_CHANGE.findall(before)):
         return False
     return set(_NUMBERS.findall(before)) == set(_NUMBERS.findall(after))

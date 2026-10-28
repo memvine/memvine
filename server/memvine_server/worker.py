@@ -10,10 +10,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import traceback
 from uuid import UUID
 
-from . import health, profiles
+from . import consolidation, health, profiles
 from .billing import apply_retention
 from .config import settings
 from .embeddings import Embedder
@@ -127,6 +128,23 @@ async def claim_job(conn, project_id: UUID | None = None):
     ).fetchone()
 
 
+async def _dispatch(conn, llm: LLM, embedder: Embedder, job) -> dict:
+    if job["kind"] == consolidation.JOB_KIND:
+        # Its own transaction, so a failure is recorded on the run as well as on the job.
+        return await consolidation.run_job(conn, llm, job["project_id"])
+    # One transaction per job: a crash mid-episode leaves no half-reconciled state.
+    async with conn.transaction():
+        if job["kind"] == "extract":
+            return await process_episode(conn, llm, embedder, job["project_id"], job["episode_id"])
+        if job["kind"] == "session_state":
+            return await refresh_state(conn, llm, job["project_id"], job["episode_id"])
+        if job["kind"] == "session_close":
+            return await synthesize_session(conn, job["project_id"], job["episode_id"])
+        if job["kind"] == "profile":
+            return await profiles.build(conn, llm, job["project_id"], *profiles.parse_key(job["episode_id"]))
+        raise ValueError(f"unknown job kind {job['kind']}")
+
+
 async def run_one(pool, llm: LLM, embedder: Embedder, project_id: UUID | None = None) -> bool:
     """Process at most one job. Returns False when nothing is runnable."""
     async with pool.connection() as conn:
@@ -148,18 +166,7 @@ async def run_one(pool, llm: LLM, embedder: Embedder, project_id: UUID | None = 
             )
             return True
         try:
-            # One transaction per job: a crash mid-episode leaves no half-reconciled state.
-            async with conn.transaction():
-                if job["kind"] == "extract":
-                    result = await process_episode(conn, llm, embedder, job["project_id"], job["episode_id"])
-                elif job["kind"] == "session_state":
-                    result = await refresh_state(conn, llm, job["project_id"], job["episode_id"])
-                elif job["kind"] == "session_close":
-                    result = await synthesize_session(conn, job["project_id"], job["episode_id"])
-                elif job["kind"] == "profile":
-                    result = await profiles.build(conn, llm, job["project_id"], *profiles.parse_key(job["episode_id"]))
-                else:
-                    raise ValueError(f"unknown job kind {job['kind']}")
+            result = await _dispatch(conn, llm, embedder, job)
             await conn.execute(
                 "UPDATE jobs SET status = 'done', finished_at = now(), result = %s WHERE id = %s",
                 (json.dumps(result), job["id"]),
@@ -221,12 +228,28 @@ async def _loop(pool, llm: LLM, embedder: Embedder, stop: asyncio.Event) -> None
                     await requeue_abandoned(conn)
                     await apply_retention(conn)
                     await profiles.sweep(conn)  # throttled to once a minute
+                    await _schedule_consolidation(conn)
             except Exception:
                 log.exception("idle sweep error")
             try:
                 await asyncio.wait_for(stop.wait(), timeout=settings.worker_poll_seconds)
             except TimeoutError:
                 pass
+
+
+CONSOLIDATION_CHECK_SECONDS = 60.0
+_consolidation_checked = 0.0
+
+
+async def _schedule_consolidation(conn) -> None:
+    """At most once a minute per process: queue background consolidation for projects that are due."""
+    global _consolidation_checked
+    if time.monotonic() - _consolidation_checked < CONSOLIDATION_CHECK_SECONDS:
+        return
+    _consolidation_checked = time.monotonic()
+    queued = await consolidation.schedule_due(conn)
+    if queued:
+        log.info("consolidation queued for %s project(s)", len(queued))
 
 
 async def run_forever(pool, llm: LLM, embedder: Embedder, stop: asyncio.Event) -> None:

@@ -78,7 +78,8 @@ async def forget(conn, project_id: UUID, memory_id: UUID, *, actor: str = events
     current (nothing forgotten)."""
     if not await retire(conn, project_id, memory_id, actor=actor):
         return False
-    await conn.execute("UPDATE memory_items SET forgotten_at = now() WHERE project_id = %s AND id = %s", (project_id, memory_id))
+    await conn.execute("UPDATE memory_items SET forgotten_at = now(), retired_reason = 'forgotten', flag = NULL, "
+                       "flag_reason = NULL, flag_related = NULL WHERE project_id = %s AND id = %s", (project_id, memory_id))
     await events.record(conn, project_id, "forgotten", memory_id=memory_id, actor=actor)
     await _record(conn, project_id, memory_id, "forgotten")
     return True
@@ -87,7 +88,8 @@ async def forget(conn, project_id: UUID, memory_id: UUID, *, actor: str = events
 async def restore(conn, project_id: UUID, memory_id: UUID, *, actor: str = events.SYSTEM) -> None:
     """A forgotten memory brought back: no longer forgotten, and its forget is no longer feedback."""
     await events.record(conn, project_id, "restored", memory_id=memory_id, actor=actor)
-    await conn.execute("UPDATE memory_items SET forgotten_at = NULL WHERE project_id = %s AND id = %s", (project_id, memory_id))
+    await conn.execute("UPDATE memory_items SET forgotten_at = NULL, retired_reason = NULL WHERE project_id = %s AND id = %s",
+                       (project_id, memory_id))
     await conn.execute("DELETE FROM feedback_cases WHERE project_id = %s AND memory_id = %s AND kind = 'forgotten'",
                        (project_id, memory_id))
 

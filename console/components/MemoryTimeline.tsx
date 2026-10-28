@@ -23,11 +23,20 @@ export const EVENT_LABEL: Record<MemoryEventKind, string> = {
   refused: "Not learned again",
   deleted: "Deleted with its source",
   project_settings: "Memory rules changed",
+  unmerged: "Un-merged",
+  flagged: "Flagged for review",
+  unflagged: "Flag cleared",
   profile_rebuilt: "Profile rebuilt",
 };
 
 /** Events that end or question a memory's currency, drawn in the warning color. */
-const WARN: MemoryEventKind[] = ["superseded", "contradicted", "forgotten", "expired", "corrected", "stale", "deleted", "refused"];
+const WARN: MemoryEventKind[] = ["superseded", "contradicted", "forgotten", "expired", "corrected", "stale", "deleted", "refused", "flagged"];
+
+const FLAG_LABEL: Record<string, string> = {
+  no_longer_passes: "may no longer pass the bar for memory",
+  possible_duplicate: "may repeat another memory",
+  possible_outdated: "a newer memory may replace it",
+};
 
 export function actorLabel(actor: string): string {
   if (actor === "synthesis") return "synthesis";
@@ -51,6 +60,8 @@ export function eventNote(e: MemoryEventItem): string | null {
     if (d.field === "memory_instructions") return `instructions ${d.after_len ? `set (${d.after_len} characters)` : "cleared"}`;
     if (d.field === "category") return `category ${d.slug} ${d.action}`;
   }
+  if (e.kind === "flagged" && typeof d.flag === "string") return FLAG_LABEL[d.flag] ?? d.flag;
+  if (e.kind === "unflagged") return d.reason === "kept" ? "kept by a person" : "dismissed";
   if (e.kind === "profile_rebuilt") {
     return `${d.subject_kind === "project" ? "the project" : String(d.subject)}: ${d.lines} line${d.lines === 1 ? "" : "s"} from ${d.from_memories} memor${d.from_memories === 1 ? "y" : "ies"}`;
   }

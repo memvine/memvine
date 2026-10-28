@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 
 from . import access, accounts, audit, billing, mcp_app
 from . import code as code_ops
+from . import consolidation as consolidation_ops
 from . import edges as edge_ops
 from . import events as event_ops
 from . import health as health_ops
@@ -463,6 +464,8 @@ async def memories(
     review: Literal["new", "kept"] | None = Query(None, description="new: current memories no person has kept yet"),
     q: str | None = None,
     unused: bool = False,
+    flag: Literal["any", "no_longer_passes", "possible_duplicate", "possible_outdated"] | None = Query(
+        None, description="current memories background consolidation flagged for a person (any: every flag)"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
@@ -470,7 +473,7 @@ async def memories(
     in memory_unused_days (for review: nothing is hidden or deleted for being unused)."""
     async with request.app.state.pool.connection() as conn:
         return await list_memories(conn, principal.project_id, status=status, kind=kind, q=q, limit=limit, offset=offset,
-                                   category=category, scope=scope, unused=unused, review=review)
+                                   category=category, scope=scope, unused=unused, review=review, flag=flag)
 
 
 @app.get("/v1/threads", response_model=list[ThreadSummary])
@@ -578,6 +581,9 @@ async def patch_memory(memory_id: UUID, body: MemoryPatch, request: Request, pri
             # A person forgets it: an older fact it replaced is current again; synthesis will not
             # learn it again; a synthesis-made one becomes a feedback case (review.py).
             await review_ops.forget(conn, principal.project_id, memory_id, actor=actor)
+        elif body.status == "active" and current.status == "retired" and current.retired_reason == "merged":
+            # Un-merge: consolidation merged it into another memory; it is current again (consolidation.py).
+            await consolidation_ops.unmerge(conn, principal.project_id, memory_id, actor=actor)
         elif body.status and current.status != "superseded":
             await conn.execute(
                 "UPDATE memory_items SET status = %s, valid_to = CASE WHEN %s = 'retired' THEN now() ELSE NULL END WHERE id = %s",
@@ -594,6 +600,10 @@ async def patch_memory(memory_id: UUID, body: MemoryPatch, request: Request, pri
             )
             await event_ops.record(conn, principal.project_id, "confirmed", memory_id=memory_id, actor=actor)
             await code_ops.revalidate(conn, principal.project_id, memory_id, actor=actor)
+            await consolidation_ops.clear_flag(conn, principal.project_id, memory_id, actor=actor, reason="kept")
+        if "flag" in body.model_fields_set:
+            # {"flag": null}: a person dismissed what consolidation flagged; the memory stays as it is.
+            await consolidation_ops.clear_flag(conn, principal.project_id, memory_id, actor=actor, reason="dismissed")
         return await get_memory(conn, principal.project_id, memory_id)
 
 
@@ -697,6 +707,8 @@ async def export_project(request: Request, principal: Principal = Depends(requir
             "feedback_cases": await rows(f"SELECT {review_ops.CASE_COLUMNS} FROM feedback_cases WHERE project_id = %s ORDER BY created_at"),
             "memory_events": await rows("SELECT id, memory_id, kind, actor, detail, episode_id, at FROM memory_events "
                                         "WHERE project_id = %s ORDER BY at, id"),
+            "consolidation_runs": await rows("SELECT id, started_at, finished_at, stats, error FROM consolidation_runs "
+                                             "WHERE project_id = %s ORDER BY started_at, id"),
             "profiles": await rows("SELECT subject_kind, subject, lines, token_estimate, dirty, built_at, built_from_event_id "
                                    "FROM profiles WHERE project_id = %s ORDER BY subject_kind, subject"),
         }
@@ -890,6 +902,11 @@ PROJECT_SELECT = """
            """ + str(int(settings.memory_unused_days)) + """ AS unused_days,
            (SELECT count(*) FROM memory_items m WHERE m.project_id = p.id AND m.review = 'new'
              AND m.status IN ('active', 'stale')) AS review_count,
+           (SELECT count(*) FROM memory_items m WHERE m.project_id = p.id AND m.flag IS NOT NULL
+             AND m.status IN ('active', 'stale')) AS flagged_count,
+           p.consolidated_at,
+           (SELECT r.stats FROM consolidation_runs r WHERE r.project_id = p.id AND r.finished_at IS NOT NULL AND r.error IS NULL
+             ORDER BY r.finished_at DESC, r.id DESC LIMIT 1) AS last_consolidation,
            (SELECT count(*) FROM episodes e WHERE e.project_id = p.id) AS source_count,
            (SELECT count(*) FROM episodes e WHERE e.project_id = p.id AND e.metadata->>'source' = 'sample') AS sample_source_count,
            (SELECT count(*) FROM api_keys k WHERE k.project_id = p.id AND k.revoked_at IS NULL) AS key_count,
@@ -1085,6 +1102,30 @@ async def delete_category(slug: str, category: str, request: Request, admin: Adm
     if not cur.rowcount:
         raise HTTPException(404, {"code": "not-found", "message": "No such category"})
     request.state.audit_target = f"{slug}/categories/{category}"
+
+
+@app.post("/v1/projects/{slug}/consolidate", status_code=202)
+async def consolidate_project(slug: str, request: Request, admin: Admin = Depends(require_manager)):
+    """Queue a background consolidation now (owners and admins): duplicates merged, missed updates and
+    contradictions linked, doubtful memories flagged for review (consolidation.py). Nothing is deleted.
+    `queued` is false when one is already waiting or running. Refused while the project is paused."""
+    async with request.app.state.pool.connection() as conn:
+        project = await _owned(conn, admin, slug)
+        if (await (await conn.execute("SELECT processing_paused FROM projects WHERE id = %s", (project["id"],))).fetchone())["processing_paused"]:
+            raise HTTPException(409, {"code": "project-paused", "message": "Processing is paused for this project; resume it first"})
+        queued, job_id = await consolidation_ops.queue(conn, project["id"])
+    request.state.audit_target = slug
+    return {"queued": queued, "job_id": job_id}
+
+
+@app.get("/v1/projects/{slug}/consolidation-runs")
+async def consolidation_runs(slug: str, request: Request, admin: Admin = Depends(require_management),
+                             limit: int = Query(20, ge=1, le=200)):
+    """The project's consolidation runs, newest first: when, what each did (stats: merged, linked,
+    flagged, judged_pairs, checked_items; or skipped and why), or the error that stopped it."""
+    async with request.app.state.pool.connection() as conn:
+        project = await _owned(conn, admin, slug)
+        return await consolidation_ops.runs(conn, project["id"], limit)
 
 
 @app.get("/v1/projects/{slug}/keys", response_model=list[KeyOut])

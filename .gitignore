@@ -19,3 +19,5 @@ benchmark/memory/check-server.log
 benchmark/memory/check-briefing.txt
 benchmark/memory/check-profiles.txt
 benchmark/memory/check-agent-e2e.json
+__pycache__/
+*.pyc

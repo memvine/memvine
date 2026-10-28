@@ -213,6 +213,18 @@ Turning sources into memory runs in the background. Memvine calls this **tending
 4. **Code checks.** At the start of each session the Claude Code and Codex plugins report the
    current versions of anchored files (`POST /v1/code/check`; any client can call it); memories whose files changed turn stale, and turn active again if the file
    changes back.
+5. **Tidy-up (background consolidation).** About daily, or after 20 new memories, a project with at
+   least 10 active memories gets a conservative pass over what is already known (paused projects
+   never do). Near-identical restatements (same audience, kind and category; cosine 0.92 or more with
+   the same numbers and dates) are merged into the stronger one; closer calls, missed updates and
+   contradictions (cosine 0.8 or more) go to the fast model in one batched call, at most 50 pairs a
+   run. Unreviewed memories a week old and never recalled, and unreviewed facts, are re-asked the
+   three tests (at most 30 a run). Doubt only flags a memory for review ("may repeat another", "a
+   newer one may replace it", "may no longer be worth keeping", with the reason); a memory a person
+   kept or made is never changed, only flagged. Nothing is deleted: a merged memory is retired as
+   `merged` and **Un-merge** (PATCH status `active`) brings it back; every action is in the
+   Activity feed as `consolidation`. `POST /v1/projects/{slug}/consolidate` runs one now;
+   `GET /v1/projects/{slug}/consolidation-runs` lists what each run did.
 
 A memory is visible to recall as soon as its stretch's job is done: `GET /v1/jobs` shows the queue
 (the console's **Jobs** page shows the same), and the pending count reaching zero means everything
