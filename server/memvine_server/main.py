@@ -790,7 +790,7 @@ async def charge(conn, project_id, kind: str, chars: int) -> None:
 
 PROJECT_SELECT = """
     SELECT p.id, p.slug, p.name, p.created_at, p.tags, p.monthly_credit_cap, p.retention_days, p.processing_paused,
-           p.description, p.recall_min_relevance, p.memory_instructions,
+           p.description, p.recall_min_relevance, p.recall_half_life_days, p.memory_instructions,
            (SELECT coalesce(jsonb_agg(jsonb_build_object('slug', c.slug, 'name', c.name, 'description', c.description,
                                                          'created_at', c.created_at) ORDER BY c.created_at, c.slug), '[]'::jsonb)
               FROM project_categories c WHERE c.project_id = p.id) AS categories,
@@ -873,8 +873,8 @@ async def projects(request: Request, admin: Admin = Depends(require_management))
 
 @app.patch("/v1/projects/{slug}", response_model=ProjectOut)
 async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: Admin = Depends(require_manager)):
-    """Rename, retag, pause, describe, or change the cap, retention, recall relevance threshold or
-    memory instructions of a project. The slug never changes."""
+    """Rename, retag, pause, describe, or change the cap, retention, recall relevance threshold,
+    recall recency half-life or memory instructions of a project. The slug never changes."""
     async with request.app.state.pool.connection() as conn:
         project = await _owned(conn, admin, slug)
         await conn.execute(
@@ -885,6 +885,7 @@ async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: 
                 processing_paused = COALESCE(%s, processing_paused),
                 description = CASE WHEN %s THEN %s ELSE description END,
                 recall_min_relevance = CASE WHEN %s THEN %s ELSE recall_min_relevance END,
+                recall_half_life_days = CASE WHEN %s THEN %s ELSE recall_half_life_days END,
                 memory_instructions = CASE WHEN %s THEN %s ELSE memory_instructions END
             WHERE id = %s
             """,
@@ -893,6 +894,7 @@ async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: 
              "retention_days" in body.model_fields_set, body.retention_days, body.processing_paused,
              "description" in body.model_fields_set, (body.description or "").strip() or None,
              "recall_min_relevance" in body.model_fields_set, body.recall_min_relevance,
+             "recall_half_life_days" in body.model_fields_set, body.recall_half_life_days,
              "memory_instructions" in body.model_fields_set, (body.memory_instructions or "").strip() or None, project["id"]),
         )
         updated = await (await conn.execute(PROJECT_SELECT + " WHERE p.id = %s", (project["id"],))).fetchone()

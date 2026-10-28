@@ -20,6 +20,8 @@ export interface Project {
   monthCredits: number;
   /** Recall abstains unless a memory is at least this relevant (0–1); null uses the server default. */
   recallMinRelevance?: number | null;
+  /** Recency in recall's ranking: a fact or gotcha's weight halves toward a floor every this many days; 0 is off, null the server default (90). */
+  recallHalfLifeDays?: number | null;
   /** Sources that are sample data (loaded from the console), deletable in one action. */
   sampleSourceCount?: number;
   /** What the project is for, in the owner's words; shown under its name on the graph. */
@@ -509,7 +511,7 @@ export interface MemvineApi {
   listProjects(): Promise<Project[]>;
   /** Creates the project and its first API key; the clear key is returned once. */
   createProject(name: string, tags: string[], options?: { description?: string | null; sample?: boolean }): Promise<{ project: Project; secret: string }>;
-  updateProject(slug: string, patch: { name?: string; tags?: string[]; monthlyCreditCap?: number | null; retentionDays?: number | null; recallMinRelevance?: number | null }): Promise<void>;
+  updateProject(slug: string, patch: { name?: string; tags?: string[]; monthlyCreditCap?: number | null; retentionDays?: number | null; recallMinRelevance?: number | null; recallHalfLifeDays?: number | null }): Promise<void>;
   deleteProject(slug: string): Promise<void>;
   listKeys(project: string): Promise<ApiKey[]>;
   createKey(project: string, name: string): Promise<{ key: ApiKey; secret: string }>;

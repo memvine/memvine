@@ -127,7 +127,7 @@ async def snapshot(dsn: str, b: dict) -> dict:
     """Everything of B's that a leak could change (last-used timestamps aside)."""
     queries = {
         "project": "SELECT slug, name, tags, monthly_credit_cap, retention_days, processing_paused, description, recall_min_relevance, "
-                   "memory_instructions FROM projects WHERE id = %(pid)s",
+                   "recall_half_life_days, memory_instructions FROM projects WHERE id = %(pid)s",
         "categories": "SELECT slug, name, description FROM project_categories WHERE project_id = %(pid)s ORDER BY slug",
         "memories": "SELECT id, statement, status, review, assertion, superseded_by, valid_to FROM memory_items WHERE project_id = %(pid)s ORDER BY id",
         "episodes": "SELECT id, content, audience FROM episodes WHERE project_id = %(pid)s ORDER BY id",

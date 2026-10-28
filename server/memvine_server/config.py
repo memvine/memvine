@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     # Server-wide relevance threshold for recall's abstention (recall.py). Unset: each embedding model's
     # calibrated default (embeddings.py). A project's own recall_min_relevance overrides both.
     recall_min_relevance: float | None = None
+    # Recency in recall's ranking (recall.py: recency_factor): a fact or gotcha's weight halves toward
+    # the floor every this many days since it was last said. 0 turns it off. A project's own
+    # recall_half_life_days overrides it.
+    recall_half_life_days: float = 90.0
     # A memory this many days old that no briefing served in this many days is listed for review
     # (GET /v1/memories?unused=true, the project's unused_count). Never hidden or deleted for it.
     memory_unused_days: int = 60

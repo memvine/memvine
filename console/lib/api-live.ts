@@ -126,7 +126,7 @@ const toThread = (t: ServerThread): ThreadSummary => ({
 interface ServerProject {
   slug: string; name: string; created_at: string; tags: string[]; memory_count: number; source_count: number;
   key_count: number; last_activity_at: string | null; monthly_credit_cap: string | null; retention_days: number | null;
-  month_credits: string; recall_min_relevance?: number | null; sample_source_count?: number;
+  month_credits: string; recall_min_relevance?: number | null; recall_half_life_days?: number | null; sample_source_count?: number;
   description?: string | null; unused_count?: number; unused_days?: number; review_count?: number;
 }
 
@@ -136,6 +136,7 @@ const toProject = (p: ServerProject): Project => ({
   monthlyCreditCap: p.monthly_credit_cap === null ? null : Number(p.monthly_credit_cap), retentionDays: p.retention_days,
   monthCredits: Number(p.month_credits ?? 0),
   recallMinRelevance: p.recall_min_relevance ?? null,
+  recallHalfLifeDays: p.recall_half_life_days ?? null,
   sampleSourceCount: Number(p.sample_source_count ?? 0),
   description: p.description ?? null,
   unusedCount: Number(p.unused_count ?? 0),
@@ -216,6 +217,7 @@ export const liveApi: MemvineApi = {
     if (patch.monthlyCreditCap !== undefined) body.monthly_credit_cap = patch.monthlyCreditCap;
     if (patch.retentionDays !== undefined) body.retention_days = patch.retentionDays;
     if (patch.recallMinRelevance !== undefined) body.recall_min_relevance = patch.recallMinRelevance;
+    if (patch.recallHalfLifeDays !== undefined) body.recall_half_life_days = patch.recallHalfLifeDays;
     await call(`/v1/projects/${slug}`, { method: "PATCH", body });
   },
   async deleteProject(slug) {
