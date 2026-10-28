@@ -35,6 +35,7 @@ from .remember import SupersedeError, remember
 from .review import forget
 
 _project: ContextVar[UUID | None] = ContextVar("memvine_project", default=None)
+_actor: ContextVar[str] = ContextVar("memvine_actor", default="key:project")  # events.actor_of for MCP
 _runtime: dict = {}  # pool, embedder, llm; set by the API at startup
 
 server = MCPServer(
@@ -109,7 +110,7 @@ async def memory_remember(statement: str, kind: str | None = None, subjects: lis
         try:
             decision = await remember(conn, _runtime["llm"], _runtime["embedder"], project, statement=statement, kind=kind,
                                       subjects=subjects or [], assertion=assertion, source="mcp", supersedes=replaces,
-                                      readable=["project"], given=given)
+                                      readable=["project"], given=given, actor=_actor.get())
         except CapReached as exc:
             return f"Not stored: this project's monthly credit cap is reached ({exc.used} of {exc.cap})."
         except SupersedeError as exc:
@@ -129,7 +130,7 @@ async def memory_forget(memory_id: str) -> str:
             "SELECT statement FROM memory_items WHERE project_id = %s AND id = %s", (project, mid))).fetchone()
         if not row:
             return f"No memory {memory_id} in this project."
-        if not await forget(conn, project, mid):
+        if not await forget(conn, project, mid, actor=_actor.get()):
             return f"Not current, so nothing to forget: {row['statement']}"
     return f"Forgotten: {row['statement']}"
 
@@ -158,7 +159,8 @@ def build_asgi():
     )
 
 
-async def _resolve_project(headers: list[tuple[bytes, bytes]]) -> UUID | None:
+async def _resolve_project(headers: list[tuple[bytes, bytes]]) -> tuple[UUID, str] | None:
+    """The project and the key's name of an MCP request's project key, or None."""
     token = ""
     agent = None
     for name, value in headers:
@@ -172,14 +174,14 @@ async def _resolve_project(headers: list[tuple[bytes, bytes]]) -> UUID | None:
     async with _runtime["pool"].connection() as conn:
         row = await (
             await conn.execute(
-                "SELECT k.project_id, k.revoked_at FROM api_keys k WHERE k.key_hash = %s", (hash_key(token),)
+                "SELECT k.project_id, k.name, k.revoked_at FROM api_keys k WHERE k.key_hash = %s", (hash_key(token),)
             )
         ).fetchone()
         if not row or row["revoked_at"]:
             return None
         await conn.execute("UPDATE api_keys SET last_used_at = now(), last_user_agent = COALESCE(%s, last_user_agent) "
                            "WHERE key_hash = %s", (agent, hash_key(token)))
-    return row["project_id"]
+    return row["project_id"], row["name"]
 
 
 async def mcp_with_auth(scope, receive, send):
@@ -188,16 +190,19 @@ async def mcp_with_auth(scope, receive, send):
     if scope["type"] != "http":
         await asgi(scope, receive, send)
         return
-    project = await _resolve_project(scope.get("headers", []))
-    if project is None:
+    resolved = await _resolve_project(scope.get("headers", []))
+    if resolved is None:
         body = json.dumps({"error": {"code": "unauthorized", "message": "Send Authorization: Bearer <mv_sk_ project key>"}}).encode()
         await send({"type": "http.response.start", "status": 401, "headers": [(b"content-type", b"application/json")]})
         await send({"type": "http.response.body", "body": body})
         return
+    project, key_name = resolved
     token = _project.set(project)
+    actor = _actor.set(f"key:{key_name}")
     scoped = request_project.set(str(project))
     try:
         await asgi(scope, receive, send)
     finally:
         request_project.reset(scoped)
+        _actor.reset(actor)
         _project.reset(token)

@@ -384,6 +384,50 @@ export interface MemoryDetail {
   chain: MemoryItem[];
   conflicts: MemoryItem[];
   episodes: Episode[];
+  /** What happened to this memory, oldest first (GET /v1/memories/{id}/history). */
+  history: MemoryEventItem[];
+}
+
+// ---------------------------------------------------------------- memory history and activity
+// Mirrors server/memvine_server/events.py (KINDS) and models.py (MemoryEvent, EventFeed).
+
+export const MEMORY_EVENT_KINDS = [
+  "created", "restated", "superseded", "supersedes", "contradicted", "extended", "confirmed", "forgotten", "restored",
+  "expired", "corrected", "merged", "anchored", "stale", "revalidated", "category_changed", "refused", "deleted",
+] as const;
+export type MemoryEventKind = (typeof MEMORY_EVENT_KINDS)[number];
+
+export interface MemoryEventItem {
+  /** null only for a computed event (expired). */
+  id: number | null;
+  memoryId: string | null;
+  kind: MemoryEventKind;
+  /** "synthesis", "person:<email or identity>", "key:<name>", "system" or "consolidation". */
+  actor: string;
+  detail: Record<string, unknown>;
+  episodeId: string | null;
+  at: string;
+  /** created / restated: the evidence that source gave. */
+  quotes: string[];
+  /** The memories `detail` names (by, of, with, into, from, related). */
+  related: { role: string; id: string; statement: string; status: MemoryStatus }[];
+  /** Feed only: the memory's statement (null once it was deleted) and status. */
+  statement?: string | null;
+  memoryStatus?: MemoryStatus | null;
+}
+
+export interface EventFilter {
+  kind?: MemoryEventKind;
+  memoryId?: string;
+  since?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface EventPage {
+  events: MemoryEventItem[];
+  /** Pass back as `cursor` for older events; null on the last page. */
+  nextCursor: string | null;
 }
 
 // ---------------------------------------------------------------- the memory graph
@@ -529,6 +573,8 @@ export interface MemvineApi {
   listIdentities(project: string): Promise<Identity[]>;
   putIdentity(project: string, identity: string, traits: Record<string, string>): Promise<void>;
   getMemory(project: string, id: string): Promise<MemoryDetail | null>;
+  /** The project's activity feed, newest first (GET /v1/events). */
+  listEvents(project: string, filter?: EventFilter): Promise<EventPage>;
   setMemoryStatus(project: string, id: string, status: "active" | "retired"): Promise<void>;
   /** The node and its edges (GET /v1/memories/{id}/related). */
   getRelated(project: string, id: string): Promise<MemoryRelated | null>;

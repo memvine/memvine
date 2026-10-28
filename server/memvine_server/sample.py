@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from . import events
 from .embeddings import Embedder
 from .extraction.extract import Candidate
 from .ingest import delete_episode, ingest_episode
@@ -224,6 +225,14 @@ async def load_sample(conn, embedder: Embedder, project_id: UUID) -> dict:
             ids[mem.key] = new_id
             thread_id = await _sample_thread(conn, embedder, project_id, mem.thread, src.id, at, threads) if mem.thread else None
             await conn.execute("UPDATE memory_items SET scope = 'project', thread_id = %s WHERE id = %s", (thread_id, new_id))
+            history = [{"kind": "created", "memory_id": new_id, "detail": {"origin": "sample"}, "episode_id": src.id, "at": at}]
+            if old:
+                history += [{"kind": "supersedes", "memory_id": new_id, "detail": {"of": old}, "at": at},
+                            {"kind": "superseded", "memory_id": old, "detail": {"by": new_id}, "at": at}]
+            if mem.conflicts_with:
+                history += [{"kind": "contradicted", "memory_id": new_id, "detail": {"with": ids[mem.conflicts_with]}, "at": at},
+                            {"kind": "contradicted", "memory_id": ids[mem.conflicts_with], "detail": {"with": new_id}, "at": at}]
+            await events.record_batch(conn, project_id, history)
             if old:
                 await conn.execute(
                     "UPDATE memory_items SET status = 'superseded', superseded_by = %s, valid_to = %s WHERE id = %s",

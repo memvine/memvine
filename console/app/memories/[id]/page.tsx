@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Brain } from "lucide-react";
 import { CopyButton } from "@/components/client";
 import { MemoryActions, MemoryFacts, MemoryHistory } from "@/components/MemoryPanel";
+import { MemoryTimeline } from "@/components/MemoryTimeline";
 import { Callout, Card, CardBody, CardHeader, formatDate, Mono, PageHeader, SourceQuote, StatusBadge } from "@/components/ui";
 import { currentProject, getMemory, listThreads } from "@/lib/api";
 
@@ -77,10 +78,15 @@ export default async function MemoryPage({ params }: { params: Promise<{ id: str
 
           {chain.length > 1 && (
             <Card>
-              <CardHeader title="History of this fact" />
+              <CardHeader title="Values of this fact" />
               <CardBody><MemoryHistory chain={chain} current={m.id} linkFor={(cid) => `/memories/${cid}`} /></CardBody>
             </Card>
           )}
+
+          <Card>
+            <CardHeader title="History" description="Everything that happened to this memory, and who did it." />
+            <CardBody><MemoryTimeline events={detail.history} linkFor={(cid) => `/memories/${cid}`} /></CardBody>
+          </Card>
         </div>
 
         <div className="min-w-0 space-y-6">

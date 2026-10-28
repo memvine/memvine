@@ -128,6 +128,48 @@ export interface Graph {
   since: string | null;
 }
 
+/** What happened to a memory (GET /v1/memories/{id}/history, GET /v1/events). */
+export type EventKind =
+  | "created" | "restated" | "superseded" | "supersedes" | "contradicted" | "extended" | "confirmed" | "forgotten"
+  | "restored" | "expired" | "corrected" | "merged" | "anchored" | "stale" | "revalidated" | "category_changed"
+  | "refused" | "deleted";
+
+export interface MemoryEvent {
+  /** null only for a computed event (expired). */
+  id: number | null;
+  memory_id: string | null;
+  kind: EventKind;
+  /** "synthesis", "person:<email or identity>", "key:<name>", "system" or "consolidation". */
+  actor: string;
+  /** by / of / with / into / from / related name other memories; reason, files, repo, before / after. */
+  detail: Record<string, unknown>;
+  episode_id: string | null;
+  at: string;
+  /** created / restated: the evidence that source gave. */
+  quotes: string[];
+  /** The memories `detail` names, with their statement and status. */
+  related: { role: string; id: string; statement: string; status: Memory["status"] }[];
+}
+
+export interface FeedEvent {
+  id: number;
+  memory_id: string | null;
+  kind: EventKind;
+  actor: string;
+  detail: Record<string, unknown>;
+  episode_id: string | null;
+  at: string;
+  /** The memory's statement; null when it was deleted. */
+  statement: string | null;
+  memory_status: Memory["status"] | null;
+}
+
+export interface EventFeed {
+  events: FeedEvent[];
+  /** Pass back as `cursor` for the next (older) page; null on the last one. */
+  next_cursor: string | null;
+}
+
 export interface RecallResult {
   briefing: string;
   tokens: number;
@@ -179,9 +221,12 @@ export class Memvine {
   }
 
   /** @internal */
-  async call<T>(method: string, path: string, body?: unknown, params?: Record<string, string | number | undefined>): Promise<T> {
+  async call<T>(method: string, path: string, body?: unknown, params?: Record<string, string | number | string[] | undefined>): Promise<T> {
     const url = new URL(this.baseUrl + path);
-    for (const [k, v] of Object.entries(params ?? {})) if (v !== undefined) url.searchParams.set(k, String(v));
+    for (const [k, v] of Object.entries(params ?? {})) {
+      if (Array.isArray(v)) for (const item of v) url.searchParams.append(k, item);
+      else if (v !== undefined) url.searchParams.set(k, String(v));
+    }
     const res = await this.fetchImpl(url, {
       method,
       headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json", "User-Agent": `memvine-sdk-ts/${VERSION}` },
@@ -218,6 +263,20 @@ export class Memvine {
   /** A memory and every edge it has, both directions. */
   related(id: string) {
     return this.call<MemoryRelated>("GET", `/v1/memories/${id}/related`);
+  }
+
+  /** Everything that happened to a memory, oldest first: created (with its evidence quotes),
+   *  restated, superseded, corrected, forgotten, stale, ... */
+  history(id: string) {
+    return this.call<MemoryEvent[]>("GET", `/v1/memories/${id}/history`);
+  }
+
+  /** The project's activity feed, newest first. Page with the returned `next_cursor`. */
+  events(o: { since?: string | Date; kind?: EventKind | EventKind[]; memoryId?: string; limit?: number; cursor?: string } = {}) {
+    return this.call<EventFeed>("GET", "/v1/events", undefined, {
+      since: iso(o.since), kind: o.kind === undefined ? undefined : Array.isArray(o.kind) ? o.kind : [o.kind],
+      memory_id: o.memoryId, limit: o.limit, cursor: o.cursor,
+    });
   }
 
   /** A neighborhood of the memory graph (at most 300 nodes); `since` flags what grew. Without
