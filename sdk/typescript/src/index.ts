@@ -136,7 +136,7 @@ export interface Graph {
 export type EventKind =
   | "created" | "restated" | "superseded" | "supersedes" | "contradicted" | "extended" | "confirmed" | "forgotten"
   | "restored" | "expired" | "corrected" | "merged" | "anchored" | "stale" | "revalidated" | "category_changed"
-  | "refused" | "deleted";
+  | "refused" | "deleted" | "profile_rebuilt";
 
 export interface MemoryEvent {
   /** null only for a computed event (expired). */
@@ -183,6 +183,26 @@ export interface RecallResult {
   threads: { id: string; key: string; title: string; status: string; summary: string }[];
   passages: { episode_id: string; occurred_at: string; content: string }[];
   pending: { session_id: string; seq: number; role: string; at: string; content: string }[];
+  /** With `profiles: true`: the caller's person profile and the project profile, as a brief shows them. */
+  profiles?: string;
+  profile_tokens?: number;
+}
+
+/** A short summary of a person or of the project, derived from memory; each line cites its memories. */
+export interface Profile {
+  subject_kind: "person" | "project";
+  /** The identity; "" for the project. */
+  subject: string;
+  lines: { text: string; memory_ids: string[] }[];
+  /** The project's description (project profile only). */
+  description: string | null;
+  /** As a session-start brief shows it; "" when there is nothing to say. */
+  text: string;
+  tokens: number;
+  /** Memory changed since it was built; a rebuild is due. */
+  dirty: boolean;
+  /** null: not built yet (asking for it queues the first build). */
+  built_at: string | null;
 }
 
 export interface RecallOptions {
@@ -195,6 +215,8 @@ export interface RecallOptions {
   /** { related: true }: each item lists its edges in `related` (at most 6). */
   include?: { related?: boolean };
   branch?: string;
+  /** A session-start brief: also return the person profile of `identity` and the project profile. */
+  profiles?: boolean;
 }
 
 export interface RememberOptions {
@@ -261,8 +283,19 @@ export class Memvine {
     return this.call<RecallResult>("POST", "/v1/recall", {
       query, budget: o.budget, identity: o.identity, as_of: iso(o.asOf), session_id: o.sessionId,
       include_history: o.includeHistory, exclude: o.exclude ?? [], branch: o.branch,
-      include: o.include,
+      include: o.include, profiles: o.profiles,
     });
+  }
+
+  /** A person's profile (by identity): their preferences, the rules and decisions they set or own. */
+  async profile(identity: string) {
+    const found = await this.call<Profile[]>("GET", "/v1/profiles", undefined, { subject_kind: "person", subject: identity });
+    return found[0];
+  }
+
+  /** The project profile: its description, standing rules and most durable decisions. */
+  projectProfile() {
+    return this.call<Profile>("GET", "/v1/profiles/project");
   }
 
   /** A memory and every edge it has, both directions. */
