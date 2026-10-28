@@ -14,7 +14,10 @@ class Settings(BaseSettings):
     # Who may create an account: open (anyone who can reach the server; a new user gets their own
     # organization), invite (only with an invite link from an organization admin), closed.
     signup: str = "open"
-    # Postgres row-level security beneath the application's own project filters (schema.sql).
+    # Apply pending schema migrations on start (migrate.py). Off: a server whose database needs
+    # migrations refuses to start until `memvine-server migrate` has run.
+    auto_migrate: bool = True
+    # Postgres row-level security beneath the application's own project filters (migrations/rls.sql).
     row_security: bool = True
     # A console sign-in lasts this long.
     session_days: int = 30

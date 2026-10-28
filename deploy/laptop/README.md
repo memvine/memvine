@@ -76,3 +76,11 @@ Codex, Cursor and other MCP clients: see `plugins/claude-code/README.md`, with t
   it, and `restore-test` restores the newest dump into a scratch database and compares its counts
   with the live one. A real restore: `docker exec -i $(docker compose -f server/docker-compose.yml ps -q db)
   pg_restore -U memvine -d memvine --clean --no-owner < <dump>` with the server stopped.
+- **Upgrades.** Pull the new code, then `deploy/laptop/memvine-laptop.sh restart`. When the new
+  code changes the database schema, `restart` lists the migrations, takes a backup
+  (`memvine-laptop.sh backup`), and the API applies them as it starts (see "Schema and
+  migrations" in `server/README.md`); `api.log` in `~/.memvine/server` shows each step as
+  `schema: applied 000N_<name>`. If one fails it rolls back and the API does not come up: the log
+  says why; go back to the previous code and restart, or restore the backup. `memvine-laptop.sh
+  migrations` lists what is applied and pending. The first restart on code with migrations
+  baselines the existing database (`schema: baselined 0001_baseline`), which changes no data.

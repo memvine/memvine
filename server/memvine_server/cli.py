@@ -27,11 +27,61 @@ async def _with_pool(fn):
         await pool.close()
 
 
+def _redacted(dsn: str) -> str:
+    return re.sub(r"//([^:/@]+):[^@]*@", r"//\1:***@", dsn)
+
+
+@app.command()
+def migrate(dry_run: bool = typer.Option(False, "--dry-run", help="print what would run; change nothing")):
+    """Apply pending schema migrations (the server also does this on start). Take a backup first."""
+    from .migrate import MigrationError, migrate_database
+
+    try:
+        steps = _run(migrate_database(settings.database_url, dry_run=dry_run))
+    except MigrationError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    target = _redacted(settings.database_url)
+    if not steps:
+        typer.echo(f"{target}: schema is up to date")
+        return
+    typer.echo(f"{target}:" + (" would" if dry_run else ""))
+    for step in steps:
+        typer.echo(f"  {step}")
+
+
+@app.command()
+def migrations():
+    """List schema migrations: applied (with checksum check) and pending."""
+    import psycopg
+
+    from .migrate import load_repeatables, status
+
+    async def go():
+        async with await psycopg.AsyncConnection.connect(settings.database_url, autocommit=True) as conn:
+            return await status(conn)
+
+    st = _run(go())
+    mismatched = {m.version for m, _ in st.mismatched}
+    for row in st.applied:
+        mark = "CHANGED SINCE APPLIED" if row["version"] in mismatched else ("baseline" if row["baseline"] else "applied")
+        typer.echo(f"{row['version']:04d}_{row['name']:<28} {mark:<22} {row['applied_at']:%Y-%m-%d %H:%M}")
+    if st.legacy:
+        typer.echo(f"{'0001_baseline':<33} {'baseline due':<22} existing database from before migrations")
+    for m in st.pending:
+        typer.echo(f"{m.label:<33} pending")
+    for row in st.unknown:
+        typer.echo(f"{row['version']:04d}_{row['name']:<28} applied by a newer release (no file here)")
+    for name in load_repeatables():
+        typer.echo(f"{name + '.sql':<33} {'repeatable, due' if name in st.repeatables_due else 'repeatable, current'}")
+    if st.mismatched or st.unknown:
+        raise typer.Exit(1)
+
+
 @app.command()
 def init_db():
-    """Create the schema in the configured database."""
-    _run(_with_pool(lambda conn: conn.execute("SELECT 1")))
-    typer.echo(f"schema applied at {settings.database_url}")
+    """Create or upgrade the schema in the configured database (same as `migrate`)."""
+    migrate(dry_run=False)
 
 
 @app.command()

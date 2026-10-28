@@ -239,6 +239,39 @@ the id of the memory a correction replaces), `memory_forget`, `memory_session_br
 claude mcp add --transport http memvine http://127.0.0.1:8400/mcp --header "Authorization: Bearer mv_sk_..."
 ```
 
+## Schema and migrations
+
+The schema is a series of numbered SQL files in `memvine_server/migrations/` (`0001_baseline.sql`,
+then `000N_<name>.sql`), plus `rls.sql`, the row-level security setup. On start the server applies
+every pending file in order, each in its own transaction, under a Postgres advisory lock (an API and
+a separate worker starting together apply each file once), and records it in `schema_migrations`
+with a checksum. `rls.sql` is repeatable: it runs again after any numbered migration (so new tables
+get its grants) and whenever its text changes; it is recorded in `schema_repeatables`.
+
+```sh
+.venv/bin/memvine-server migrations         # applied (with dates) and pending
+.venv/bin/memvine-server migrate --dry-run  # what the next start would do
+.venv/bin/memvine-server migrate            # apply now, without starting the server
+```
+
+**Upgrading a server.** Take a backup, then deploy the new code and restart; the server migrates
+before it accepts requests. A migration that fails rolls back and the server does not start: fix
+the cause (or return to the old code) and start again. `MEMVINE_AUTO_MIGRATE=false` makes the
+server refuse to start while migrations are pending, so they run only through `memvine-server
+migrate`.
+
+**Writing a migration.** Add the next number, e.g. `0003_project_quotas.sql`. Never edit a file
+that has been applied anywhere: the server compares checksums on every start and refuses to run if
+an applied file changed (fix forward with a new file). A table holding project rows also goes into
+the list in `rls.sql`. A statement that cannot run in a transaction (`CREATE INDEX CONCURRENTLY`)
+goes alone in its own file whose first line is `-- memvine:no-transaction`.
+
+**Databases from before migrations.** Until migrations existed the server applied one idempotent
+`schema.sql` on start (tracked in `schema_meta`). A database with Memvine's tables but no recorded
+migration is baselined on its first start: the server checks that every table and column of
+`0001_baseline.sql` exists, records 0001 as applied without running it, and reapplies `rls.sql`.
+If anything is missing it refuses to start and names it. `schema_meta` is left in place, unused.
+
 ## Docker
 
 `docker build -t memvine-server .` then run it with `MEMVINE_DATABASE_URL`, `MEMVINE_MANAGEMENT_KEY`
@@ -257,5 +290,5 @@ Tests use the fake LLM and fake embedder, so they are deterministic and free.
 ## Not yet built
 
 Payment collection, SSO, identifier-level staleness (anchors are per file), per-request rate
-limits beyond sign-in throttling, migrations (the schema applies itself idempotently). See the
+limits beyond sign-in throttling. See the
 design doc's roadmap.
