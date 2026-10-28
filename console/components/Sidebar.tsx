@@ -49,7 +49,9 @@ function initials(text: string) {
 
 export interface SidebarViewer { label: string; detail?: string | null; canSignOut: boolean }
 
-export function Sidebar({ projects, current, live, viewer, credits }: {
+export function Sidebar({ projects, current, live, viewer, credits, reviewCount = 0 }: {
+  /** Current memories awaiting review: a badge on Home. */
+  reviewCount?: number;
   projects: Project[];
   current: string;
   live: boolean;
@@ -127,6 +129,13 @@ export function Sidebar({ projects, current, live, viewer, credits }: {
                     >
                       <ItemIcon className={cx("size-4 shrink-0", active ? "text-text" : "text-text-3")} strokeWidth={1.75} aria-hidden />
                       {item.label}
+                      {item.href === "/" && reviewCount > 0 && (
+                        <span className="ml-auto rounded-full bg-accent-soft px-1.5 py-px text-[11px] font-medium tabular-nums text-accent"
+                              title={`${reviewCount} new ${reviewCount === 1 ? "memory" : "memories"} to review`}>
+                          {reviewCount > 99 ? "99+" : reviewCount}
+                          <span className="sr-only"> to review</span>
+                        </span>
+                      )}
                     </Link>
                   </li>
                 );

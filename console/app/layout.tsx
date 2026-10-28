@@ -57,7 +57,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang="en" className={fonts}>
       <body>
         <div className="md:flex md:h-screen">
-          <Sidebar projects={projects} current={project.slug} live={isLive} viewer={who} credits={credits} />
+          <Sidebar projects={projects} current={project.slug} live={isLive} viewer={who} credits={credits} reviewCount={project.reviewCount ?? 0} />
           <main className="scroll-quiet min-w-0 flex-1 bg-panel md:my-2 md:mr-2 md:overflow-y-auto md:rounded-xl md:border md:border-border">
             <div className="mx-auto max-w-[1180px] px-4 pt-6 pb-16 sm:px-6 md:px-8 md:pt-8">
               <ProjectGate hasProjects={projects.length > 0} fallback={<FirstProject canCreate={who?.canManage ?? true} />}>

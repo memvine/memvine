@@ -24,6 +24,8 @@ export interface Project {
   sampleSourceCount?: number;
   /** What the project is for, in the owner's words; shown under its name on the graph. */
   description?: string | null;
+  /** Current memories awaiting review (review "new"). */
+  reviewCount?: number;
 }
 
 /** POST /v1/ingest with `instant: true` (server/memvine_server/instant.py). status "done": every
@@ -101,6 +103,8 @@ export interface MemoryItem {
   why?: string | null;
   /** The thread of work this came from, if any. */
   threadId?: string | null;
+  /** "new" until a person keeps it (Keep / Still true); synthesis writes "new", a person's own memory starts "kept". */
+  review?: "new" | "kept";
 }
 
 export type KnowledgeCategory = "decision" | "rule" | "gotcha" | "fact" | "preference";
@@ -321,6 +325,8 @@ export interface MemoryFilter {
   kind?: MemoryKind;
   status?: MemoryStatus;
   category?: KnowledgeCategory;
+  /** "new": current memories no person has kept yet. */
+  review?: "new" | "kept";
 }
 
 export interface MemoryDetail {

@@ -16,15 +16,16 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const params = await searchParams;
   const kind = KINDS.find((k) => k === params.kind);
   const status = STATUSES.find((s) => s === params.status);
+  const review = params.review === "new" ? "new" as const : undefined;
   const project = await currentProject();
   const [memories, all, threads, detail] = await Promise.all([
-    listMemories(project.slug, { q: params.q, kind, status }),
-    params.q || kind || status ? listMemories(project.slug) : null,
+    listMemories(project.slug, { q: params.q, kind, status, review }),
+    params.q || kind || status || review ? listMemories(project.slug) : null,
     listThreads(project.slug),
     params.open ? getMemory(project.slug, params.open) : null,
   ]);
-  const filtered = Boolean(params.q || kind || status);
-  const base = { q: params.q, kind, status };
+  const filtered = Boolean(params.q || kind || status || review);
+  const base = { q: params.q, kind, status, review };
   const link = (id: string) => href("/memories", { ...base, open: id });
   const total = all?.length ?? memories.length;
 
@@ -47,6 +48,10 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
           <option value="">Any status</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </Select>
+        <Select name="review" defaultValue={review ?? ""} aria-label="Review" wrapperClassName="w-[150px]" className="h-9">
+          <option value="">Reviewed or not</option>
+          <option value="new">Needs review</option>
+        </Select>
       </FilterBar>
 
       <Card>
@@ -57,9 +62,10 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
           followParam="open"
           selected={params.open}
           threads={Object.fromEntries(threads.map((t) => [t.id, t.title]))}
+          reviewing={Boolean(review)}
           empty={
             <div className="px-5 py-14 text-center text-[13px] text-text-3">
-              {filtered ? "No memories match these filters." : (
+              {review && !params.q && !kind && !status ? "Nothing to review: every current memory has been kept or forgotten." : filtered ? "No memories match these filters." : (
                 <div className="flex flex-col items-center gap-4">
                   <p>No memories yet. They appear a minute or two after the first conversation is sent, or load a sample to try recall right now.</p>
                   {project.sourceCount === 0 && <SampleOffer />}
