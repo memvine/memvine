@@ -1,8 +1,14 @@
-import { KeyRound } from "lucide-react";
+import { ArrowRight, KeyRound } from "lucide-react";
 import { revokeKey } from "@/app/actions";
-import { Badge, button, Card, CardBody, CardHeader, formatDate, Mono, PageHeader, Table, TableEmpty, TBody, Td, Th, THead, timeAgo, Tr } from "@/components/ui";
+import { Badge, button, ButtonLink, Card, CardBody, CardHeader, formatDate, Mono, PageHeader, Table, TableEmpty, TBody, Td, Th, THead, timeAgo, Tr } from "@/components/ui";
 import { canManage, currentProject, listKeys, publicApiUrl, viewerEmail } from "@/lib/api";
+import { describeAgent } from "@/lib/agent";
 import { CreateKeyForm } from "./CreateKeyForm";
+
+function agentLabel(userAgent: string | null | undefined): string {
+  const a = describeAgent(userAgent);
+  return a ? `via ${a.label}${a.version ? ` ${a.version}` : ""}` : "";
+}
 
 export default async function KeysPage() {
   const project = await currentProject();
@@ -16,6 +22,7 @@ export default async function KeysPage() {
         title="API keys"
         count={live}
         description={`Project keys let agents, plugins and your backend ingest and recall memory in ${project.name}. A key belongs to one project and never moves.`}
+        actions={<ButtonLink href="/connect" variant="secondary">Connect your agent, step by step <ArrowRight aria-hidden /></ButtonLink>}
       />
 
       <Card className="mb-6">
@@ -41,6 +48,7 @@ export default async function KeysPage() {
               <Td muted nowrap>
                 {timeAgo(k.lastUsedAt)}
                 {k.lastUsedIp && <span className="block font-mono text-[11.5px] text-text-3">from {k.lastUsedIp}</span>}
+                {describeAgent(k.lastUserAgent) && <span className="block text-[11.5px] text-text-3">{agentLabel(k.lastUserAgent)}</span>}
               </Td>
               <Td align="right">
                 {k.revokedAt ? (

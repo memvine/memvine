@@ -43,6 +43,12 @@ def client_ip(request: Request) -> str:
     return forwarded or (request.client.host if request.client else "")
 
 
+def user_agent(value: str | None) -> str | None:
+    """A caller's User-Agent as stored on its key: trimmed, at most 200 characters, None when absent."""
+    value = (value or "").strip()[:200]
+    return value or None
+
+
 def _bearer(request: Request) -> str:
     header = request.headers.get("authorization", "")
     scheme, _, token = header.partition(" ")
@@ -190,8 +196,9 @@ async def require_project(request: Request) -> Principal:
             raise HTTPException(401, {"code": "unknown-api-key", "message": "No such key"})
         if row["revoked_at"]:
             raise HTTPException(401, {"code": "revoked-api-key", "message": "This key was revoked"})
-        await conn.execute("UPDATE api_keys SET last_used_at = now(), last_used_ip = %s WHERE id = %s",
-                           (client_ip(request) or None, row["key_id"]))
+        await conn.execute("UPDATE api_keys SET last_used_at = now(), last_used_ip = %s, "
+                           "last_user_agent = COALESCE(%s, last_user_agent) WHERE id = %s",
+                           (client_ip(request) or None, user_agent(request.headers.get("user-agent")), row["key_id"]))
     principal = Principal(project_id=row["project_id"], project_slug=row["slug"], key_id=row["key_id"])
     request.state.principal = principal
     request_project.set(str(principal.project_id))

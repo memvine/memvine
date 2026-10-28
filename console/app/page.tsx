@@ -68,8 +68,8 @@ export default async function HomePage() {
   const recalls30 = usage.filter((d) => d.date >= since).reduce((n, d) => n + d.recall, 0);
 
   const steps: SetupStep[] = [
-    { done: keys.some((k) => !k.revokedAt), label: "Create a project API key", href: "/keys" },
-    { done: episodes.length > 0, label: "Send your first conversation", href: "/integrations" },
+    { done: keys.some((k) => !k.revokedAt), label: "Create a project API key", href: "/connect" },
+    { done: episodes.length > 0, label: "Send your first conversation", href: "/connect" },
     { done: hasMemory, label: "Wait for memory to be tended", href: "/sources" },
     { done: recalls30 > 0 || recalls.some((r) => r.status < 400), label: "Ask memory for the first time", href: "/playground" },
   ];
@@ -77,8 +77,8 @@ export default async function HomePage() {
   // the plugin's backfill labels the sessions it imports "(imported)".
   const sent = episodes.filter((e) => !e.id.startsWith("paste-") && !e.id.startsWith(SAMPLE_PREFIX));
   const connect: SetupStep[] = [
-    { done: keys.some((k) => !k.revokedAt), label: "Create a project API key", href: "/keys", detail: "Agents send and recall with it." },
-    { done: sent.length > 0, label: "Install the plugin in Claude Code or Codex", href: "/integrations", detail: "/plugin install memvine@memvine" },
+    { done: keys.some((k) => !k.revokedAt), label: "Create a project API key", href: "/connect", detail: "Agents send and recall with it." },
+    { done: sent.length > 0, label: "Install the plugin in Claude Code or Codex", href: "/connect", detail: "/plugin install memvine@memvine" },
     { done: sent.some((e) => e.label?.endsWith("(imported)")), label: "Backfill your past sessions", href: "/integrations", detail: "/memvine:backfill" },
   ];
 

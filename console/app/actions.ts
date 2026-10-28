@@ -162,6 +162,8 @@ export async function switchProject(formData: FormData) {
 export interface CreateKeyState {
   secret?: string;
   name?: string;
+  /** The new key's id, so the connect page can watch for its first use. */
+  id?: string;
   error?: string;
 }
 
@@ -171,12 +173,18 @@ export async function createKey(_prev: CreateKeyState, formData: FormData): Prom
   if (name.length > 60) return { error: "Keep the name under 60 characters." };
   const project = await api.currentProject();
   try {
-    const { secret } = await api.createKey(project.slug, name);
+    const { key, secret } = await api.createKey(project.slug, name);
     revalidatePath("/keys");
-    return { secret, name };
+    return { secret, name, id: key.id };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the key." };
   }
+}
+
+/** The connect page's "Check connection" poll: whether an agent has used this key of the current project yet. */
+export async function checkKeyConnection(id: string) {
+  const project = await api.currentProject();
+  return project.slug ? api.keyConnection(project.slug, id) : null;
 }
 
 export async function revokeKey(formData: FormData) {
