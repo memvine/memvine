@@ -84,6 +84,7 @@ BODIES: dict[tuple[str, str], dict | None] = {
     ("GET", "/v1/projects/{slug}/keys"): None,
     ("POST", "/v1/projects/{slug}/keys"): {"name": "attacker key"},
     ("DELETE", "/v1/projects/{slug}/keys/{key_id}"): None,
+    ("GET", "/v1/projects/{slug}/keys/{key_id}/connection"): None,
     ("GET", "/v1/org"): None,
     ("POST", "/v1/orgs"): {"name": "attacker org {rand}"},
     ("GET", "/v1/orgs"): None,
@@ -160,7 +161,7 @@ async def test_no_route_reaches_another_organization(client):
     pb = (await client.post("/v1/projects", json={"name": f"Quokka project {tag}", "slug": f"b-{tag}", "description": "quokka billing"}, headers=hb)).json()
     kb = (await client.post(f"/v1/projects/{pb['slug']}/keys", json={"name": "quokka key"}, headers=hb)).json()
     okb = (await client.post("/v1/org/keys", json={"name": "quokka org key"}, headers=hb)).json()
-    hk = bearer(kb["key"])
+    hk = {**bearer(kb["key"]), "User-Agent": "quokka-agent/1.0"}  # stored on B's key
     assert (await client.post("/v1/sample", headers=hk)).status_code == 200
     assert (await client.post("/v1/ingest", json={"items": [{"id": f"ep-{tag}", "content": "The quokka ledger closes on Fridays.", "timestamp": "2026-10-01T10:00:00Z"}]},
                               headers=hk)).status_code == 202

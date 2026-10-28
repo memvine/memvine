@@ -45,7 +45,7 @@ def client_ip(request: Request) -> str:
 
 def user_agent(value: str | None) -> str | None:
     """A caller's User-Agent as stored on its key: trimmed, at most 200 characters, None when absent."""
-    value = (value or "").strip()[:200]
+    value = "".join(ch for ch in (value or "") if ch.isprintable()).strip()[:200]
     return value or None
 
 
