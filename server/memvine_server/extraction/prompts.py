@@ -134,6 +134,7 @@ Return ONLY a JSON array (possibly empty). Each element:
   "assertion": "stated" | "observed" | "claimed" | "inferred",
   "confidence": "high" | "medium" | "low",
   "valid_from": string | null,
+  "valid_until": string | null, // ISO date the item itself says it stops being true ("the scratch org expires on 28 Oct 2026", "until the freeze ends on 3 Nov 2026"), else null; a date something starts ("from 4 Nov") is valid_from
   "standing": boolean,     // true for a rule the assistant must follow from now on ("always ...", "never ...")
   "quote": string          // a verbatim span of the excerpt, 5-200 characters, copied character for character
 }

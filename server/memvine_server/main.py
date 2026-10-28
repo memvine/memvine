@@ -70,7 +70,7 @@ from .models import (
 )
 from .recall import recall as run_recall
 from .remember import SupersedeError, remember
-from .store import MEMORY_COLUMNS, get_memory, list_memories
+from .store import MEMORY_COLUMNS, get_memory, list_memories, unused_clause
 from .store import retire as retire_memory
 from .worker import run_forever
 
@@ -205,7 +205,9 @@ async def ingest(body: IngestRequest, request: Request, response: Response, prin
 async def recall(body: RecallRequest, request: Request, principal: Principal = Depends(require_project)):
     async with request.app.state.pool.connection() as conn:
         audiences = await access.readable_audiences(conn, principal.project_id, body.identity, principal.key_id is None)
-        result = await run_recall(conn, request.app.state.embedder, principal.project_id, body, audiences)
+        # The console's playground (no project key) is a person looking, not an agent using memory.
+        result = await run_recall(conn, request.app.state.embedder, principal.project_id, body, audiences,
+                                  track=principal.key_id is not None)
         request.state.log_detail = recall_log_detail(result)
         if principal.key_id is not None:  # the console's playground is not billed
             await billing.charge_recall(conn, principal.project_id)
@@ -378,12 +380,15 @@ async def memories(
     category: str | None = None,
     scope: Literal["project", "thread"] | None = None,
     q: str | None = None,
+    unused: bool = False,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
+    """status=expired lists items past the end they stated; unused=true lists items no recall served
+    in memory_unused_days (for review: nothing is hidden or deleted for being unused)."""
     async with request.app.state.pool.connection() as conn:
         return await list_memories(conn, principal.project_id, status=status, kind=kind, q=q, limit=limit, offset=offset,
-                                   category=category, scope=scope)
+                                   category=category, scope=scope, unused=unused)
 
 
 @app.get("/v1/threads", response_model=list[ThreadSummary])
@@ -730,6 +735,8 @@ PROJECT_SELECT = """
            (SELECT coalesce(sum(u.credits), 0) FROM usage_events u WHERE u.project_id = p.id
              AND u.at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS month_credits,
            (SELECT count(*) FROM memory_items m WHERE m.project_id = p.id) AS memory_count,
+           (SELECT count(*) FROM memory_items m WHERE m.project_id = p.id AND """ + unused_clause(settings.memory_unused_days) + """) AS unused_count,
+           """ + str(int(settings.memory_unused_days)) + """ AS unused_days,
            (SELECT count(*) FROM episodes e WHERE e.project_id = p.id) AS source_count,
            (SELECT count(*) FROM episodes e WHERE e.project_id = p.id AND e.metadata->>'source' = 'sample') AS sample_source_count,
            (SELECT count(*) FROM api_keys k WHERE k.project_id = p.id AND k.revoked_at IS NULL) AS key_count,

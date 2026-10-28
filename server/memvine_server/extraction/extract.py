@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from .llm import LLM
 from .prompts import KNOWLEDGE_SYSTEM, knowledge_user
@@ -37,6 +37,9 @@ class Candidate:
     why: str | None = None
     thread_key: str | None = None
     scope: str | None = None  # "project" (anyone in the project) or "thread" (only beside its thread's page)
+    # When the item says it stops being true ("the scratch org expires on 28 Oct"): stored as valid_to,
+    # and recall stops serving it as current after that moment.
+    valid_until: datetime | None = None
 
 
 @dataclass
@@ -140,6 +143,23 @@ def parse_date(value) -> datetime | None:
         return None
 
 
+def end_date(value, valid_from: datetime | None) -> datetime | None:
+    """valid_until as the moment the item stops being true: a bare date means the last second of that
+    day (UTC), so "expires on 28 Oct" is still current on 28 Oct and reads "until 28 Oct". None when
+    missing, unparseable, or not after valid_from (an "end" before the start is a misread start)."""
+    end = parse_date(value)
+    if end is None:
+        return None
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    if isinstance(value, str) and len(value.strip()) == 10:  # YYYY-MM-DD
+        end += timedelta(days=1, seconds=-1)
+    start = valid_from.replace(tzinfo=valid_from.tzinfo or timezone.utc) if valid_from else None
+    if start is not None and end <= start:
+        return None
+    return end
+
+
 def candidates_from(raw, source: str) -> ExtractionResult:
     result = ExtractionResult(items=[], raw=raw if isinstance(raw, str) else "")
     data = parse_json(raw) if isinstance(raw, str) else raw
@@ -189,6 +209,7 @@ def candidates_from(raw, source: str) -> ExtractionResult:
                 assertion=assertion,
                 confidence=confidence,
                 valid_from=parse_date(entry.get("valid_from")),
+                valid_until=end_date(entry.get("valid_until"), parse_date(entry.get("valid_from"))),
                 quote=quote,
                 standing=is_standing(entry.get("standing"), kind, statement),
                 category=category if category in CATEGORY_KIND else None,

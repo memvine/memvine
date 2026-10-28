@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     # Server-wide relevance threshold for recall's abstention (recall.py). Unset: each embedding model's
     # calibrated default (embeddings.py). A project's own recall_min_relevance overrides both.
     recall_min_relevance: float | None = None
+    # A memory this many days old that no briefing served in this many days is listed for review
+    # (GET /v1/memories?unused=true, the project's unused_count). Never hidden or deleted for it.
+    memory_unused_days: int = 60
 
 
 settings = Settings()
