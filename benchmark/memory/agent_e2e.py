@@ -188,7 +188,7 @@ def _run(prompt: str, repo: Path, bin_dir: Path, log: Path, plugin: Path | None)
             if d.get("is_error"):
                 run["error"] = d.get("subtype", "error")
     if out.returncode and not run["error"]:
-        run["error"] = (out.stderr or "exit %d" % out.returncode)[:300]
+        run["error"] = (out.stderr or f"exit {out.returncode}")[:300]
     run["calls"] = [c for c in log.read_text().splitlines() if c.strip()]
     return run
 

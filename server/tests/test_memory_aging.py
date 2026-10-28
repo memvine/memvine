@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from conftest import needs_db
@@ -35,7 +35,7 @@ def test_valid_until_is_parsed_as_the_end_of_that_day():
          "quote": "do not park test data there"},
     ])
     items = knowledge_from(raw, source).items
-    assert items[0].valid_until == datetime(2026, 10, 28, 23, 59, 59, tzinfo=timezone.utc)
+    assert items[0].valid_until == datetime(2026, 10, 28, 23, 59, 59, tzinfo=UTC)
     assert items[1].valid_until is None
 
 
@@ -158,7 +158,7 @@ async def test_a_near_duplicate_merges_without_asking_the_model(client):
     reworded = "The staging database is shared with the partner integration team on weekdays and holidays."
     changed = "The staging database is now shared with the partner integration team on weekdays."
     a, b, c = await app.state.embedder.embed([first, reworded, changed])
-    cos = sum(x * y for x, y in zip(a, b))
+    cos = sum(x * y for x, y in zip(a, b, strict=False))
     assert NEAR_DUPLICATE_SIMILARITY <= cos < IDENTICAL_SIMILARITY, cos
 
     llm = app.state.llm
@@ -174,7 +174,7 @@ async def test_a_near_duplicate_merges_without_asking_the_model(client):
     rule = (await client.post("/v1/memories", json={"statement": reworded, "subjects": ["staging database"],
                                                     "kind": "procedural", "category": "rule"})).json()
     assert rule["memory"]["id"] != base["memory"]["id"]
-    if sum(x * y for x, y in zip(a, c)) >= NEAR_DUPLICATE_SIMILARITY:
+    if sum(x * y for x, y in zip(a, c, strict=False)) >= NEAR_DUPLICATE_SIMILARITY:
         update = (await client.post("/v1/memories", json={"statement": changed, "subjects": ["staging database"],
                                                           "category": "fact"})).json()
         assert update["relation"] != "same"

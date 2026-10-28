@@ -46,10 +46,10 @@ os.environ.setdefault("MEMVINE_EMBEDDINGS_BACKEND", "fake")
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent / "server"))
 
-from memvine_server.checkpoints import Event, plan_cuts, render
-from memvine_server.extraction.extract import extract_knowledge
-from memvine_server.extraction.llm import FakeLLM, make_llm
-from memvine_server.extraction.prompts import KNOWLEDGE_SYSTEM
+from memvine_server.checkpoints import Event, plan_cuts, render  # noqa: E402 - after the sys.path entry above
+from memvine_server.extraction.extract import extract_knowledge  # noqa: E402 - after the sys.path entry above
+from memvine_server.extraction.llm import FakeLLM, make_llm  # noqa: E402 - after the sys.path entry above
+from memvine_server.extraction.prompts import KNOWLEDGE_SYSTEM  # noqa: E402 - after the sys.path entry above
 
 FAILED = re.compile(r"`([^`]*)` failed \(exit \d+\): ([^;]{10,200})")
 

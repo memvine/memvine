@@ -2,11 +2,11 @@
 reconciliation, recall and the HTTP routes."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
-from .extraction.extract import Candidate
 from .config import settings
+from .extraction.extract import Candidate
 from .models import Evidence, MemoryOut
 
 MEMORY_COLUMNS = """
@@ -91,7 +91,7 @@ def memory_out(row, evidence: list[Evidence] | None = None) -> MemoryOut:
         thread_id=row.get("thread_id"),
         scope=row.get("scope"),
         expired=row["status"] in ("active", "stale") and row["valid_to"] is not None
-        and row["valid_to"] <= datetime.now(timezone.utc),
+        and row["valid_to"] <= datetime.now(UTC),
         last_recalled_at=row.get("last_recalled_at"),
         recall_count=row.get("recall_count") or 0,
         review=row.get("review") or "kept",

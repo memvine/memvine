@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from .llm import LLM
 from .prompts import KNOWLEDGE_SYSTEM, knowledge_user
@@ -151,10 +151,10 @@ def end_date(value, valid_from: datetime | None) -> datetime | None:
     if end is None:
         return None
     if end.tzinfo is None:
-        end = end.replace(tzinfo=timezone.utc)
+        end = end.replace(tzinfo=UTC)
     if isinstance(value, str) and len(value.strip()) == 10:  # YYYY-MM-DD
         end += timedelta(days=1, seconds=-1)
-    start = valid_from.replace(tzinfo=valid_from.tzinfo or timezone.utc) if valid_from else None
+    start = valid_from.replace(tzinfo=valid_from.tzinfo or UTC) if valid_from else None
     if start is not None and end <= start:
         return None
     return end

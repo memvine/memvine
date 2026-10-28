@@ -15,7 +15,7 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # Where each split lives on Hugging Face.
@@ -147,7 +147,7 @@ def to_ingest_item(conversation: Conversation, message: Message) -> dict:
 
 def utc_iso(moment: datetime) -> str:
     """A moment as Past writes it: UTC, ending in Z."""
-    return moment.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return moment.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 # --- The conversation and its user -----------------------------------------------------------
@@ -230,7 +230,7 @@ def parse_date(value) -> datetime | None:
     text = re.sub(r"(?<=\d)(?:st|nd|rd|th)\b", "", str(value or "").strip())
     for pattern in DATE_FORMATS if text else ():
         try:
-            return datetime.strptime(text, pattern).replace(hour=12, tzinfo=timezone.utc)
+            return datetime.strptime(text, pattern).replace(hour=12, tzinfo=UTC)
         except ValueError:
             continue
     return None

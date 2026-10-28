@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from .config import settings
@@ -119,7 +119,7 @@ def render_line(row, previous: str | None, conflicts: list[tuple[str, datetime]]
         head.append(f"superseded {_short(row['valid_to'])}" if row.get("valid_to") else "superseded")
     elif row.get("valid_to") and row["status"] != "retired":
         # A time-bound item: "ended" once past (only a historical question sees it then), else "until".
-        ended = row["valid_to"] <= datetime.now(timezone.utc)
+        ended = row["valid_to"] <= datetime.now(UTC)
         head.append(f"{'ended' if ended else 'until'} {_short(row['valid_to'])}")
     if previous:
         head.append(f"supersedes {_short(links['supersedes'])}" if links.get("supersedes") else "supersedes")
