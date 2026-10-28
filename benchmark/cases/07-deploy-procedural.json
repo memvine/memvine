@@ -1,0 +1,30 @@
+{
+  "name": "deploy-procedural",
+  "files": {
+    "src/deploy/promote.ts": "export const promote = () => 'promoted';\n",
+    "src/deploy/stage.ts": "export const stage = () => 'staged';\n",
+    "src/user/profile.ts": "export const avatarUrl = (id: string) => `/avatars/${id}`;\n"
+  },
+  "memory": {
+    "body": "To deploy: run `make stage`, wait for CI to go green on the staging environment, then run `make promote`. Never promote before staging CI is green.",
+    "kind": "procedural",
+    "scope": ["src/deploy/**"],
+    "confidence": "high"
+  },
+  "task": {
+    "query": "update the deploy promote step to add a confirmation",
+    "path": "src/deploy/promote.ts"
+  },
+  "distractors": [
+    { "body": "User avatars are served from /avatars and cached for 24h.", "kind": "semantic", "scope": ["src/user/**"], "confidence": "medium" },
+    { "body": "CI runs the unit suite on every push; integration tests are nightly.", "kind": "procedural", "scope": [], "confidence": "medium" }
+  ],
+  "edits": {
+    "directEvidence": {
+      "src/deploy/promote.ts": "export const promote = (confirm: boolean) => (confirm ? 'promoted' : 'aborted');\n"
+    },
+    "unrelated": {
+      "src/user/profile.ts": "export const avatarUrl = (id: string) => `/avatars/v2/${id}`;\n"
+    }
+  }
+}

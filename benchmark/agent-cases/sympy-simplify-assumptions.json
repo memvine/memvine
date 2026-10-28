@@ -1,0 +1,21 @@
+{
+  "instance_id": "sympy__sympy-22714",
+  "repo": "sympy/sympy",
+  "issue": "simplify() drops assumptions on Symbol when the expression is rebuilt, so positive=True is lost after simplification. Preserve symbol assumptions through the rebuild.",
+  "firstFile": "sympy/simplify/simplify.py",
+  "dependencyMemories": [
+    {
+      "body": "Symbol assumptions are stored on the Symbol object and are lost if you reconstruct via Symbol(name); use symbol.func(*symbol.args, **symbol.assumptions0) to preserve them through a rebuild.",
+      "kind": "semantic",
+      "scope": ["sympy/simplify/**", "sympy/core/**"],
+      "confidence": "high",
+      "evidence": "issue #21619"
+    }
+  ],
+  "distractorMemories": [
+    { "body": "Matrix determinant uses Bareiss by default; switch to LU for large dense matrices.", "kind": "semantic", "scope": ["sympy/matrices/**"], "confidence": "medium" },
+    { "body": "Printing precedence for Mul is set in sympy/printing/precedence.py.", "kind": "semantic", "scope": ["sympy/printing/**"], "confidence": "medium" },
+    { "body": "The test suite uses XFAIL for known-broken integrals; don't delete them.", "kind": "procedural", "scope": [], "confidence": "medium" }
+  ],
+  "mock": { "keyFacts": ["assumptions0"] }
+}

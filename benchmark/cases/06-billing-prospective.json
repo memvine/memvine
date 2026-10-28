@@ -1,0 +1,30 @@
+{
+  "name": "billing-prospective",
+  "files": {
+    "src/billing/checkout.ts": "export const LAUNCH_FLAG = true;\nexport const checkout = () => (LAUNCH_FLAG ? 'v1' : 'v2');\n",
+    "src/billing/flags.ts": "export const flags = { billingV2: false };\n",
+    "src/api/handler.ts": "export const handle = (r: string) => r;\n"
+  },
+  "memory": {
+    "body": "When billing v2 ships (flags.billingV2 = true), delete the LAUNCH_FLAG hack in checkout.ts and the branch it guards.",
+    "kind": "prospective",
+    "scope": ["src/billing/**"],
+    "confidence": "high"
+  },
+  "task": {
+    "query": "work on the billing checkout launch flag",
+    "path": "src/billing/checkout.ts"
+  },
+  "distractors": [
+    { "body": "HTTP handlers must return within 30s or the gateway times out.", "kind": "semantic", "scope": ["src/api/**"], "confidence": "medium" },
+    { "body": "The staging DB is reset every Sunday; don't rely on its data.", "kind": "semantic", "scope": [], "confidence": "low" }
+  ],
+  "edits": {
+    "directEvidence": {
+      "src/billing/flags.ts": "export const flags = { billingV2: true };\n"
+    },
+    "unrelated": {
+      "src/api/handler.ts": "export const handle = (r: string) => r.trim();\n"
+    }
+  }
+}

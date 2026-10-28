@@ -1,0 +1,24 @@
+name: Release checks
+# Manual only (Actions tab → Run workflow): the account's GitHub Actions quota ran out, so pushes
+# and pull requests do not trigger it. Run checks locally; see CONTRIBUTING.md.
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: ['22.0.0', '22', '24']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run benchmark
+      - run: npm run test:package

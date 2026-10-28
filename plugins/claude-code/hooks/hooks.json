@@ -1,0 +1,10 @@
+{
+  "description": "memvine: every session starts briefed, and what is said becomes memory.",
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/memvine-hook.mjs\" brief", "statusMessage": "Recalling from memvine", "timeout": 15 }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/memvine-hook.mjs\" prompt", "timeout": 8 }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/memvine-hook.mjs\" stop", "timeout": 5 }] }],
+    "PreCompact": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/memvine-hook.mjs\" precompact", "async": true, "timeout": 60 }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/memvine-hook.mjs\" end", "async": true, "timeout": 5 }] }]
+  }
+}

@@ -1,0 +1,97 @@
+# BEAM on Memvine
+
+Runs the [BEAM](https://arxiv.org/abs/2510.27246) long-conversation memory benchmark against the
+Memvine server, and against two reference arms on the same harness, prompts, models and judge:
+
+| Backend | What answers the question | Why it is here |
+| --- | --- | --- |
+| `memvine` | the Memvine server's recall, as of the moment asked | the system under test |
+| `fullcontext` | every turn up to that moment, verbatim (capped) | the ceiling when the conversation fits the model's context |
+| `rag` | top chunks of the raw turns by local embeddings + keyword overlap, same 8,000-token budget | whether synthesis earns its cost over plain retrieval |
+
+This is a fork of [past.dev's open harness](https://github.com/pastdotdev/benchmarks/tree/main/beam)
+(MIT, see `LICENSE-past-harness` and `NOTICE.md`). The dataset handling (`dataset.py`), ExaBase's
+answer and judge prompts (`exabase_prompts.py`, unchanged, SHA-256 checked by `verify.py --prompts`),
+the model (`llm.py`: `openai/gpt-5.6-luna` via OpenRouter, reasoning off) and the scoring
+(`scoring.py`) are theirs, so a number from here compares with their published 90.02%. Only the
+memory system is pluggable (`memory_api.py`).
+
+## Run
+
+```sh
+cd benchmark/beam
+uv venv --python 3.12 .venv && uv pip install -p .venv/bin/python -r requirements.txt
+export OPENROUTER_API_KEY=...
+
+.venv/bin/python run.py --backend fullcontext --split 100k            # reference arms need no server
+.venv/bin/python run.py --backend rag --split 100k
+
+export MEMVINE_API_URL=http://127.0.0.1:8400 MEMVINE_MANAGEMENT_KEY=mv_mk_...   # server running, API-backed LLM
+.venv/bin/python run.py --backend memvine --split 100k
+.venv/bin/python run.py --backend memvine --split 100k --conversations 2        # a cheap first look
+```
+
+Results land in `results/<backend>-<split>/`: `results.jsonl` (one line per question with the
+recall response, the answer and the verdicts) and `summary.json` (scores by category, dataset
+revision, backend configuration, models). Rerunning the same command skips conversations already
+scored. `--reuse TAG` (memvine only) scores again against the projects an earlier run filled.
+
+## Plumbing check without an OpenRouter account
+
+`BEAM_FAKE_MODEL=1` replaces the answer and judge model with canned replies. Every other step is
+real: dataset, ingestion, waiting, recall, scoring arithmetic, files. The summary records
+`"fakeModel": true` and the scores mean nothing.
+
+```sh
+BEAM_FAKE_MODEL=1 .venv/bin/python run.py --backend rag --split 100k --conversations 1
+```
+
+## How Memvine is sent the conversation
+
+Consecutive turns of one session go together as one episode, up to `BEAM_EPISODE_CHARS`
+(default 6,000) characters, rendered as `## Author · time` blocks, timestamped at the first turn.
+One project per conversation, as in past.dev's run. Recall asks with `as_of` set to the question's
+moment and an 8,000-token budget, and the answer model reads the recall response (briefing plus
+items with their dates, status and previous value) as JSON.
+
+## Answer coverage (no model account needed)
+
+`coverage.py` runs recall exactly as the harness does and measures the share of each reference
+answer's key terms (numbers, names, content words) present in what comes back. It is a retrieval
+proxy, not a BEAM score, but it is free and moves when retrieval moves.
+
+```sh
+.venv/bin/python coverage.py --split 100k --conversations 3 --backends rag fullcontext
+.venv/bin/python coverage.py --split 100k --conversations 1 --backends memvine --memvine-tag "100k <run tag>"
+```
+
+First reading (2026-10-25, 100K, conversations 1-3, 8,000-token budget for rag):
+
+| Category | rag | fullcontext |
+| --- | ---: | ---: |
+| contradiction_resolution | 0.611 | 0.817 |
+| event_ordering | 0.816 | 0.978 |
+| information_extraction | 0.860 | 0.925 |
+| instruction_following | 0.841 | 1.000 |
+| knowledge_update | 1.000 | 1.000 |
+| multi_session_reasoning | 0.702 | 0.819 |
+| preference_following | 0.678 | 0.906 |
+| summarization | 0.624 | 0.890 |
+| temporal_reasoning | 0.899 | 0.938 |
+| **overall** | **0.781** | **0.919** |
+| mean evidence tokens | 7,801 | 121,146 |
+
+## Tests
+
+```sh
+.venv/bin/pytest -q                       # backends on a synthetic conversation
+MEMVINE_API_URL=... MEMVINE_MANAGEMENT_KEY=... .venv/bin/pytest -q   # plus the Memvine round trip
+.venv/bin/python verify.py --prompts     # ExaBase prompt file unchanged
+```
+
+## Process rules
+
+From the design doc's evaluation plan: pre-register configuration before looking at scores; any
+memory error during a run stops it (the harness does: a failed synthesis job raises
+`IngestionFailed`); report cost beside accuracy; publish per-category scores with failed
+questions counted as wrong, and this runnable harness.

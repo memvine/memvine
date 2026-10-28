@@ -1,0 +1,23 @@
+{
+  "name": "@memvine/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript client for the Memvine memory API: send conversations, recall memory, keep a live session's state.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test dist/index.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "typescript": "^5.9.3"
+  }
+}

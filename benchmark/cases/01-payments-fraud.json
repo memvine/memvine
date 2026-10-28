@@ -1,0 +1,33 @@
+{
+  "name": "payments-fraud",
+  "files": {
+    "src/pay/service.ts": "export function createPayment(amount: number) {\n  runFraudCheck(amount);\n  return charge(amount);\n}\nfunction runFraudCheck(_a: number) {}\nfunction charge(a: number) { return { id: 'p', a }; }\n",
+    "src/pay/checkout.ts": "import { createPayment } from './service';\nexport const checkout = (amt: number) => createPayment(amt);\n",
+    "src/user/profile.ts": "export const avatarUrl = (id: string) => `/avatars/${id}`;\n",
+    "src/notify/email.ts": "export const send = (to: string) => ({ to });\n"
+  },
+  "memory": {
+    "body": "Payments must be created through PaymentService.createPayment, never by calling charge() directly, because createPayment runs the required fraud check first.",
+    "kind": "semantic",
+    "scope": ["src/pay/**"],
+    "confidence": "high"
+  },
+  "task": {
+    "query": "add a refund path in payments checkout",
+    "path": "src/pay/checkout.ts"
+  },
+  "distractors": [
+    { "body": "User avatars are served from /avatars and cached for 24h.", "kind": "semantic", "scope": ["src/user/**"], "confidence": "medium" },
+    { "body": "Transactional email uses the notify module; do not inline SMTP.", "kind": "semantic", "scope": ["src/notify/**"], "confidence": "medium" },
+    { "body": "The payments dashboard renders its charts with the vendored charts lib.", "kind": "semantic", "scope": [], "confidence": "low" },
+    { "body": "CI runs the unit suite on every push; integration tests are nightly.", "kind": "procedural", "scope": [], "confidence": "medium" }
+  ],
+  "edits": {
+    "directEvidence": {
+      "src/pay/service.ts": "export function createPayment(amount: number) {\n  // fraud check reworked\n  runFraudCheck(amount, 'v2');\n  return charge(amount);\n}\nfunction runFraudCheck(_a: number, _v?: string) {}\nfunction charge(a: number) { return { id: 'p', a }; }\n"
+    },
+    "unrelated": {
+      "src/user/profile.ts": "export const avatarUrl = (id: string) => `/avatars/v2/${id}`;\n"
+    }
+  }
+}

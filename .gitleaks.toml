@@ -1,0 +1,27 @@
+# Secret scanning config for gitleaks (https://github.com/gitleaks/gitleaks).
+# Runs in CI (.github/workflows/secret-scan.yml) and in the optional pre-commit hook
+# (scripts/git-hooks/pre-commit). Extends gitleaks' default rules with Memvine's own key formats.
+title = "memvine gitleaks config"
+
+[extend]
+useDefault = true
+
+# Memvine credentials (server/memvine_server/auth.py, accounts.py): project keys mv_sk_,
+# organization keys mv_mk_, sign-in sessions mv_us_ and invite tokens mv_in_, each followed by
+# secrets.token_urlsafe(24 or 32), i.e. 32+ url-safe characters.
+[[rules]]
+id = "memvine-key"
+description = "Memvine project/organization key, session or invite token"
+regex = '''\bmv_(?:sk|mk|us|in)_[A-Za-z0-9_-]{30,}'''
+keywords = ["mv_sk_", "mv_mk_", "mv_us_", "mv_in_"]
+
+# Allowlist known test fixtures ONLY. Do not add real values here: rotate them instead.
+[[allowlists]]
+description = "Fake credentials used by redaction tests and docs placeholders"
+regexTarget = "match"
+regexes = [
+  '''mv_sk_AbCdEfGhIjKlMnOpQrStUv''',
+  '''ghp_abcdefghijklmnopqrstuvwxyz123456''',
+  '''sk-ant-api03-abcdefghijklmnop''',
+  '''hunter2(hunter2)?''',
+]

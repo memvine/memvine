@@ -1,0 +1,20 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+benchmark/out/
+
+# Agent worktrees
+.claude/worktrees/
+
+# Secrets and local data: never commit
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+*.pem
+benchmark/memory/check-server.log
+benchmark/memory/check-briefing.txt
+benchmark/memory/check-agent-e2e.json

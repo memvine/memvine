@@ -1,0 +1,49 @@
+"""Keep/drop cases for what memory admits, run against the real extraction model.
+
+  cd server && .venv/bin/python ../benchmark/knowledge/cases.py [prompt_file]
+
+Uses the configured LLM backend (MEMVINE_LLM_BACKEND; claude-cli or anthropic). Every case must
+print OK: "keep" cases must yield an item, "drop" cases none. prompt_file tries a draft of
+KNOWLEDGE_SYSTEM without changing the server. benchmark/memory/check.py runs these too.
+Measured 2026-10-27: 8/8 with the current rules.
+"""
+import asyncio
+import sys
+from datetime import UTC, datetime
+
+CASES = [
+    ("keep: db port", "User: For the muse project, the production database is Postgres 16 running on port 5544. Assistant: Got it, Postgres 16 on port 5544 for muse production."),
+    ("keep: deploy rule", "User: Always deploy muse with `make deploy ENV=prod` from the repo root, never with kubectl apply directly. Assistant: Understood, I'll use make deploy ENV=prod."),
+    ("keep: decision", "User: The muse frontend uses SvelteKit, and we decided against Next.js because the team wants smaller bundles. Assistant: Noted: SvelteKit chosen over Next.js for bundle size."),
+    ("keep: preference", "User: Please keep PR descriptions short, three bullets max, I won't read more. Assistant: Will do."),
+    ("drop: progress", "User: where are we? Assistant: I pushed branch fix/retry, opened PR #88 and the CI run is green: 142 passed. Waiting on Dana's review."),
+    ("drop: code description", "Assistant: I read src/export/worker.py. The export worker retries 3 times with exponential backoff starting at 2s, then writes the failure to the dead_letter table. [tools] Read ok: src/export/worker.py"),
+    ("drop: bug trace", "Assistant: Root cause found: OrderService.total() rounds before applying the discount (order_service.py:212), so totals are off by a cent on discounted orders. I'll fix it by rounding after. [tools] Bash `pytest tests/test_orders.py` failed (exit 1) ... then passed (exit 0): 12 passed"),
+    ("keep: env gotcha", "[tools] Bash `make test` failed (exit 1): E could not connect to server: port 5432 ... Assistant: Port 5432 on the dev box is the legacy billing DB, not ours; our test DB is on 5433. Setting TEST_DB_PORT=5433 fixed it. [tools] Bash `TEST_DB_PORT=5433 make test` ok (exit 0): 230 passed"),
+]
+PROFILE = "muse — a web app (SvelteKit frontend, Postgres) and how it is deployed"
+
+
+async def run_cases(prompt_file: str | None = None) -> list[tuple[str, bool, list[str]]]:
+    """(case name, passed, items kept) for every case."""
+    from memvine_server.extraction import extract as ex
+    from memvine_server.extraction.llm import make_llm
+
+    if prompt_file:
+        ex.KNOWLEDGE_SYSTEM = open(prompt_file).read()
+    llm = make_llm()
+
+    async def one(name, text):
+        r = await ex.extract_knowledge(llm, label="Claude Code · muse · main", occurred_at=datetime(2026, 10, 20, tzinfo=UTC),
+                                       content=text, project=PROFILE, threads=[])
+        items = [f"[{c.category}] {c.statement}" for c in r.items]
+        return name, bool(items) == name.startswith("keep"), items
+
+    return list(await asyncio.gather(*(one(n, t) for n, t in CASES)))
+
+
+if __name__ == "__main__":
+    results = asyncio.run(run_cases(sys.argv[1] if len(sys.argv) > 1 else None))
+    for name, ok, items in results:
+        print(("OK  " if ok else "FAIL"), name, "->", items or "[]")
+    sys.exit(0 if all(ok for _, ok, _ in results) else 1)

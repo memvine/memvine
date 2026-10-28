@@ -1,0 +1,19 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: memvine
+      POSTGRES_PASSWORD: memvine
+      POSTGRES_DB: memvine
+    ports:
+      - "5433:5432"
+    volumes:
+      - memvine-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memvine"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+volumes:
+  memvine-pg:

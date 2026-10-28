@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="800" viewBox="0 0 1040 800" role="img" aria-labelledby="t d">
+  <title id="t">Memvine memory graph: the sample project</title>
+  <desc id="d">Threads of work are hubs with facts around them. The launch date fact supersedes an older one; two weekend escalation rules contradict each other; a gotcha about retries is anchored to src/queue.py, which changed, so its anchor is drawn broken and the fact is marked may be outdated; a fact extends the gotcha; an inferred fact is derived from two others; files sit at the rim and people are small nodes.</desc>
+  <style>
+    svg { --bg:#f4f4f5; --panel:#ffffff; --border:#d4d4d8; --text:#09090b; --text-2:#52525b; --text-3:#8b8b93;
+          --accent:#15803d; --accent-soft:#ecf8f0; --warn:#a16207; --warn-soft:#fdf6e3; --bad:#c2261d;
+          --info:#2563eb; --info-soft:#eef3fe; }
+    @media (prefers-color-scheme: dark) {
+      svg { --bg:#0d0d0f; --panel:#19191c; --border:#303035; --text:#ededef; --text-2:#a0a0a8; --text-3:#6c6c74;
+            --accent:#4ccb84; --accent-soft:#11261a; --warn:#e6b450; --warn-soft:#2a2210; --bad:#f2776d;
+            --info:#7aa7ff; --info-soft:#141d33; }
+    }
+    text { font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--text); }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .bg { fill: var(--bg); }
+    .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.2; }
+    .card.old { opacity: .5; }
+    .card.stale { stroke: var(--warn); stroke-width: 1.6; fill: var(--warn-soft); }
+    .card.standing { stroke: var(--accent); stroke-width: 1.6; }
+    .card.derived { stroke: var(--text-2); stroke-dasharray: 5 4; }
+    .tag { font-size: 10.5px; fill: var(--text-3); letter-spacing: .3px; }
+    .tag.warn { fill: var(--warn); font-weight: 600; }
+    .tag.acc { fill: var(--accent); font-weight: 600; }
+    .stmt { font-size: 13px; font-weight: 500; }
+    .old .stmt, .stmt.old { fill: var(--text-3); text-decoration: line-through; }
+    .hub { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.6; }
+    .hubl { font-size: 12px; font-weight: 600; fill: var(--accent); }
+    .file { fill: var(--info-soft); stroke: var(--info); stroke-width: 1.2; }
+    .filel { font-size: 11.5px; fill: var(--info); }
+    .person { fill: var(--panel); stroke: var(--text-3); stroke-width: 1.2; }
+    .personl { font-size: 11px; fill: var(--text-2); }
+    .e { fill: none; stroke-width: 1.6; }
+    .decided { stroke: var(--text-3); stroke-width: 1.1; opacity: .8; }
+    .supersedes { stroke: var(--text-2); }
+    .contradicts { stroke: var(--bad); }
+    .anchored { stroke: var(--info); }
+    .stalee { stroke: var(--warn); }
+    .extends { stroke: var(--accent); }
+    .derive { stroke: var(--text-2); stroke-dasharray: 5 4; }
+    .said { stroke: var(--text-3); stroke-width: 1.1; stroke-dasharray: 1.5 3.5; }
+    .el { font-size: 10.5px; fill: var(--text-2); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+    .el.warn { fill: var(--warn); font-weight: 600; }
+    .el.bad { fill: var(--bad); }
+    .el.acc { fill: var(--accent); }
+    .el.info { fill: var(--info); }
+    .title { font-size: 17px; font-weight: 650; }
+    .sub { font-size: 12px; fill: var(--text-2); }
+    .legend { font-size: 11px; fill: var(--text-2); }
+    .ah { fill: var(--text-2); }
+    .ahacc { fill: var(--accent); }
+    .ahder { fill: var(--text-2); }
+    .rule { stroke: var(--border); }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah" d="M0 1 L9 5 L0 9 z"/></marker>
+    <marker id="arracc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahacc" d="M0 1 L9 5 L0 9 z"/></marker>
+    <marker id="arrder" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahder" d="M0 1 L9 5 L0 9 z"/></marker>
+  </defs>
+
+  <rect class="bg" width="1040" height="800" rx="14"/>
+
+  <text class="title" x="32" y="42">Sample project</text>
+  <text class="sub" x="32" y="62">threads are hubs · facts grow around them · files at the rim</text>
+
+  <!-- ============ edges first, so nodes sit on top ============ -->
+
+  <!-- decided_in: thread hub to its facts -->
+  <path class="e decided" d="M168 236 L150 158"/>
+  <path class="e decided" d="M170 286 L150 340"/>
+  <path class="e decided" d="M498 196 L455 138"/>
+  <path class="e decided" d="M508 252 L495 300"/>
+  <path class="e decided" d="M786 308 L725 228"/>
+  <path class="e decided" d="M832 350 L880 410"/>
+  <path class="e decided" d="M270 498 L180 488"/>
+  <path class="e decided" d="M290 548 L190 600"/>
+  <path class="e decided" d="M322 552 L420 600"/>
+  <text class="el" x="44" y="210">decided_in</text>
+
+  <!-- supersedes: new to old, old dimmed -->
+  <path class="e supersedes" d="M44 140 C 14 200, 14 300, 42 352" marker-end="url(#arr)"/>
+  <text class="el" x="6" y="252" transform="rotate(-90 22 252)">supersedes</text>
+  <path class="e supersedes" d="M336 120 C 300 190, 330 280, 380 304" marker-end="url(#arr)"/>
+  <text class="el" x="300" y="226">supersedes</text>
+
+  <!-- anchored, current: solid -->
+  <path class="e anchored" d="M435 50 L435 90"/>
+  <text class="el info" x="442" y="76">anchored · current</text>
+
+  <!-- anchored, file changed: broken -->
+  <path class="e stalee" d="M800 204 L838 204"/>
+  <path class="e stalee" d="M838 196 L846 212"/>
+  <path class="e stalee" d="M856 196 L864 212"/>
+  <path class="e stalee" d="M862 204 L900 204"/>
+  <text class="el warn" x="804" y="188">anchored · file changed</text>
+
+  <!-- extends -->
+  <path class="e extends" d="M740 108 L715 176" marker-end="url(#arracc)"/>
+  <text class="el acc" x="734" y="150">extends</text>
+
+  <!-- contradicts: double line -->
+  <path class="e contradicts" d="M250 620 L360 620"/>
+  <path class="e contradicts" d="M250 628 L360 628"/>
+  <text class="el bad" x="268" y="610">contradicts</text>
+
+  <!-- derived: dashed, from two cited facts -->
+  <path class="e derive" d="M770 494 C 790 480, 790 450, 778 440" marker-end="url(#arrder)"/>
+  <path class="e derive" d="M770 506 C 790 520, 790 552, 778 560" marker-end="url(#arrder)"/>
+  <text class="el" x="672" y="468">derived</text>
+
+  <!-- said by: people to facts -->
+  <path class="e said" d="M992 650 C 1020 600, 1020 470, 992 446"/>
+  <path class="e said" d="M970 642 L930 588"/>
+  <path class="e said" d="M120 690 L130 648"/>
+  <path class="e said" d="M480 690 L470 648"/>
+  <text class="el" x="984" y="625">said by</text>
+
+  <!-- ============ threads (hubs) ============ -->
+  <circle class="hub" cx="190" cy="262" r="30"/>
+  <text class="hubl" x="190" y="266" text-anchor="middle">launch</text>
+  <circle class="hub" cx="520" cy="224" r="34"/>
+  <text class="hubl" x="520" y="221" text-anchor="middle">invoice</text>
+  <text class="hubl" x="520" y="235" text-anchor="middle">parsing</text>
+  <circle class="hub" cx="808" cy="330" r="34"/>
+  <text class="hubl" x="808" y="327" text-anchor="middle">release</text>
+  <text class="hubl" x="808" y="341" text-anchor="middle">4.2.0</text>
+  <circle class="hub" cx="300" cy="524" r="34"/>
+  <text class="hubl" x="300" y="528" text-anchor="middle">escalations</text>
+
+  <!-- ============ facts ============ -->
+  <!-- launch -->
+  <g><rect class="card" x="40" y="110" width="220" height="48" rx="10"/>
+    <text class="tag" x="54" y="128">decision · 21 Oct · Priya said</text>
+    <text class="stmt" x="54" y="147">Launch is 12 Nov</text></g>
+  <g class="old"><rect class="card old" x="40" y="340" width="220" height="48" rx="10"/>
+    <text class="tag" x="54" y="358">decision · 9 Oct · superseded</text>
+    <text class="stmt old" x="54" y="377">Launch is 29 Oct</text></g>
+  <g><rect class="card" x="40" y="440" width="220" height="48" rx="10"/>
+    <text class="tag" x="54" y="458">rule · 27 Oct · Sam said</text>
+    <text class="stmt" x="54" y="477">Escalate in #support-tier2</text></g>
+
+  <!-- invoice parsing -->
+  <g><rect class="file" x="347" y="20" width="176" height="30" rx="7"/>
+    <text class="filel mono" x="435" y="39" text-anchor="middle">src/invoices/prompt.py</text></g>
+  <g><rect class="card" x="330" y="90" width="220" height="48" rx="10"/>
+    <text class="tag" x="344" y="108">decision · 25 Oct · Priya said</text>
+    <text class="stmt" x="344" y="127">Aliases live only in the prompt</text></g>
+  <g class="old"><rect class="card old" x="380" y="300" width="220" height="48" rx="10"/>
+    <text class="tag" x="394" y="318">decision · 13 Oct · superseded</text>
+    <text class="stmt old" x="394" y="337">Keep field aliases as a fallback</text></g>
+
+  <!-- release 4.2.0 -->
+  <g><rect class="card" x="630" y="60" width="240" height="48" rx="10"/>
+    <text class="tag" x="644" y="78">fact · 24 Oct · seen in a run</text>
+    <text class="stmt" x="644" y="97">The broker rate-limits above 3</text></g>
+  <g><rect class="card stale" x="590" y="180" width="210" height="48" rx="10"/>
+    <text class="tag warn" x="604" y="198">gotcha · MAY BE OUTDATED</text>
+    <text class="stmt" x="604" y="217">Retries cap at 3</text></g>
+  <g><rect class="file" x="900" y="189" width="120" height="30" rx="7"/>
+    <text class="filel mono" x="960" y="208" text-anchor="middle">src/queue.py</text></g>
+  <g><rect class="card" x="780" y="410" width="230" height="48" rx="10"/>
+    <text class="tag" x="794" y="428">rule · 20 Oct · Priya said</text>
+    <text class="stmt" x="794" y="447">Only Priya merges release work</text></g>
+  <g><rect class="card" x="780" y="540" width="230" height="48" rx="10"/>
+    <text class="tag" x="794" y="558">preference · 5 Oct · Priya said</text>
+    <text class="stmt" x="794" y="577">Priya prefers async review</text></g>
+  <g><rect class="card derived" x="530" y="476" width="240" height="48" rx="10"/>
+    <text class="tag" x="544" y="494">fact · inferred</text>
+    <text class="stmt" x="544" y="513">Priya signs off releases async</text></g>
+
+  <!-- standing rule: no thread, in every recall -->
+  <g><rect class="card standing" x="370" y="392" width="200" height="48" rx="10"/>
+    <text class="tag acc" x="384" y="410">rule · standing · every recall</text>
+    <text class="stmt" x="384" y="429">Never deploy on Fridays</text></g>
+
+  <!-- escalations -->
+  <g><rect class="card" x="40" y="600" width="210" height="48" rx="10"/>
+    <text class="tag" x="54" y="618">rule · 23 Oct · Sam said</text>
+    <text class="stmt" x="54" y="637">Weekends wait until Monday</text></g>
+  <g><rect class="card" x="360" y="600" width="220" height="48" rx="10"/>
+    <text class="tag" x="374" y="618">rule · 25 Oct · Dana said</text>
+    <text class="stmt" x="374" y="637">Weekends page on-call now</text></g>
+
+  <!-- ============ people ============ -->
+  <circle class="person" cx="118" cy="700" r="11"/><text class="personl" x="136" y="704">Sam</text>
+  <circle class="person" cx="482" cy="700" r="11"/><text class="personl" x="500" y="704">Dana</text>
+  <circle class="person" cx="982" cy="660" r="11"/><text class="personl" x="944" y="664" text-anchor="end">Priya</text>
+
+  <!-- ============ legend ============ -->
+  <line class="rule" x1="32" y1="730" x2="1008" y2="730"/>
+  <g transform="translate(32 760)">
+    <path class="e supersedes" d="M0 0 L34 0" marker-end="url(#arr)"/><text class="legend" x="42" y="4">supersedes</text>
+    <path class="e contradicts" d="M118 -3 L152 -3 M118 3 L152 3"/><text class="legend" x="160" y="4">contradicts</text>
+    <path class="e anchored" d="M240 0 L274 0"/><text class="legend" x="282" y="4">anchored</text>
+    <path class="e stalee" d="M350 0 L362 0 M362 -6 L367 6 M372 -6 L377 6 M377 0 L389 0"/><text class="legend" x="397" y="4">anchored, file changed</text>
+    <path class="e decided" d="M530 0 L564 0"/><text class="legend" x="572" y="4">decided_in</text>
+    <path class="e extends" d="M648 0 L682 0" marker-end="url(#arracc)"/><text class="legend" x="690" y="4">extends</text>
+    <path class="e derive" d="M752 0 L786 0" marker-end="url(#arrder)"/><text class="legend" x="794" y="4">derived</text>
+    <path class="e said" d="M856 0 L890 0"/><text class="legend" x="898" y="4">said by</text>
+  </g>
+</svg>

@@ -1,0 +1,267 @@
+"""Turn one episode into candidate memory items, keeping only those whose quote
+really appears in the source text."""
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass, field
+from datetime import datetime
+
+from .llm import LLM
+from .prompts import KNOWLEDGE_SYSTEM, knowledge_user
+
+KINDS = {"semantic", "episodic", "procedural", "prospective", "preference"}
+ASSERTIONS = {"observed", "stated", "claimed", "inferred"}
+CONFIDENCES = {"high", "medium", "low"}
+SCOPES = {"project", "thread"}
+
+# Agent self-reports that must never be stored as facts, whatever the model labelled them.
+CLAIM_WORDS = re.compile(
+    r"\b(implementation (is )?complete|all tests pass|tests? (are )?passing|successfully (implemented|fixed|deployed)|is now (done|working|fixed))\b",
+    re.IGNORECASE,
+)
+
+
+@dataclass
+class Candidate:
+    statement: str
+    kind: str
+    subjects: list[str]
+    assertion: str
+    confidence: str
+    valid_from: datetime | None
+    quote: str
+    standing: bool = False
+    # Knowledge (KNOWLEDGE_SYSTEM): category, why it matters, the thread it belongs to.
+    category: str | None = None
+    why: str | None = None
+    thread_key: str | None = None
+    scope: str | None = None  # "project" (anyone in the project) or "thread" (only beside its thread's page)
+
+
+@dataclass
+class ExtractionResult:
+    items: list[Candidate]
+    dropped_no_quote: int = 0
+    dropped_invalid: int = 0
+    dropped_gate: int = 0  # progress events and status snapshots the knowledge gate refused
+    raw: str = ""
+    notes: list[str] = field(default_factory=list)
+
+
+_BAD_ESCAPE = re.compile(r'\\(?!["\\/bfnrtu])')
+
+
+def _loads(text: str):
+    """json.loads that accepts raw control characters in strings and repairs invalid escapes
+    (a backslash before anything JSON does not escape, as in Windows paths or regexes)."""
+    try:
+        return json.loads(text, strict=False)
+    except json.JSONDecodeError:
+        return json.loads(_BAD_ESCAPE.sub(r"\\\\", text), strict=False)
+
+
+def _salvage_array(text: str) -> list | None:
+    """The elements of a JSON array that parse, one by one, when the whole does not: one
+    malformed element (or a truncated tail) costs that element, not the episode."""
+    text = _BAD_ESCAPE.sub(r"\\\\", text)
+    start = text.find("[")
+    if start == -1:
+        return None
+    decoder = json.JSONDecoder(strict=False)
+    items, i = [], start + 1
+    while (j := text.find("{", i)) != -1:
+        try:
+            obj, i = decoder.raw_decode(text, j)
+            items.append(obj)
+        except json.JSONDecodeError:
+            i = j + 1  # skip the broken element; a nested "{" inside it is tried and fails the same way
+    return items or None
+
+
+def parse_json(text: str):
+    """Pull a JSON value out of model output that may be wrapped in prose or a code fence,
+    tolerating invalid escapes, raw newlines in strings, and a malformed element in an array."""
+    text = text.strip()
+    fence = re.match(r"```(?:json)?\s*(.*?)```\s*$", text, re.DOTALL)
+    if fence:
+        text = fence.group(1).strip()
+    try:
+        return _loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Fall back to the outermost bracket pair.
+    for open_, close in (("[", "]"), ("{", "}")):
+        start, end = text.find(open_), text.rfind(close)
+        if start != -1 and end > start:
+            try:
+                return _loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                continue
+    salvaged = _salvage_array(text)
+    if salvaged is not None:
+        return salvaged
+    raise ValueError(f"no JSON found in model output: {text[:2000]!r}")
+
+
+_WS = re.compile(r"\s+")
+_QUOTES = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-"})
+
+
+def normalize(text: str) -> str:
+    return _WS.sub(" ", text.translate(_QUOTES)).strip().lower()
+
+
+def quote_in_source(quote: str, source: str) -> bool:
+    q = normalize(quote)
+    return len(q) >= 5 and q in normalize(source)
+
+
+def normalize_subject(subject: str) -> str:
+    return _WS.sub(" ", str(subject)).strip().lower()[:80]
+
+
+STANDING_WORDS = re.compile(r"\b(always|whenever|every time|each time|never|from now on|going forward)\b", re.IGNORECASE)
+
+
+def is_standing(flag, kind: str, statement: str) -> bool:
+    """The model's flag when it gave one; otherwise a preference or procedure phrased as a rule."""
+    if isinstance(flag, bool):
+        return flag and kind in {"preference", "procedural"}
+    return kind in {"preference", "procedural"} and bool(STANDING_WORDS.search(statement))
+
+
+def parse_date(value) -> datetime | None:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def candidates_from(raw, source: str) -> ExtractionResult:
+    result = ExtractionResult(items=[], raw=raw if isinstance(raw, str) else "")
+    data = parse_json(raw) if isinstance(raw, str) else raw
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        data = data["items"]
+    if not isinstance(data, list):
+        raise ValueError("extraction output is not a list")
+
+    seen: set[str] = set()
+    for entry in data:
+        if not isinstance(entry, dict):
+            result.dropped_invalid += 1
+            continue
+        statement = str(entry.get("statement", "")).strip()
+        quote = str(entry.get("quote", "")).strip()
+        kind = str(entry.get("kind", "")).strip()
+        assertion = str(entry.get("assertion", "")).strip()
+        if not statement or kind not in KINDS or assertion not in ASSERTIONS:
+            result.dropped_invalid += 1
+            continue
+        if not quote_in_source(quote, source):
+            result.dropped_no_quote += 1
+            continue
+        key = normalize(statement)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        if CLAIM_WORDS.search(statement) and assertion != "observed":
+            assertion = "claimed"
+        confidence = str(entry.get("confidence", "medium"))
+        if confidence not in CONFIDENCES:
+            confidence = "medium"
+        if assertion == "claimed" and confidence == "high":
+            confidence = "medium"
+        subjects = [normalize_subject(s) for s in (entry.get("subjects") or []) if str(s).strip()][:3]
+
+        category = str(entry.get("category") or "").strip().lower()
+        why = str(entry.get("why") or "").strip()
+        thread_key = str(entry.get("thread_key") or "").strip()
+        scope = str(entry.get("scope") or "").strip().lower()
+        result.items.append(
+            Candidate(
+                statement=statement,
+                kind=kind,
+                subjects=subjects,
+                assertion=assertion,
+                confidence=confidence,
+                valid_from=parse_date(entry.get("valid_from")),
+                quote=quote,
+                standing=is_standing(entry.get("standing"), kind, statement),
+                category=category if category in CATEGORY_KIND else None,
+                why=why[:300] or None,
+                thread_key=thread_key[:200] or None,
+                scope=scope if scope in SCOPES else None,
+            )
+        )
+    return result
+
+
+# Each knowledge category is stored under the memory kind it behaves like, so reconciliation,
+# staleness anchors and recall treat it accordingly.
+CATEGORY_KIND = {"decision": "semantic", "fact": "semantic", "rule": "procedural", "gotcha": "procedural",
+                 "preference": "preference"}
+# What the knowledge prompt is told to refuse but a model sometimes keeps anyway: a step of the
+# work ("cherry-picked 3fa91c0b7", "staging dry-run validate passed 55/55") or a dated status snapshot ("as of
+# 21 Oct still waiting for SHAs"). True a moment, useless to a teammate a week later.
+PROGRESS = re.compile(
+    r"\bcherry-?pick(ed|s)?\b|\bpass(ed|es|ing)?\s+\d+\s*/\s*\d+|\b\d+\s*/\s*\d+\s+(tests?\s+|checks?\s+)?pass"
+    r"|\bas of (\d{1,2}\s+[a-z]{3,9}|today|now|this morning)\b|\bstill (waiting|pending)\b",
+    re.IGNORECASE,
+)
+# Run-specific trivia the knowledge prompt is told to refuse, now that coding sessions send tool
+# outcome lines: one run's temp or scratch paths, the summary line itself, ids that name one
+# session or job, and completion status. True for that run, noise for everyone after it.
+TRIVIA = re.compile(
+    # A rule about temp folders ("tests must not write to /tmp/") survives; a path inside one run's
+    # temp folder (/tmp/claude-501/..., /tmp/tmpk3j9x/...) does not.
+    r"<tmp>|/private/tmp/|/var/folders/|(?<![\w.])/tmp/[\w.-]*\d|\bscratchpad\b|\[tools\]"
+    r"|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"
+    r"|\b(?:the\s+)?(?:task|implementation|work|job)\s+(?:is\s+)?(?:now\s+)?(?:complete|completed|finished|done)\b",
+    re.IGNORECASE,
+)
+
+
+def gated(statement: str) -> bool:
+    """True for a statement the knowledge gate refuses: a progress event, a status snapshot,
+    or run-specific trivia."""
+    return bool(PROGRESS.search(statement) or TRIVIA.search(statement))
+
+
+def knowledge_from(raw, source: str) -> ExtractionResult:
+    """Knowledge candidates: a verbatim quote, claims downgraded, and the gate:
+    a known category, and no progress event, status snapshot or run-specific trivia (gated)."""
+    data = parse_json(raw) if isinstance(raw, str) else raw
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        data = data["items"]
+    if not isinstance(data, list):
+        raise ValueError("knowledge output is not a list")
+    kept, invalid, refused = [], 0, 0
+    for entry in data:
+        category = str(entry.get("category") or "").strip().lower() if isinstance(entry, dict) else ""
+        if category not in CATEGORY_KIND:
+            invalid += 1
+            continue
+        if gated(str(entry.get("statement", ""))):
+            refused += 1
+            continue
+        kept.append({**entry, "category": category, "kind": CATEGORY_KIND[category],
+                     "assertion": entry.get("assertion") or "stated"})
+    result = candidates_from(kept, source)
+    result.raw = raw if isinstance(raw, str) else ""
+    result.dropped_invalid += invalid
+    result.dropped_gate = refused
+    return result
+
+
+async def extract_knowledge(llm: LLM, *, label: str, occurred_at: datetime, content: str, project: str,
+                            threads: list[tuple[str, str]], context: str = "") -> ExtractionResult:
+    """Durable knowledge from `content`, judged against the project profile. `threads`: (key, title)
+    of the work this episode touched, so an item can name the one it belongs to."""
+    raw = await llm.complete(KNOWLEDGE_SYSTEM, knowledge_user(label, occurred_at.isoformat(), content, project, threads, context),
+                             max_tokens=8192)
+    return knowledge_from(raw, content)
+

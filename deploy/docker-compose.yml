@@ -1,0 +1,58 @@
+# The whole Memvine stack: Postgres + pgvector, the API with its synthesis worker, and the console.
+#   cp .env.example .env   # set the secrets
+#   docker compose up -d --build
+# API on :8400, console on :3000. Put both behind TLS before giving anyone a key.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: memvine
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: memvine
+    volumes:
+      - pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memvine"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    restart: unless-stopped
+
+  api:
+    build: ../server
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MEMVINE_DATABASE_URL: postgresql://memvine:${POSTGRES_PASSWORD}@db:5432/memvine
+      MEMVINE_MANAGEMENT_KEY: ${MEMVINE_OPERATOR_KEY:?set MEMVINE_OPERATOR_KEY in .env}
+      MEMVINE_LLM_BACKEND: anthropic
+      MEMVINE_LLM_MODEL: ${MEMVINE_LLM_MODEL:-claude-sonnet-5-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY in .env}
+      MEMVINE_EMBEDDINGS_BACKEND: fastembed
+    volumes:
+      - fastembed:/var/cache/fastembed
+    ports:
+      - "${MEMVINE_API_PORT:-8400}:8400"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8400/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  console:
+    build: ../console
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      MEMVINE_API_URL: http://api:8400
+      # Unset: every visitor signs in with their organization's key (multi-tenant).
+    ports:
+      - "${MEMVINE_CONSOLE_PORT:-3000}:3000"
+    restart: unless-stopped
+
+volumes:
+  pg:
+  fastembed:

@@ -1,0 +1,16 @@
+{
+  "name": "memvine-codex",
+  "version": "0.6.0",
+  "description": "Memvine for OpenAI Codex CLI: every session starts briefed from your team's memory, and what is said in it becomes memory.",
+  "type": "module",
+  "bin": { "memvine-codex": "bin/memvine-codex.mjs" },
+  "files": ["bin/memvine-codex.mjs", "lib/memvine-hook.mjs", "README.md"],
+  "scripts": {
+    "prepack": "mkdir -p lib && cp ../claude-code/bin/memvine-hook.mjs lib/",
+    "test": "node --test bin/"
+  },
+  "engines": { "node": ">=18" },
+  "homepage": "https://memvine.dev",
+  "repository": { "type": "git", "url": "git+https://github.com/memvine/memvine.git", "directory": "plugins/codex" },
+  "license": "MIT"
+}

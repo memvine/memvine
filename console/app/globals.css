@@ -1,0 +1,168 @@
+@import "tailwindcss";
+
+/* Design tokens. Light values sit on :root; the dark theme (the primary design target)
+   overrides them when the system asks for dark. Components only ever use these tokens. */
+:root {
+  color-scheme: light;
+  --bg: #f4f4f5;
+  --panel: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-3: #ececee;
+  --overlay: rgb(9 9 11 / 0.32);
+  --border: #e6e6e9;
+  --border-strong: #d4d4d8;
+  --text: #09090b;
+  --text-2: #52525b;
+  --text-3: #8b8b93;
+  /* Inverted surface for the primary button: near-black on light, near-white on dark. */
+  --inverse: #18181b;
+  --inverse-text: #fafafa;
+  --accent: #15803d;
+  --accent-soft: #ecf8f0;
+  --accent-text: #ffffff;
+  --ring: #22a35a;
+  --good: #15803d;
+  --good-soft: #e9f7ee;
+  --warn: #a16207;
+  --warn-soft: #fdf6e3;
+  --bad: #c2261d;
+  --bad-soft: #fdeceb;
+  --info: #2563eb;
+  --info-soft: #eef3fe;
+  --chart: #22a35a;
+  --chart-2: #a7dcbc;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #070708;
+    --panel: #0d0d0f;
+    --surface: #131315;
+    --surface-2: #19191c;
+    --surface-3: #222225;
+    --overlay: rgb(0 0 0 / 0.6);
+    --border: #222226;
+    --border-strong: #303035;
+    --text: #ededef;
+    --text-2: #a0a0a8;
+    --text-3: #6c6c74;
+    --inverse: #f4f4f5;
+    --inverse-text: #0a0a0b;
+    --accent: #4ccb84;
+    --accent-soft: #11261a;
+    --accent-text: #06120b;
+    --ring: #4ccb84;
+    --good: #4ccb84;
+    --good-soft: #11261a;
+    --warn: #e6b450;
+    --warn-soft: #2a2210;
+    --bad: #f2776d;
+    --bad-soft: #2d1513;
+    --info: #7aa7ff;
+    --info-soft: #141d33;
+    --chart: #4ccb84;
+    --chart-2: #b4ecca;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 48px rgb(0 0 0 / 0.5);
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-overlay: var(--overlay);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-inverse: var(--inverse);
+  --color-inverse-text: var(--inverse-text);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-ring: var(--ring);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --shadow-panel: var(--shadow);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Base styles sit in the base layer so utilities (e.g. outline-none on the drawer) override them. */
+@layer base {
+  html {
+    background: var(--bg);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  /* One visible focus style everywhere keyboard focus lands. */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  summary {
+    list-style: none;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+}
+
+@keyframes drawer-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.drawer-in { animation: drawer-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.drawer-fade { animation: fade-in 180ms ease-out; }
+/* A fact the paste box just learned rises into its place. */
+@keyframes fact-in {
+  from { transform: translateY(6px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.fact-in { animation: fact-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+/* A node that grew this week breathes, once every few seconds. */
+@keyframes grew {
+  0%, 100% { opacity: 0.12; }
+  50% { opacity: 0.3; }
+}
+.mv-grew { animation: grew 3.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .drawer-in, .drawer-fade, .mv-grew, .fact-in { animation: none; }
+}
+
+/* Thin, quiet scrollbars on scrolling panes. */
+.scroll-quiet {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
