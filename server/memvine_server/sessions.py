@@ -322,7 +322,10 @@ async def kept(conn, project_id: UUID, session_id: str) -> SessionKept | None:
           AND m.id IN (SELECT memory_id FROM evidence WHERE project_id = %s AND starts_with(episode_id, %s))
           AND starts_with((SELECT e.episode_id FROM evidence e JOIN episodes ep ON ep.project_id = e.project_id AND ep.id = e.episode_id
                            WHERE e.memory_id = m.id ORDER BY ep.created_at, ep.occurred_at, e.episode_id LIMIT 1), %s)
-        ORDER BY m.recorded_at, m.created_at
+        -- Items from one source share both timestamps: break the tie by creation order, which the
+        -- events log records, then by id so the order is always the same.
+        ORDER BY m.recorded_at, m.created_at,
+                 (SELECT min(ev.id) FROM memory_events ev WHERE ev.memory_id = m.id AND ev.kind = 'created'), m.id
         """, (project_id, project_id, prefix, prefix))).fetchall()
     items = [KeptMemory(id=r["id"], category=r["category"] or KIND_WORD.get(r["kind"], "fact"), statement=r["statement"],
                         supersedes=r["supersedes"], previous=r["previous"]) for r in rows]
