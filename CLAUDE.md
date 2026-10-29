@@ -61,6 +61,9 @@ Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local
 
 ## Status (28 Oct 2026)
 
+Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next/later.
+
+
 - Hosted on Railway (project `memvine`: `postgres`, `api`, `console`; see `deploy/railway/README.md`).
   Deploy with `railway up server --path-as-root --service api` (and `console`) or GitHub auto-deploy.
   The laptop server is retired.
