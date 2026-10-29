@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Memvine</title>
+  <meta name="description" content="Memory for AI agents. What your agents learn stays with your team, and every session starts already knowing it.">
+  <meta property="og:title" content="Memvine">
+  <meta property="og:description" content="Memory that grows with your team. What your agents learn stays learned, and every session starts already knowing it.">
+  <meta property="og:url" content="https://memvine.dev/">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#0b1310">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <canvas id="vine" aria-hidden="true"></canvas>
+
+  <header class="top">
+    <a class="wordmark" href="/" aria-label="Memvine home">
+      <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 17.5V9"/>
+        <path d="M10 11C10 7.4 7.6 5 4 5c0 3.6 2.4 6 6 6Z"/>
+        <path d="M10 9c0-3.3 2.2-5.5 5.6-5.5 0 3.3-2.2 5.5-5.6 5.5Z"/>
+      </svg>
+      <span>memvine</span>
+    </a>
+    <nav aria-label="Primary">
+      <a href="https://github.com/memvine/memvine/blob/main/docs/how-memory-works.md">How it works</a>
+      <a href="https://github.com/memvine/memvine">GitHub</a>
+      <a class="nav-console" href="https://app.memvine.dev">Open the console</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>
+        <span class="line"><span>Memory that grows</span></span>
+        <span class="line"><span>with your team.</span></span>
+      </h1>
+      <p class="lede">Memvine keeps what your agents learn, so every new session starts already knowing it.</p>
+      <div class="actions">
+        <a class="button primary" href="#connect">Connect an agent</a>
+        <a class="button" href="https://app.memvine.dev">Open the console</a>
+      </div>
+    </section>
+
+    <section class="grows" aria-label="How memory grows">
+      <p class="statement">Every session adds a little. Nothing is lost between them.</p>
+    </section>
+
+    <section class="recall" aria-labelledby="recall-title">
+      <h2 id="recall-title">The next session opens already knowing.</h2>
+      <div class="brief" role="figure" aria-label="A briefing as an agent sees it">
+        <p class="brief-line"><span class="tag">[decision 15 Oct, supersedes 6 Oct]</span> The public launch moved to 14 Nov because legal pushed back on the refund copy <span class="was">(was: planned for 31 Oct)</span></p>
+        <p class="brief-line"><span class="tag">[rule 26 Oct, contradicts 24 Oct]</span> Weekend escalations page the on-call engineer right away</p>
+        <p class="brief-line"><span class="tag">[gotcha 3 Oct, anchored src/queue.py]</span> Retries cap at 3. The broker rate-limits us above that.</p>
+        <p class="brief-line"><span class="tag">[rule 21 Oct, extends 21 Oct]</span> Only Priya merges release work</p>
+      </div>
+    </section>
+
+    <section class="connect" id="connect" aria-labelledby="connect-title">
+      <h2 id="connect-title">Connect any agent.</h2>
+      <div class="commands">
+        <div class="command">
+          <h3>Claude Code</h3>
+          <pre><code>/plugin marketplace add memvine/memvine
+/plugin install memvine@memvine
+/memvine:connect mv_sk_... you@company.com</code></pre>
+        </div>
+        <div class="command">
+          <h3>Codex CLI</h3>
+          <pre><code>git clone --depth 1 https://github.com/memvine/memvine ~/.memvine/src
+node ~/.memvine/src/plugins/codex/bin/memvine-codex.mjs install mv_sk_... you@company.com</code></pre>
+        </div>
+      </div>
+      <p class="also">Claude Code and Codex connect in one command. Any other agent connects through the TypeScript or Python SDK, or MCP.</p>
+    </section>
+
+    <section class="close">
+      <p class="statement">Memory grows on the trellis of your work. When the work moves, the vine notices.</p>
+    </section>
+  </main>
+
+  <footer class="bottom">
+    <span>Memvine</span>
+    <nav aria-label="Footer">
+      <a href="https://github.com/memvine/memvine/blob/main/docs/how-memory-works.md">How it works</a>
+      <a href="https://github.com/memvine/memvine">GitHub</a>
+      <a href="https://app.memvine.dev">Console</a>
+    </nav>
+  </footer>
+
+  <script src="vine.js" defer></script>
+</body>
+</html>

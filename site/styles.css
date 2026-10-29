@@ -1,0 +1,282 @@
+/* Memvine homepage. One palette, one typeface, one moving thing (the vine, drawn in vine.js). */
+
+:root {
+  --night: #0b1310;
+  --moss: #16261e;
+  --linen: #e8ede7;
+  --ash: #8a978e;
+  --sprout: #a8e4bf;
+  --stem: #3e8c5e;
+  --hair: rgba(232, 237, 231, 0.12);
+  --hair-strong: rgba(232, 237, 231, 0.22);
+  --surface: #111c16;
+  --gutter: clamp(20px, 6vw, 96px);
+  --col: 720px;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  background: var(--night);
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--linen);
+  background: var(--night);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  text-rendering: optimizeLegibility;
+}
+
+::selection { background: var(--sprout); color: var(--night); }
+
+a { color: inherit; text-decoration: none; }
+a:focus-visible, .button:focus-visible {
+  outline: 2px solid var(--sprout);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+#vine {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.top, main, .bottom { position: relative; z-index: 1; }
+
+/* Header */
+
+.top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 30px var(--gutter);
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.top nav { display: flex; gap: 32px; font-size: 15.5px; color: var(--ash); }
+.top nav a { transition: color 160ms ease; }
+.top nav a:hover { color: var(--linen); }
+.top nav .nav-console { color: var(--linen); }
+
+/* Hero */
+
+.hero {
+  min-height: 100svh;
+  display: grid;
+  align-content: center;
+  padding: 120px var(--gutter) 80px;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(46px, 7.2vw, 112px);
+  font-weight: 500;
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  max-width: 16ch;
+}
+
+.hero h1 .line { display: block; overflow: hidden; padding-bottom: 0.06em; margin-bottom: -0.06em; }
+.hero h1 .line > span {
+  display: inline-block;
+  transform: translateY(112%);
+  animation: rise 1000ms cubic-bezier(0.2, 0.7, 0.15, 1) forwards;
+}
+.hero h1 .line:nth-child(2) > span { animation-delay: 110ms; }
+
+.lede {
+  margin: 36px 0 0;
+  max-width: 36ch;
+  font-size: clamp(19px, 1.55vw, 23px);
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  opacity: 0;
+  animation: appear 900ms ease 420ms forwards;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 44px;
+  opacity: 0;
+  animation: appear 900ms ease 560ms forwards;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  height: 52px;
+  padding: 0 26px;
+  border-radius: 999px;
+  border: 1px solid var(--hair-strong);
+  font-size: 16.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+.button:hover { border-color: var(--linen); }
+.button.primary { background: var(--linen); border-color: var(--linen); color: var(--night); }
+.button.primary:hover { background: #ffffff; border-color: #ffffff; }
+
+@keyframes rise { to { transform: translateY(0); } }
+@keyframes appear { to { opacity: 1; } }
+
+/* Statements */
+
+.statement {
+  margin: 0;
+  max-width: 19ch;
+  font-size: clamp(30px, 3.6vw, 54px);
+  font-weight: 500;
+  line-height: 1.12;
+  letter-spacing: -0.028em;
+  text-wrap: balance;
+}
+
+.grows {
+  display: grid;
+  gap: 16vh;
+  padding: 8vh var(--gutter) 16vh;
+}
+
+/* Recall and connect */
+
+.recall, .connect { padding: 8vh var(--gutter) 14vh; }
+
+h2 {
+  margin: 0;
+  max-width: 19ch;
+  font-size: clamp(30px, 3.6vw, 54px);
+  font-weight: 500;
+  line-height: 1.12;
+  letter-spacing: -0.028em;
+  text-wrap: balance;
+}
+
+.brief {
+  margin-top: 56px;
+  max-width: var(--col);
+  padding: 28px 32px;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 16px;
+  font-family: var(--mono);
+  font-size: 15.5px;
+  line-height: 1.6;
+}
+
+.brief-line { margin: 0; }
+.brief-line + .brief-line { margin-top: 18px; }
+.brief .tag { color: var(--sprout); }
+.brief .was { color: var(--ash); }
+
+.brief-line {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 700ms ease, transform 700ms cubic-bezier(0.2, 0.7, 0.15, 1);
+}
+.brief.shown .brief-line { opacity: 1; transform: none; }
+.brief.shown .brief-line:nth-child(2) { transition-delay: 220ms; }
+.brief.shown .brief-line:nth-child(3) { transition-delay: 440ms; }
+.brief.shown .brief-line:nth-child(4) { transition-delay: 660ms; }
+
+.commands {
+  display: grid;
+  gap: 32px;
+  margin-top: 56px;
+  max-width: var(--col);
+}
+
+.command h3 {
+  margin: 0 0 14px;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+.command pre {
+  margin: 0;
+  padding: 22px 24px;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 16px;
+  font-family: var(--mono);
+  font-size: 14.5px;
+  line-height: 1.7;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.also {
+  margin: 44px 0 0;
+  max-width: 40ch;
+  font-size: clamp(19px, 1.55vw, 23px);
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+}
+
+.close { padding: 10vh var(--gutter) 18vh; }
+.close .statement { max-width: 24ch; }
+
+/* Footer */
+
+.bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 36px var(--gutter) 44px;
+  border-top: 1px solid var(--hair);
+  font-size: 15.5px;
+  color: var(--ash);
+}
+.bottom nav { display: flex; gap: 28px; }
+.bottom a:hover { color: var(--linen); }
+
+/* Small screens */
+
+@media (max-width: 720px) {
+  body { font-size: 17px; }
+  .top { padding: 22px var(--gutter); }
+  .top nav { display: none; }
+  .hero { padding-top: 110px; }
+  .hero h1 .line { display: inline; overflow: visible; padding: 0; margin: 0; }
+  .hero h1 .line > span { display: inline; transform: none; opacity: 0; animation: appear 900ms ease 120ms forwards; }
+  .grows { gap: 16vh; }
+  .brief { padding: 22px 20px; font-size: 14px; }
+  #vine { opacity: 0.62; }
+  .bottom { flex-direction: column; align-items: flex-start; }
+}
+
+/* Reduced motion: everything is simply there. The vine draws itself at rest. */
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .hero h1 .line > span, .lede, .actions { animation: none; transform: none; opacity: 1; }
+  .brief-line { transition: none; }
+}
