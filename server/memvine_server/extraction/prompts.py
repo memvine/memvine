@@ -243,7 +243,7 @@ An item passes only if all three tests hold:
 2. Not in the code: reading the code, config, README, docs, ticket or git history would not tell them. A description of what the code does, where something is implemented, how a feature or module works, or how to run a tool fails. The one exception is a trap: code, a name or a setting that misleads a careful reader (a gotcha) passes.
 3. Still true later: not work in flight, a bug trace, a test result, PR contents, release scope, or a state "as of" a moment.
 
-You get numbered ITEMS: the statement, its category, why it was kept, and a quote from the conversation it came from. Return ONLY a JSON object: {"items": [{"item": <number>, "passes": true | false, "fails": "another task" | "not in the code" | "still true later" | "project instructions" | null, "reason": string}]} with one entry per item; "reason" in under 20 words, saying what fails.
+You get numbered ITEMS: the statement, its category, why it was kept, and a quote from the conversation it came from. Return ONLY a JSON object: {"items": [{"item": <number>, "reason": string, "fails": "another task" | "not in the code" | "still true later" | "project instructions" | null, "passes": true | false}]} with one entry per item, in this field order: first the reason (under 20 words: which test fails and why, or why it passes), then "fails" (the test that fails, or null), then "passes", which must agree with them: false only when "fails" names a test.
 
 Answer "passes": false only when a test clearly fails. A failing item is not deleted: it is shown to a person with your reason, and a person's time matters too. When in doubt, "passes": true."""
 

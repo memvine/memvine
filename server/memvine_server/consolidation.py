@@ -397,6 +397,25 @@ async def _flag(run: _Run, m, flag: str, reason: str, related: UUID | None) -> N
 # ------------------------------------------------------------------ c: the bar
 
 
+BAR_TESTS = {"another task", "not in the code", "still true later", "project instructions"}
+
+
+def _as_int(v) -> int | None:
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    return int(v) if isinstance(v, str) and v.strip().isdigit() else None
+
+
+def _as_bool(v) -> bool | None:
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str) and v.strip().lower() in ("true", "false"):
+        return v.strip().lower() == "true"
+    return None
+
+
 async def _bar(run: _Run) -> None:
     builtins = list(BUILTIN_CATEGORIES)
     rows = await (await run.conn.execute(
@@ -428,13 +447,16 @@ async def _bar(run: _Run) -> None:
         return
     entries = parsed.get("items") if isinstance(parsed, dict) else parsed
     for e in entries if isinstance(entries, list) else []:
-        if not (isinstance(e, dict) and isinstance(e.get("item"), int) and 1 <= e["item"] <= len(rows)
-                and isinstance(e.get("passes"), bool)):
+        item, passes = (_as_int(e.get("item")), _as_bool(e.get("passes"))) if isinstance(e, dict) else (None, None)
+        if item is None or passes is None or not 1 <= item <= len(rows):
+            run.stats["judge_skipped"] = run.stats.get("judge_skipped", 0) + 1
             continue
-        m = rows[e["item"] - 1]
+        m = rows[item - 1]
         run.stats["checked_items"] += 1
+        fails = str(e.get("fails") or "").strip()
+        # A failing verdict must name the test that fails; without one it is not a reason to flag.
+        e["passes"] = passes or fails.lower() not in BAR_TESTS
         if not e["passes"]:
-            fails = str(e.get("fails") or "").strip()
             reason = str(e.get("reason") or "").strip() or "Seems to fail the bar for memory."
             await _flag(run, m, "no_longer_passes", f"{fails[:1].upper()}{fails[1:]}: {reason}" if fails else reason, None)
         await run.conn.execute(

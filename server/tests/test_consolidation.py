@@ -477,3 +477,13 @@ async def test_merges_and_unmerges_mark_profiles_dirty(client):
         assert dirty["dirty"]  # it cited the merged-away memory
         assert "unmerged" in profiles.RELEVANT_KINDS and "merged" in profiles.RELEVANT_KINDS
         assert (await item(conn, new))["merged_into"] == old
+
+
+def test_bar_verdicts_tolerate_strings_and_need_a_named_test():
+    """Item numbers and booleans given as strings are read; a 'fails' verdict that names no test is
+    not a reason to flag (real model, 2026-10-28: a contradictory verdict flagged a passing rule)."""
+    from memvine_server.consolidation import BAR_TESTS, _as_bool, _as_int
+
+    assert _as_int("2") == 2 and _as_int(3) == 3 and _as_int(True) is None and _as_int("x") is None
+    assert _as_bool("false") is False and _as_bool(True) is True and _as_bool("maybe") is None
+    assert "not in the code" in BAR_TESTS and "" not in BAR_TESTS
