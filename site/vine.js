@@ -92,7 +92,7 @@
     while (ls < total - 120) {
       // A leaf near the right edge opens to the left, so none is cut off; on a phone that is all of them.
       const edge = phone || pointAt(ls).x > W - 150 * scale;
-      leaves.push({ s: ls, side: edge ? -1 : side, size: (0.78 + r2() * 0.5) * scale, tilt: (r2() - 0.5) * (phone ? 0.9 : 0.5), curl: !phone && r2() > 0.62 });
+      leaves.push({ s: ls, side: edge ? -1 : side, size: (0.78 + r2() * 0.5) * scale * (phone ? 0.8 : 1), tilt: (r2() - 0.5) * (phone ? 0.9 : 0.5), curl: !phone && r2() > 0.62 });
       side = -side;
       ls += (150 + r2() * 110) * scale;
     }
