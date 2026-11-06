@@ -212,8 +212,8 @@ export interface RecallOptions {
   sessionId?: string;
   includeHistory?: boolean;
   exclude?: string[];
-  /** { related: true }: each item lists its edges in `related` (at most 6). */
-  include?: { related?: boolean };
+  /** { related: true }: each item lists its edges in `related` (at most 6). { passages: true }: source excerpts in the briefing and `passages`. */
+  include?: { related?: boolean; passages?: boolean };
   branch?: string;
   /** A session-start brief: also return the person profile of `identity` and the project profile. */
   profiles?: boolean;

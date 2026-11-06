@@ -102,7 +102,8 @@ class Memvine:
                include_history: bool | None = None, exclude: list[str] | None = None, include: dict | None = None,
                branch: str | None = None, profiles: bool | None = None) -> Recall:
         """include={"related": True}: each item lists its edges in item["related"], as
-        {kind, direction, id, statement} (at most 6). profiles=True (a session-start brief): also the
+        {kind, direction, id, statement} (at most 6); {"passages": True} adds source excerpts to the
+        briefing and .passages. profiles=True (a session-start brief): also the
         person profile of `identity` and the project profile, in .profiles."""
         body = {"query": query, "budget": budget, "identity": identity, "as_of": _iso(as_of), "session_id": session_id,
                 "include_history": include_history, "exclude": exclude or [], "branch": branch,

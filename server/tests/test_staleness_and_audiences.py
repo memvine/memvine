@@ -291,13 +291,13 @@ async def test_a_restricted_episode_leaks_through_no_recall_channel(client):
     await client.post("/v1/memories", json={"statement": OPEN, "kind": "semantic", "subjects": ["acme"]})
     await synthesize(client, app)
 
-    as_carol = await recall_as(client, "carol@acme.com", budget=4000)
+    as_carol = await recall_as(client, "carol@acme.com", budget=4000, include={"passages": True})
     assert SECRET in statements(as_carol)
     assert any("dana@acme.com" in s for s in as_carol["standing"])
     assert any("48,000" in p["content"] for p in as_carol["passages"]), "the source passage reaches the audience"
 
     for outsider in ("bob@example.com", "alice@example.com", None):
-        r = await recall_as(client, outsider, budget=4000)
+        r = await recall_as(client, outsider, budget=4000, include={"passages": True})
         assert OPEN in statements(r)
         assert r["standing"] == [], f"{outsider}: no restricted standing rule"
         assert not r["passages"] or all("48,000" not in p["content"] for p in r["passages"])

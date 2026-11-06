@@ -35,7 +35,7 @@ DEFAULT_MIN_RELEVANCE = 0.55
 KEYWORD_BONUS = 0.05
 # Thread pages come first and may take this share of the budget; items fill the rest.
 PAGE_BUDGET_SHARE = 0.45
-# Facts and pages together may use this share of the budget; source passages fill the rest.
+# Facts and pages together may use this share of the budget; source passages, when asked for, fill the rest.
 FACT_BUDGET_SHARE = 0.55
 STANDING_BUDGET_SHARE = 0.15
 PENDING_BUDGET_SHARE = 0.10
@@ -481,8 +481,10 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     chosen = [(score, r) for score, r, _ in packed]
     evidence = {r["id"]: said_evidence.get(r["id"], []) for _, r in chosen}
     sources = [(e.episode_id, e.quote) for _, r in chosen for e in evidence[r["id"]]]
-    excerpts = await relevant_passages(conn, project_id, req, embedding, audiences, sources, budget - spent,
-                                       best=best, min_relevance=min_relevance, broad=broad, include_history=include_history)
+    excerpts = []
+    if req.include and req.include.passages:
+        excerpts = await relevant_passages(conn, project_id, req, embedding, audiences, sources, budget - spent, best=best,
+                                           min_relevance=min_relevance, broad=broad, include_history=include_history)
     excerpt_lines = []
     if excerpts:
         excerpt_lines.append("--- source excerpts (the original words) ---")

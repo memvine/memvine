@@ -459,7 +459,7 @@ async def test_abandoned_running_job_is_requeued(client):
 
 @pytest.mark.asyncio
 async def test_recall_fills_the_budget_with_source_passages(client):
-    """After facts, recall adds the original passages behind them, in conversation order,
+    """Asked for them, recall adds the original passages behind the facts, in conversation order,
     never past as_of, within the budget."""
     from memvine_server.main import app
 
@@ -467,7 +467,8 @@ async def test_recall_fills_the_budget_with_source_passages(client):
         {"id": "s1", "content": SESSION_1, "timestamp": "2026-09-18T10:11:00Z"},
         {"id": "s2", "content": SESSION_2, "timestamp": "2026-10-03T14:02:00Z"},
     ])
-    r = (await client.post("/v1/recall", json={"query": "When is the launch and why did it move?", "budget": 2000})).json()
+    r = (await client.post("/v1/recall", json={"query": "When is the launch and why did it move?", "budget": 2000,
+                                                     "include": {"passages": True}})).json()
     assert r["passages"], "source excerpts fill the remaining budget"
     assert "--- source excerpts (the original words) ---" in r["briefing"]
     assert any("Legal pushed back on the refund copy" in p["content"] for p in r["passages"])
@@ -475,7 +476,8 @@ async def test_recall_fills_the_budget_with_source_passages(client):
     assert times == sorted(times), "excerpts come in conversation order"
     assert r["tokens"] <= 2000
 
-    early = (await client.post("/v1/recall", json={"query": "launch date", "as_of": "2026-09-25T00:00:00Z"})).json()
+    early = (await client.post("/v1/recall", json={"query": "launch date", "as_of": "2026-09-25T00:00:00Z",
+                                                         "include": {"passages": True}})).json()
     assert all(p["episode_id"] == "s1" for p in early["passages"]), "nothing from after the moment asked"
 
 

@@ -1,7 +1,7 @@
 """The briefing carries what the question needs and nothing twice: items within a margin of the best
 one (contradiction and supersede partners kept with them), thread pages only when they are the
-caller's branch, named, or as relevant as the best item, and source excerpts only as evidence of what
-was kept. A recreation of the measured case: "Which port does the muse production database use?"
+caller's branch, named, or as relevant as the best item, and source excerpts, for a caller that asks
+for them with include.passages, only as evidence of what was kept. A recreation of the measured case: "Which port does the muse production database use?"
 used to get both thread pages, the unrelated SvelteKit decision, every excerpt and the deploy rule
 three times.
 
@@ -109,7 +109,7 @@ async def setup_scenario(client) -> dict:
 
 
 async def recall(client, **body) -> dict:
-    r = await client.post("/v1/recall", json={"budget": 2000, **body})
+    r = await client.post("/v1/recall", json={"budget": 2000, "include": {"passages": True}, **body})
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -131,6 +131,16 @@ async def test_the_port_question_gets_the_port_and_nothing_unrelated(client):
     assert len(excerpts) == 1 and "port 5433" in excerpts[0], "only the evidence of the kept fact"
     assert "port 5432" not in "".join(excerpts), "no excerpt of the superseded value"
     assert r["tokens"] < 200
+
+
+@pytest.mark.asyncio
+async def test_a_plain_recall_carries_memory_and_no_excerpts(client):
+    """Agents get memory, not transcript: excerpts only come to a caller that asks for them."""
+    await setup_scenario(client)
+    r = (await client.post("/v1/recall", json={"query": QUESTION, "budget": 2000})).json()
+    assert "5433" in r["briefing"], "the memory itself is served"
+    assert r["passages"] == []
+    assert "source excerpts" not in r["briefing"]
 
 
 @pytest.mark.asyncio

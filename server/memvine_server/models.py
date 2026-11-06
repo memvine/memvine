@@ -267,6 +267,8 @@ class GraphOut(BaseModel):
 
 class RecallInclude(BaseModel):
     related: bool = False  # each served item lists its edges (RecallItem.related)
+    # Source excerpts in the briefing and in `passages`. Off by default: agents get memory, not transcript.
+    passages: bool = False
 
 
 class RecallRequest(BaseModel):

@@ -1,6 +1,6 @@
 """Passages: an episode's text cut into retrieval-sized pieces, embedded and indexed.
 
-Facts are dense but lossy; passages keep the original wording. Recall uses them to fill the
+Facts are dense but lossy; passages keep the original wording. Recall, when asked (include.passages), uses them to fill the
 budget that facts and pages leave, preferring passages from the episodes the chosen facts
 came from.
 """
