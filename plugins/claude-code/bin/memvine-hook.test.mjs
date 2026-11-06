@@ -317,3 +317,41 @@ test("session start shows what the previous session kept once tended; forget ret
     server.close();
   }
 });
+
+test("search uses the connection of the folder it runs in", async () => {
+  const { execFile } = await import("node:child_process");
+  const { mkdtempSync, mkdirSync, realpathSync, writeFileSync } = await import("node:fs");
+  const { createServer } = await import("node:http");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const script = fileURLToPath(new URL("./memvine-hook.mjs", import.meta.url));
+
+  const auth = [];
+  const server = createServer((req, res) => {
+    auth.push(req.headers.authorization);
+    req.resume();
+    req.on("end", () => {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ briefing: "Invoices close on the 3rd.", abstained: false }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "memvine-search-")));
+    const home = join(root, "home");
+    const work = join(root, "work");
+    mkdirSync(join(home, ".memvine"), { recursive: true });
+    mkdirSync(work);
+    const apiUrl = `http://127.0.0.1:${server.address().port}`;
+    writeFileSync(join(home, ".memvine", "config.json"), JSON.stringify({ projects: { [work]: { apiUrl, apiKey: "mv_sk_folder", identity: "ana@northwind.test" } } }));
+    const env = { ...process.env, HOME: home, MEMVINE_API_URL: "", MEMVINE_API_KEY: "" };
+    const output = await new Promise((resolve, reject) => {
+      execFile(process.execPath, [script, "search", "when", "do", "invoices", "close"], { cwd: work, env }, (error, stdout) => (error ? reject(error) : resolve(stdout)));
+    });
+    assert.equal(output, "Invoices close on the 3rd.\n");
+    assert.deepEqual(auth, ["Bearer mv_sk_folder"]);
+  } finally {
+    server.close();
+  }
+});

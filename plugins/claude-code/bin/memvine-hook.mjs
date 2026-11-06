@@ -26,7 +26,7 @@ import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const VERSION = "0.7.2";
+export const VERSION = "0.7.3";
 const HOME = join(homedir(), ".memvine");
 export const CONFIG_PATH = join(HOME, "config.json");
 const STATE_PATH = join(HOME, "state.json");
@@ -800,7 +800,7 @@ async function main() {
     else if (mode === "connect") await modeConnect(argv);
     else if (mode === "status") modeStatus(config);
     else if (mode === "cut") modeCut(argv);
-    else if (mode === "search") await modeSearch(config, argv);
+    else if (mode === "search") await modeSearch(loadConfig(process.env, process.cwd()), argv);
     else if (mode === "backfill") await modeBackfill(argv);
     else if (mode === "disconnect") modeDisconnect(argv);
     else if (mode === "forget") await forgetKept(loadConfig(process.env, process.cwd()), process.cwd(), argv, "/memvine:forget");
