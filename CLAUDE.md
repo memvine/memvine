@@ -60,7 +60,7 @@ Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local
 - Examples in code, tests and docs use the invented "Northwind" billing world. Never put real
   company, customer or employer details in the repo.
 
-## Status (28 Oct 2026)
+## Status (5 Nov 2026)
 
 Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next/later.
 
@@ -69,7 +69,7 @@ Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next
   Deploy with `railway up server --path-as-root --service api` (and `console`) or GitHub auto-deploy.
   The laptop server is retired.
   After each deploy: `MEMVINE_SMOKE_KEY=mv_mk_... python3 benchmark/smoke/hosted.py --api <url> --console <url>`
-  (throwaway project, deleted at the end; `--no-synthesis` until the model key is set).
-- Pending: custom domains `app.memvine.dev` / `api.memvine.dev` (the DNS provider DNS CNAMEs), the
-  Anthropic API key on `api`, re-pointing agent plugins to the new API address.
+  (throwaway project, deleted at the end; `--no-synthesis` skips the real model).
+- Pending: custom domains `app.memvine.dev` / `api.memvine.dev` (the DNS provider DNS CNAMEs),
+  re-pointing agent plugins to the new API address.
 - Later: security pass, terms and privacy pages, billing, SSO; the open-core split is undecided.

@@ -5,7 +5,6 @@ The product hub (vision, decisions, competitor comparison, open questions) lives
 labelled `now` / `next` / `later` / `parked`, with `P0`–`P2` and an `area:` label.
 
 ## Now (this week)
-- Anthropic API key on Railway (#1), then the real-synthesis production smoke test (#3)
 - Re-point both laptops' plugins to Railway (#2); custom domains app/api.memvine.dev (#4)
 - Nightly backups of the Railway database (#5)
 - Review real capture after a week of use (#6)
@@ -14,9 +13,10 @@ labelled `now` / `next` / `later` / `parked`, with `P0`–`P2` and an `area:` la
 - Cursor plugin (#8) · self-serve sign-up with free credits and a cost preview (#9)
 - MCP with OAuth for Claude.ai and ChatGPT (#10) · publish the SDKs (#11)
 - Files, PDFs and URLs as sources (#12) · webhooks on memory events (#13)
+- Ask the team: judges for agent questions (#20, #21, #22; plan in `docs/plans/judges-plan.md`)
 
 ## Later
-GitHub connector (#15), agent framework integrations (#16), published benchmarks (#17),
+Principles per person for judges (#23), GitHub connector (#15), agent framework integrations (#16), published benchmarks (#17),
 billing (#18), SSO/MFA, SOC 2 and VPC self-hosting.
 
 ## Parked
