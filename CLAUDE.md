@@ -70,6 +70,7 @@ Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next
   The laptop server is retired.
   After each deploy: `MEMVINE_SMOKE_KEY=mv_mk_... python3 benchmark/smoke/hosted.py --api <url> --console <url>`
   (throwaway project, deleted at the end; `--no-synthesis` skips the real model).
-- Pending: custom domains `app.memvine.dev` / `api.memvine.dev` (the DNS provider DNS CNAMEs),
-  re-pointing agent plugins to the new API address.
+- Addresses: `api.memvine.dev`, `app.memvine.dev`, `www.memvine.dev` (CNAMEs at the DNS provider); the
+  bare `memvine.dev` forwards to `www`.
+- Pending: re-pointing agent plugins to `https://api.memvine.dev`.
 - Later: security pass, terms and privacy pages, billing, SSO; the open-core split is undecided.
