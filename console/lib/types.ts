@@ -415,7 +415,7 @@ export interface RecallResult {
   items: (MemoryItem & { previous?: string | null; score?: number | null; related?: RelatedRef[] | null })[];
   tokens: number;
   abstained: boolean;
-  /** Why recall served nothing relevant, when it abstained: "empty_store", "no_candidates" or "below_threshold". */
+  /** Why recall served nothing relevant, when it abstained: "empty_store", "no_candidates", "below_threshold" or "not_needed". */
   abstainReason?: string | null;
   /** The relevance a match needed to be served, and the best match's. */
   minRelevance?: number | null;

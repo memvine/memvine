@@ -332,8 +332,12 @@ class RecallResponse(BaseModel):
     abstained: bool
     # Why nothing was served: "empty_store" (no memory to search), "no_candidates" (memory exists, but
     # none is visible to this question: everything excluded, or nothing recorded by as_of), or
-    # "below_threshold" (the best match is under min_relevance). None when not abstained.
+    # "below_threshold" (the best match is under min_relevance), or "not_needed" (close matches, but the
+    # model judged that none applies to this question). None when not abstained.
     abstain_reason: str | None = None
+    # Whether the model chose what was served; false when the similarity margin did (a broad question,
+    # a session-start brief, or the model failed or ran out of time).
+    picked_by_model: bool = False
     # The relevance threshold this recall used (project setting, else the embedder's calibrated default).
     min_relevance: float | None = None
     # Best relevance of any candidate memory: its cosine similarity to the question, plus a small bonus

@@ -253,7 +253,7 @@ async def recall(body: RecallRequest, request: Request, principal: Principal = D
             body = body.model_copy(update={"budget": max(100, budget - profile_tokens)})
         # The console's playground (no project key) is a person looking, not an agent using memory.
         result = await run_recall(conn, request.app.state.embedder, principal.project_id, body, audiences,
-                                  track=principal.key_id is not None)
+                                  track=principal.key_id is not None, llm=request.app.state.llm)
         result.profiles, result.profile_tokens = profile_text, profile_tokens
         request.state.log_detail = recall_log_detail(result)
         if principal.key_id is not None:  # the console's playground is not billed
@@ -267,7 +267,8 @@ def recall_log_detail(result: RecallResponse) -> str:
     threshold = f"{result.min_relevance:.2f}" if result.min_relevance is not None else "none"
     if result.abstained:
         return f"abstained: {result.abstain_reason} (best relevance {top}, threshold {threshold})"
-    return f"served {len(result.items)} items, {result.tokens} tokens (best relevance {top}, threshold {threshold})"
+    by = "picked by model, " if result.picked_by_model else ""
+    return f"served {len(result.items)} items, {result.tokens} tokens ({by}best relevance {top}, threshold {threshold})"
 
 
 @app.post("/v1/sessions/{session_id}/events", response_model=SessionOut, status_code=202)

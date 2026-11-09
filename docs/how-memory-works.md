@@ -59,6 +59,9 @@ for i in r.items: print(i["memory"]["statement"], f"(was: {i['previous']})" if i
 Recall prints the current launch date with the old one beside it, because the newer statement
 superseded the older one. Two more things recall does that matter on day one:
 
+- **It picks.** Inside a project every memory looks similar to every task, so similarity only finds
+  the candidates. A small model reads the question and picks what would change the work, and only
+  that is served. If the model fails or takes too long, recall falls back to the closest matches.
 - **It abstains.** If nothing in memory is relevant enough to the question, `abstained` is true and
   the briefing is empty, so an unrelated question never gets a confident-looking wrong answer.
 - **Standing rules come separately.** Rules marked standing ("Never deploy on Fridays") come back

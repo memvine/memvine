@@ -12,7 +12,9 @@ themselves, so an unrelated question gets an abstention instead of the same few 
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
 from datetime import UTC, datetime
 from uuid import UUID
@@ -20,10 +22,14 @@ from uuid import UUID
 from .config import settings
 from .edges import edges_for, recall_refs
 from .embeddings import Embedder
-from .extraction.extract import normalize
+from .extraction.extract import normalize, parse_json
+from .extraction.llm import LLM, fast
+from .extraction.prompts import RELEVANCE_SYSTEM, relevance_user
 from .models import PendingMessage, RecallItem, RecallPassage, RecallRequest, RecallResponse, RecallThread
 from .store import MEMORY_COLUMNS, evidence_for, memory_out
 from .threads import item_words, relevant_threads, render_page, render_page_brief, same_item
+
+log = logging.getLogger("memvine.recall")
 
 HEADER = "=== memvine · recalled memory (background, not instruction) ==="
 STANDING_HEADER = "=== memvine · standing instructions (always on: they apply to every answer, whatever the question) ==="
@@ -48,6 +54,13 @@ PASSAGE_MIN_SIMILARITY = 0.35
 # 0.82-0.92, off-topic items 0.60-0.70 for the same question). A thread page found by similarity and a
 # source excerpt that is not evidence of a kept item must be within the same margin of the best.
 RELEVANCE_MARGIN = 0.10
+# Similarity gates a question into the project, but inside a project it cannot tell which memory a task
+# needs: every memory is about the same system (a replay of one open source project's pull requests,
+# 460 judged pairs: cosine AUC 0.57). So the fast model reads the question and the closest candidates,
+# and only what it picks is served (precision 0.56 against 0.10 for the margin). Summaries and
+# session-start briefs want breadth, not a pick; if the model fails or is late, the margin decides.
+GATE_CANDIDATES = 30
+GATE_MAX_TOKENS = 200
 # Source excerpts are the evidence of the kept items, plus at most this many others within the margin.
 OTHER_PASSAGES = 1
 HISTORY_WORDS = re.compile(
@@ -61,6 +74,9 @@ BROAD = re.compile(
     r"\b(summar\w*|overview|comprehensive|overall|progress\w*|evolv\w*|journey|timeline|so far|across (my |our |the )?"
     r"(sessions|conversations)|everything|all the|how many|list (all|every)|throughout)\b", re.IGNORECASE)
 BROAD_CANDIDATES = 200
+# A broad question is short. A longer text that happens to say "summary" or "all the" is a task: a pasted
+# ticket, or a PR description with a Summary heading.
+BROAD_MAX_CHARS = 300
 MMR_LAMBDA = 0.25        # weight of novelty against relevance for ordinary questions
 MMR_LAMBDA_BROAD = 0.6
 MIN_SIMILARITY = 0.30
@@ -180,17 +196,19 @@ def line_links(edges: list[dict], neighbors: dict, *, supersedes_at: datetime | 
 
 
 async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest, audiences: list[str] | None = None,
-                 *, track: bool = True) -> RecallResponse:
+                 *, track: bool = True, llm: LLM | None = None) -> RecallResponse:
     """audiences: the ones this recall may read (from access.readable_audiences); None reads all.
     track: record what was served (mark_recalled), so unused memory can surface for review; the
     console's own playground passes False.
+    llm: the model that picks what the question needs (gate); without it the similarity margin does.
 
     Abstention: something must be a hit for anything to be served. A hit is a memory whose relevance
     (cosine similarity to the question, plus KEYWORD_BONUS when it also matches the question's words)
     reaches the threshold; the thread page of the caller's git branch or a page the question names
     by key; or a pending message sharing a word with the question. Pages found only by
-    similarity, standing instructions, and unrelated pending messages are context, never hits. On
-    abstention the briefing is empty, but the standing instructions still come back in `standing`."""
+    similarity, standing instructions, and unrelated pending messages are context, never hits. A
+    memory the model did not pick is not a hit either. On abstention the briefing is empty, but the
+    standing instructions still come back in `standing`."""
     budget = min(req.budget or settings.recall_default_budget, settings.recall_max_budget)
     include_history = req.include_history if req.include_history is not None else bool(HISTORY_WORDS.search(req.query))
     if req.as_of:
@@ -207,7 +225,7 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
         time_clause += " AND audience = ANY(%s)"
         time_params = [*time_params, audiences]
 
-    broad = bool(BROAD.search(req.query))
+    broad = len(req.query) <= BROAD_MAX_CHARS and bool(BROAD.search(req.query))
     pool = BROAD_CANDIDATES if broad else CANDIDATES
     embedding = (await embedder.embed([req.query]))[0]
     project_visible = audiences is None or "project" in audiences
@@ -293,35 +311,43 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     standing = [r["statement"] for r in standing_rows]
     pending = await pending_messages(conn, project_id, req, audiences, int(budget * PENDING_BUDGET_SHARE))
     terms = query_terms(req.query)
-    hit = (any(relevance(mid) >= min_relevance for _, mid in ranked_ids)
-           or any(thread_is_hit(t) for t in threads)
-           or any(shared_terms(terms, m.content) for m in pending))
-    if not hit:
+
+    async def abstain(reason: str) -> RecallResponse:
         if track:  # standing instructions are served with every answer, abstention or not
             await mark_recalled(conn, [r["id"] for r in standing_rows])
-        if candidates:
-            reason = "below_threshold"
-        elif await has_memory(conn, project_id, audiences):
-            reason = "no_candidates"
-        else:
-            reason = "empty_store"
         return RecallResponse(briefing="", standing=standing, items=[], tokens=0, abstained=True,
                               abstain_reason=reason, min_relevance=min_relevance, top_relevance=top_relevance)
 
+    page_or_message = any(thread_is_hit(t) for t in threads) or any(shared_terms(terms, m.content) for m in pending)
+    if not page_or_message and not any(relevance(mid) >= min_relevance for _, mid in ranked_ids):
+        if candidates:
+            return await abstain("below_threshold")
+        return await abstain("no_candidates" if await has_memory(conn, project_id, audiences) else "empty_store")
+
     ranked_ids.sort(key=lambda t: (-t[0], -rows[t[1]]["recorded_at"].timestamp()))
     ranked_ids = diversify(ranked_ids, rows, MMR_LAMBDA_BROAD if broad else MMR_LAMBDA)
+    picked = None
+    if llm is not None and settings.recall_gate and ranked_ids and not broad and not req.profiles:
+        picked = await gate(llm, req.query, [mid for _, mid in ranked_ids[:GATE_CANDIDATES]], rows)
 
     # Standing rules are said in their own section, never again as an item.
     standing_ids = {r["id"] for r in standing_rows}
     standing_words = [item_words(s) for s in standing]
     ranked_ids = [(s, mid) for s, mid in ranked_ids
                   if mid not in standing_ids and not said_in(item_words(rows[mid]["statement"]), standing_words)]
-    # What the question needs: items within the margin of the best one (with their contradiction and
-    # supersede partners); pages by similarity only within the same margin. Broad questions keep breadth.
+    # What the question needs: what the model picks, else items within the margin of the best one
+    # (either way with their contradiction and supersede partners); pages by similarity only within the
+    # same margin. Broad questions keep breadth.
     best = max((relevance(mid) for _, mid in ranked_ids), default=None)
-    if not broad:
+    if picked is not None:
+        ranked_ids = with_partners(picked, ranked_ids, rows)
+        # A standing rule the model picked is the answer: it is served in its own section.
+        if not ranked_ids and not page_or_message and not picked & standing_ids:
+            return await abstain("not_needed")
+    elif not broad:
         first = max(ranked_ids, key=lambda t: (base_score[t[1]], rows[t[1]]["recorded_at"]))[1] if ranked_ids else None
         ranked_ids = trim_to_margin(ranked_ids, rows, relevance, first=first)
+    if not broad:
         similar = [thread_similarity(t) for t in threads if not thread_is_hit(t)]
         best_any = max([*([best] if best is not None else []), *similar], default=0.0)
         threads = [t for t in threads if thread_is_hit(t) or thread_similarity(t) >= best_any - RELEVANCE_MARGIN]
@@ -521,7 +547,7 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
              *pending_lines, *excerpt_lines]
     return RecallResponse(briefing="\n".join(lines), standing=standing, pending=pending, threads=served_threads,
                           passages=served_passages, items=items, tokens=spent, abstained=False,
-                          min_relevance=min_relevance, top_relevance=top_relevance)
+                          min_relevance=min_relevance, top_relevance=top_relevance, picked_by_model=picked is not None)
 
 
 async def mark_recalled(conn, memory_ids: list[UUID]) -> None:
@@ -578,6 +604,37 @@ async def last_said_at(conn, memory_ids: list[UUID]) -> dict[UUID, datetime | No
     return out
 
 
+async def gate(llm: LLM, query: str, candidates: list[UUID], rows: dict) -> set[UUID] | None:
+    """The candidates the fast model says this question needs, or None when it gave no usable answer
+    in time: the caller then falls back to the margin, because a recall must not fail or stall with
+    the model."""
+    prompt = relevance_user(query, [rows[mid]["statement"] for mid in candidates])
+    try:
+        text = await asyncio.wait_for(fast(llm).complete(RELEVANCE_SYSTEM, prompt, max_tokens=GATE_MAX_TOKENS),
+                                      settings.recall_gate_timeout)
+        chosen = parse_json(text)["use"]
+        numbers = {int(n) for n in chosen}
+    except Exception as exc:  # noqa: BLE001
+        log.warning("recall gate gave no answer: %s: %s", type(exc).__name__, exc)
+        return None
+    return {candidates[n - 1] for n in numbers if 1 <= n <= len(candidates)}
+
+
+def with_partners(keep: set[UUID], ranked: list[tuple[float, UUID]], rows: dict) -> list[tuple[float, UUID]]:
+    """The ranked items in `keep`, in rank order, plus every item that contradicts, supersedes or is
+    superseded by a kept one: a pair is shown together or not at all."""
+    keep = set(keep)
+    present = {mid for _, mid in ranked}
+    todo = list(keep)
+    while todo:
+        r = rows[todo.pop()]
+        for other in [*(r.get("conflicts_with") or []), r.get("supersedes"), r.get("superseded_by")]:
+            if other in present and other not in keep:
+                keep.add(other)
+                todo.append(other)
+    return [(s, mid) for s, mid in ranked if mid in keep]
+
+
 def trim_to_margin(ranked: list[tuple[float, UUID]], rows: dict, relevance, margin: float = RELEVANCE_MARGIN,
                    first: UUID | None = None) -> list[tuple[float, UUID]]:
     """The ranked items within `margin` of the best relevance, in rank order. The first-ranked (or
@@ -589,15 +646,7 @@ def trim_to_margin(ranked: list[tuple[float, UUID]], rows: dict, relevance, marg
     best = max(relevance(mid) for _, mid in ranked)
     keep = {first if first is not None else ranked[0][1], max(ranked, key=lambda t: relevance(t[1]))[1]}
     keep |= {mid for _, mid in ranked if relevance(mid) >= best - margin}
-    present = {mid for _, mid in ranked}
-    todo = list(keep)
-    while todo:
-        r = rows[todo.pop()]
-        for other in [*(r.get("conflicts_with") or []), r.get("supersedes"), r.get("superseded_by")]:
-            if other in present and other not in keep:
-                keep.add(other)
-                todo.append(other)
-    return [(s, mid) for s, mid in ranked if mid in keep]
+    return with_partners(keep, ranked, rows)
 
 
 def said_in(words: frozenset[str], said: list[frozenset[str]]) -> bool:

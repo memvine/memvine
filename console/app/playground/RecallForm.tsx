@@ -21,6 +21,7 @@ const ABSTAIN_REASON: Record<string, string> = {
   empty_store: "This project has no memory yet, so there was nothing to search.",
   no_candidates: "Memory exists, but none of it is visible to this question: everything was excluded, outside the reader's audiences, or recorded after the as-of time.",
   below_threshold: "The closest memory is not relevant enough to the question to be served.",
+  not_needed: "Some memories are close, but none would change the answer to this question.",
 };
 
 function Figure({ label, children, tone }: { label: string; children: ReactNode; tone?: "bad" | "good" }) {

@@ -72,7 +72,7 @@ async def memory_recall(query: str, budget: int = 2000, as_of: str | None = None
     )
     async with _runtime["pool"].connection() as conn:
         audiences = await audiences_for(conn, project, identity) if identity else ["project"]
-        result = await run_recall(conn, _runtime["embedder"], project, req, audiences)
+        result = await run_recall(conn, _runtime["embedder"], project, req, audiences, llm=_runtime["llm"])
     if result.abstained:
         text = "Nothing in memory matches. Do not guess; ask or look."
         if result.standing:  # always-on rules still apply when nothing matched the question

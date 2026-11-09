@@ -96,6 +96,11 @@ class Settings(BaseSettings):
     # the floor every this many days since it was last said. 0 turns it off. A project's own
     # recall_half_life_days overrides it.
     recall_half_life_days: float = 90.0
+    # Within a project every memory looks similar to every task, so the fast model picks what a task
+    # needs from the closest candidates (recall.py: gate). Past the timeout, or with this off, recall
+    # falls back to the similarity margin. The plugins' prompt hook gives recall 8 seconds in all.
+    recall_gate: bool = True
+    recall_gate_timeout: float = 3.0
     # A memory this many days old that no briefing served in this many days is listed for review
     # (GET /v1/memories?unused=true, the project's unused_count). Never hidden or deleted for it.
     memory_unused_days: int = 60
