@@ -132,7 +132,10 @@ def briefing_checks(r: dict, label: str) -> None:
 def fresh_agent(briefing: str) -> str:
     prompt = (f"{briefing}\n\n---\nYou are a new engineer's coding agent on the muse project. Using only the memory above, "
               "answer in two lines: (1) which port to connect to for the muse production database, (2) the exact deploy command.")
-    out = subprocess.run(["claude", "-p", "--model", "sonnet"], input=prompt, capture_output=True, text=True, timeout=300)
+    # This machine may have the Memvine plugin installed: with its hooks on, the agent would be given
+    # the person's real memory as well, and this run would be sent to their hosted project.
+    out = subprocess.run(["claude", "-p", "--model", "sonnet", "--settings", '{"disableAllHooks": true}'], input=prompt,
+                         capture_output=True, text=True, timeout=300, env={**os.environ, "MEMVINE_HOOKS_DISABLED": "1"})
     return out.stdout.strip()
 
 
