@@ -70,6 +70,8 @@ Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next
   The laptop server is retired.
   After each deploy: `MEMVINE_SMOKE_KEY=mv_mk_... python3 benchmark/smoke/hosted.py --api <url> --console <url>`
   (throwaway project, deleted at the end; `--no-synthesis` skips the real model).
+- Backups: the `backup` cron service dumps the database nightly to the bucket `the backup bucket`
+  and restore-tests the dump (`deploy/railway/README.md` section 8).
 - Addresses: `api.memvine.dev`, `app.memvine.dev`, `www.memvine.dev` (CNAMEs at the DNS provider); the
   bare `memvine.dev` forwards to `www`.
 - Pending: re-pointing agent plugins to `https://api.memvine.dev`.

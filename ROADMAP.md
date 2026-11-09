@@ -6,7 +6,6 @@ labelled `now` / `next` / `later` / `parked`, with `P0`–`P2` and an `area:` la
 
 ## Now (this week)
 - Re-point both laptops' plugins to Railway (#2)
-- Nightly backups of the Railway database (#5)
 - Review real capture after a week of use (#6)
 
 ## Next (this month)
