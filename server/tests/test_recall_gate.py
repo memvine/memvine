@@ -157,6 +157,69 @@ async def test_a_picked_standing_rule_is_served_though_no_item_was(client):
     assert not r["abstained"] and not r["items"] and "make ship" in r["briefing"]
 
 
+PAGE_SOURCE = "## user · 2026-10-21T09:00\nThe Northwind invoice retry rework is half done. Next is the queue change."
+PAGE = json.dumps({"threads": [{
+    "key": "topic:retry-rework", "kind": "task", "title": "Invoice retry rework", "status": "open",
+    "summary": "The Northwind invoice retry rework is half done; the queue change is next.",
+    "sections": [{"label": "Next steps", "items": [{"text": "Make the queue change", "date": "2026-10-21",
+                                                    "evidence": [{"episode_id": None, "quote": "Next is the queue change"}]}]}],
+    "aliases": [], "related": []}]})
+WORK_QUESTION = "Where does the Northwind invoice retry rework stand?"
+
+
+async def seed_page(client):
+    """The two facts, and from a later source the page of a piece of work in progress; the question is
+    close to all three and names none."""
+    from test_threads import Router
+
+    await seed(client)
+    router = Router()
+    router.threads.responses = {"Next is the queue change": PAGE}
+    r = await client.post("/v1/ingest", json={"items": [{"id": "n-3", "content": PAGE_SOURCE, "timestamp": "2026-10-21T09:00:00Z"}]})
+    assert r.status_code == 202, r.text
+    async with app.state.pool.connection() as conn:
+        pid = (await (await conn.execute("SELECT id FROM projects WHERE slug = %s", (client.project_slug,))).fetchone())["id"]
+    await drain(app.state.pool, router, app.state.embedder, pid)
+    assert len((await client.get("/v1/memories")).json()) == 2 and len((await client.get("/v1/threads")).json()) == 1
+
+
+def number_of(start: str) -> int:
+    return next(n for n, line in enumerate(order(), 1) if line.startswith(start))
+
+
+@pytest.mark.asyncio
+async def test_a_page_the_model_picks_is_served_though_no_memory_was(client):
+    """A question about a piece of work gets its page; the model reads the page's title and summary."""
+    await seed_page(client)
+    gate_answers('{"use": []}')
+    r = await recall(client, WORK_QUESTION)
+    assert r["abstained"] and r["abstain_reason"] == "not_needed" and r["threads"] == []
+    assert "Work page: Invoice retry rework. The Northwind invoice retry rework is half done" in order()[-1]
+
+    gate_answers(json.dumps({"use": [number_of("Work page:")]}))
+    r = await recall(client, WORK_QUESTION)
+    assert r["picked_by_model"] is True and not r["abstained"] and r["items"] == []
+    assert [t["key"] for t in r["threads"]] == ["topic:retry-rework"] and "Make the queue change" in r["briefing"]
+
+
+@pytest.mark.asyncio
+async def test_a_page_the_model_does_not_pick_is_not_served_beside_a_picked_memory(client):
+    await seed_page(client)
+    gate_answers('{"use": []}')
+    await recall(client, WORK_QUESTION)
+    gate_answers(json.dumps({"use": [number_of("Northwind invoices retry")]}))
+    r = await recall(client, WORK_QUESTION)
+    assert len(r["items"]) == 1 and r["threads"] == [] and "queue change" not in r["briefing"]
+
+
+@pytest.mark.asyncio
+async def test_without_the_models_answer_a_similar_page_still_comes_with_a_hit(client):
+    await seed_page(client)
+    gate_answers("no idea")
+    r = await recall(client, WORK_QUESTION)
+    assert r["picked_by_model"] is False and r["items"] and [t["key"] for t in r["threads"]] == ["topic:retry-rework"]
+
+
 @pytest.mark.asyncio
 async def test_off_switch(client, monkeypatch):
     await seed(client)

@@ -60,8 +60,9 @@ Recall prints the current launch date with the old one beside it, because the ne
 superseded the older one. Two more things recall does that matter on day one:
 
 - **It picks.** Inside a project every memory looks similar to every task, so similarity only finds
-  the candidates. A small model reads the question and picks what would change the work, and only
-  that is served. If the model fails or takes too long, recall falls back to the closest matches.
+  the candidates. A small model reads the question and picks what would change the work (memories,
+  and the page of a piece of work the question is about), and only that is served. If the model
+  fails or takes too long, recall falls back to the closest matches.
 - **It abstains.** If nothing in memory is relevant enough to the question, `abstained` is true and
   the briefing is empty, so an unrelated question never gets a confident-looking wrong answer.
 - **Standing rules come separately.** Rules marked standing ("Never deploy on Fridays") come back

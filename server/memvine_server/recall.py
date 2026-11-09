@@ -61,6 +61,7 @@ RELEVANCE_MARGIN = 0.10
 # session-start briefs want breadth, not a pick; if the model fails or is late, the margin decides.
 GATE_CANDIDATES = 30
 GATE_MAX_TOKENS = 200
+PAGE_LINE_CHARS = 400   # a page's title and summary, as the model reads them
 # Source excerpts are the evidence of the kept items, plus at most this many others within the margin.
 OTHER_PASSAGES = 1
 HISTORY_WORDS = re.compile(
@@ -206,9 +207,10 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     (cosine similarity to the question, plus KEYWORD_BONUS when it also matches the question's words)
     reaches the threshold; the thread page of the caller's git branch or a page the question names
     by key; or a pending message sharing a word with the question. Pages found only by
-    similarity, standing instructions, and unrelated pending messages are context, never hits. A
-    memory the model did not pick is not a hit either. On abstention the briefing is empty, but the
-    standing instructions still come back in `standing`."""
+    similarity, standing instructions, and unrelated pending messages are context, never hits. When
+    the model picks, a memory it did not pick is not a hit, and a page found only by similarity is
+    served if and only if the model picked it. On abstention the briefing is empty, but the standing
+    instructions still come back in `standing`."""
     budget = min(req.budget or settings.recall_default_budget, settings.recall_max_budget)
     include_history = req.include_history if req.include_history is not None else bool(HISTORY_WORDS.search(req.query))
     if req.as_of:
@@ -327,27 +329,32 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     ranked_ids.sort(key=lambda t: (-t[0], -rows[t[1]]["recorded_at"].timestamp()))
     ranked_ids = diversify(ranked_ids, rows, MMR_LAMBDA_BROAD if broad else MMR_LAMBDA)
     picked = None
-    if llm is not None and settings.recall_gate and ranked_ids and not broad and not req.profiles:
-        picked = await gate(llm, req.query, [mid for _, mid in ranked_ids[:GATE_CANDIDATES]], rows)
+    # A page found only by similarity is a candidate beside the memories: the model reads its title and
+    # summary, so a question about a piece of work gets its page even when no memory is needed.
+    similar_pages = [t for t in threads if not thread_is_hit(t)]
+    if llm is not None and settings.recall_gate and (ranked_ids or similar_pages) and not broad and not req.profiles:
+        ids = [mid for _, mid in ranked_ids[:GATE_CANDIDATES]]
+        picked = await gate(llm, req.query, [*ids, *(t["id"] for t in similar_pages)],
+                            [*(rows[mid]["statement"] for mid in ids), *(page_line(t) for t in similar_pages)])
 
     # Standing rules are said in their own section, never again as an item.
     standing_ids = {r["id"] for r in standing_rows}
     standing_words = [item_words(s) for s in standing]
     ranked_ids = [(s, mid) for s, mid in ranked_ids
                   if mid not in standing_ids and not said_in(item_words(rows[mid]["statement"]), standing_words)]
-    # What the question needs: what the model picks, else items within the margin of the best one
-    # (either way with their contradiction and supersede partners); pages by similarity only within the
-    # same margin. Broad questions keep breadth.
+    # What the question needs: the items and similar pages the model picks, else the items within the
+    # margin of the best one and the similar pages within the same margin (items either way with their
+    # contradiction and supersede partners). Broad questions keep breadth.
     best = max((relevance(mid) for _, mid in ranked_ids), default=None)
     if picked is not None:
-        ranked_ids = with_partners(picked, ranked_ids, rows)
+        ranked_ids = with_partners(picked & rows.keys(), ranked_ids, rows)
+        threads = [t for t in threads if thread_is_hit(t) or t["id"] in picked]
         # A standing rule the model picked is the answer: it is served in its own section.
-        if not ranked_ids and not page_or_message and not picked & standing_ids:
+        if not ranked_ids and not threads and not page_or_message and not picked & standing_ids:
             return await abstain("not_needed")
     elif not broad:
         first = max(ranked_ids, key=lambda t: (base_score[t[1]], rows[t[1]]["recorded_at"]))[1] if ranked_ids else None
         ranked_ids = trim_to_margin(ranked_ids, rows, relevance, first=first)
-    if not broad:
         similar = [thread_similarity(t) for t in threads if not thread_is_hit(t)]
         best_any = max([*([best] if best is not None else []), *similar], default=0.0)
         threads = [t for t in threads if thread_is_hit(t) or thread_similarity(t) >= best_any - RELEVANCE_MARGIN]
@@ -604,11 +611,17 @@ async def last_said_at(conn, memory_ids: list[UUID]) -> dict[UUID, datetime | No
     return out
 
 
-async def gate(llm: LLM, query: str, candidates: list[UUID], rows: dict) -> set[UUID] | None:
-    """The candidates the fast model says this question needs, or None when it gave no usable answer
-    in time: the caller then falls back to the margin, because a recall must not fail or stall with
-    the model."""
-    prompt = relevance_user(query, [rows[mid]["statement"] for mid in candidates])
+def page_line(thread: dict) -> str:
+    """A page as the model reads it beside the memories (RELEVANCE_SYSTEM knows the prefix)."""
+    text = f"Work page: {thread.get('title') or thread['key']}. {thread.get('summary') or ''}"
+    return _clip(" ".join(text.split()), PAGE_LINE_CHARS)
+
+
+async def gate(llm: LLM, query: str, candidates: list[UUID], texts: list[str]) -> set[UUID] | None:
+    """The candidates (memories and pages, each with the text the model reads) the fast model says
+    this question needs, or None when it gave no usable answer in time: the caller then falls back
+    to the margin, because a recall must not fail or stall with the model."""
+    prompt = relevance_user(query, texts)
     try:
         text = await asyncio.wait_for(fast(llm).complete(RELEVANCE_SYSTEM, prompt, max_tokens=GATE_MAX_TOKENS),
                                       settings.recall_gate_timeout)
