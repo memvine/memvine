@@ -60,19 +60,24 @@ Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local
 - Examples in code, tests and docs use the invented "Northwind" billing world. Never put real
   company, customer or employer details in the repo.
 
-## Status (5 Nov 2026)
+## Status (10 Nov 2026)
 
 Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next/later.
 
-
-- Hosted on Railway (project `memvine`: `postgres`, `api`, `console`; see `deploy/railway/README.md`).
-  Deploy with `railway up server --path-as-root --service api` (and `console`) or GitHub auto-deploy.
-  The laptop server is retired.
+- Hosted on Railway (project `memvine`: `postgres`, `api`, `console`, `www`, `backup`; see
+  `deploy/railway/README.md`, runbook in section 9). Open to invited teams only (`MEMVINE_SIGNUP=invite`).
+  Deploy with `railway up server --path-as-root --service api` (and `console`, `site` → `www`).
+  `railway up` does not read `railway.json`: health checks, cron and restart policy are set on the
+  service. The laptop server is retired.
   After each deploy: `MEMVINE_SMOKE_KEY=mv_mk_... python3 benchmark/smoke/hosted.py --api <url> --console <url>`
   (throwaway project, deleted at the end; `--no-synthesis` skips the real model).
+- The server image installs `server/requirements.lock`; rebuild it after changing `pyproject.toml`
+  (`server/README.md`, Docker).
 - Backups: the `backup` cron service dumps the database nightly to the bucket `the backup bucket`
   and restore-tests the dump (`deploy/railway/README.md` section 8).
 - Addresses: `api.memvine.dev`, `app.memvine.dev`, `www.memvine.dev` (CNAMEs at the DNS provider); the
-  bare `memvine.dev` forwards to `www`.
-- Pending: re-pointing agent plugins to `https://api.memvine.dev`.
-- Later: security pass, terms and privacy pages, billing, SSO; the open-core split is undecided.
+  bare `memvine.dev` forwards to `www`. `site/terms.html` and `site/privacy.html` are drafts a
+  lawyer has not reviewed.
+- Pending, the operator's: a Slack webhook for alerts, an outside uptime check, a monthly limit on
+  the Anthropic key, re-pointing each laptop's plugin (#2).
+- Later: password reset by email, billing, SSO; the open-core split is undecided.

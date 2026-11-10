@@ -243,6 +243,23 @@ h2 {
 .close { padding: 10vh var(--gutter) 18vh; }
 .close .statement { max-width: 24ch; }
 
+/* Terms and privacy: one column of plain text */
+
+.legal { max-width: calc(var(--col) + 2 * var(--gutter)); padding: 150px var(--gutter) 14vh; }
+.legal h1 {
+  margin: 0 0 36px;
+  font-size: clamp(46px, 6vw, 84px);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+.legal h2 { margin: 56px 0 12px; font-size: 24px; font-weight: 500; letter-spacing: -0.015em; }
+.legal p, .legal ul { margin: 0 0 16px; }
+.legal ul { padding-left: 1.2em; }
+.legal li { margin-bottom: 8px; }
+.legal a { color: var(--sprout); }
+.legal a:hover { text-decoration: underline; }
+
 /* Footer */
 
 .bottom {
@@ -255,7 +272,7 @@ h2 {
   font-size: 15.5px;
   color: var(--ash);
 }
-.bottom nav { display: flex; gap: 28px; }
+.bottom nav { display: flex; flex-wrap: wrap; gap: 12px 28px; }
 .bottom a:hover { color: var(--linen); }
 
 /* Small screens */

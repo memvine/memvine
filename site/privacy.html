@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy · Memvine</title>
+  <meta name="description" content="What data Memvine holds, why, and how to delete it.">
+  <meta name="theme-color" content="#0b1310">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top">
+    <a class="wordmark" href="/" aria-label="Memvine home">
+      <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 17.5V9"/>
+        <path d="M10 11C10 7.4 7.6 5 4 5c0 3.6 2.4 6 6 6Z"/>
+        <path d="M10 9c0-3.3 2.2-5.5 5.6-5.5 0 3.3-2.2 5.5-5.6 5.5Z"/>
+      </svg>
+      <span>memvine</span>
+    </a>
+    <nav aria-label="Primary">
+      <a href="https://github.com/memvine/memvine/blob/main/docs/how-memory-works.md">How it works</a>
+      <a href="https://github.com/memvine/memvine">GitHub</a>
+      <a class="nav-console" href="https://app.memvine.dev">Open the console</a>
+    </nav>
+  </header>
+
+  <main class="legal">
+    <h1>Privacy</h1>
+    <p>Draft of 10 November 2026. A lawyer has not reviewed this page yet. Memvine is in an invited trial, and this page says in plain words how the trial works.</p>
+
+    <h2>What Memvine holds</h2>
+    <ul>
+      <li>Account details: your email address, your name if you give one, and a hash of your password. Memvine never stores the password itself.</li>
+      <li>Session content: the conversation your agent plugin sends, which can include prompts, replies, code and file paths.</li>
+      <li>Memories and pages made from that content, and the feedback you give on them.</li>
+      <li>Usage records: which key or account made a request, when, from which address, and what it cost in model use. Request bodies are not logged.</li>
+    </ul>
+
+    <h2>What it is used for</h2>
+    <p>Only to run the service for your team: to make memories, serve them to your team's sessions, show them in the console, keep the service secure, and fix faults.</p>
+    <p>Memvine does not sell your data, does not show ads, and does not use your content to train models.</p>
+
+    <h2>Who else handles it</h2>
+    <ul>
+      <li>Railway hosts the service and the database, in the United States.</li>
+      <li>Anthropic's API reads session content to write memories and to pick what to recall.</li>
+      <li>Google Fonts serves the typeface on this site, so Google sees your address when a page loads.</li>
+    </ul>
+    <p>No one else receives your data, unless the law requires it.</p>
+
+    <h2>Who can see it</h2>
+    <p>Members of your organization see its projects. Other organizations cannot see your data. The operator of Memvine can reach the database to run and repair the service, and looks at content only when that is needed to fix a problem.</p>
+
+    <h2>How long it is kept</h2>
+    <p>Until you delete it. Deleting a project removes its content from the live database right away. Forgetting a memory stops it being served, and Memvine keeps a note of it so the same thing is not learned again; that note goes when the project is deleted. Nightly backups are kept for 14 days and then deleted, so deleted data leaves the backups within 14 days.</p>
+
+    <h2>Cookies</h2>
+    <p>The console uses one sign-in cookie. This site uses no cookies, no analytics and no trackers.</p>
+
+    <h2>Security</h2>
+    <p>All traffic is encrypted in transit. Keys and passwords are stored as hashes. The database is not reachable from the internet. The full description is in the <a href="https://github.com/memvine/memvine/blob/main/docs/security.md">security notes</a>.</p>
+
+    <h2>Your choices</h2>
+    <p>You can export or delete your data from the console. To see, correct or delete what Memvine holds about you, or to close your account, write to the address below and we will do it.</p>
+
+    <h2>Changes</h2>
+    <p>If this page changes in a way that matters, we will tell the owners of each organization by email.</p>
+
+    <p>Questions: <a href="mailto:hello@memvine.dev">hello@memvine.dev</a></p>
+  </main>
+
+  <footer class="bottom">
+    <span>Memvine</span>
+    <nav aria-label="Footer">
+      <a href="https://github.com/memvine/memvine/blob/main/docs/how-memory-works.md">How it works</a>
+      <a href="https://github.com/memvine/memvine">GitHub</a>
+      <a href="https://app.memvine.dev">Console</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+    </nav>
+  </footer>
+</body>
+</html>

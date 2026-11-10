@@ -321,6 +321,15 @@ is gone; the banner and the endpoint still show it.
 `docker build -t memvine-server .` then run it with `MEMVINE_DATABASE_URL`, `MEMVINE_MANAGEMENT_KEY`
 and `ANTHROPIC_API_KEY` set; mount a volume at `/var/cache/fastembed` to keep the embedding model.
 
+The image installs the exact versions in `requirements.lock`, so two builds of one commit hold the
+same packages. `pyproject.toml` keeps the ranges; after changing it, or to take updates, rebuild
+the lock, audit it and run the tests on it:
+
+```sh
+uv pip compile pyproject.toml --python-version 3.12 --universal --no-header -o requirements.lock
+uvx pip-audit -r requirements.lock --no-deps --disable-pip
+```
+
 ## Tests
 
 ```sh

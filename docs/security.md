@@ -105,7 +105,8 @@ loopback, private, link-local and metadata addresses (127/8, 10/8, 172.16/12, 19
 ## Responses and logs
 
 - API responses carry `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
-  `Referrer-Policy: no-referrer`, `Cache-Control: no-store`. The API sends no CORS headers, so
+  `Referrer-Policy: no-referrer`, `Cache-Control: no-store` and `Strict-Transport-Security` (one year,
+  subdomains; browsers ignore it over plain http, so a local server is unaffected). The API sends no CORS headers, so
   browsers on other origins cannot read it.
 - Validation errors (422) do not echo the submitted input (it can be a password).
 - Logs: request bodies are never logged or stored; the request log and the audit log keep method,
@@ -158,6 +159,7 @@ loopback, private, link-local and metadata addresses (127/8, 10/8, 172.16/12, 19
 - Access logs of the hosting platform (uvicorn) include request paths, which can name an identity
   (`/v1/identities/{identity}`) or a session id; never a key or content.
 - Tracebacks of unexpected errors (`log.exception`) can include a database error's detail.
-- Dependencies are resolved at image build (`>=` ranges, no lock file) for the server; run
-  `pip-audit` against the built image's packages before a release. The root `memvine` npm package
+- The server image installs the exact versions in `server/requirements.lock`; the lock does not
+  update itself. Refresh and audit it before a release (`server/README.md`, Docker). The pins carry
+  no hashes. The root `memvine` npm package
   still depends on zod 3 (GHSA-mrhx-c7xc-m3w5, fixed only in zod 4, a breaking upgrade).

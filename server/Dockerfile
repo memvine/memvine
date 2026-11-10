@@ -6,9 +6,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     FASTEMBED_CACHE_PATH=/var/cache/fastembed
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md requirements.lock ./
 COPY memvine_server ./memvine_server
-RUN pip install --no-cache-dir . && mkdir -p /var/cache/fastembed
+# The exact versions come from requirements.lock (see server/README.md to refresh it).
+RUN pip install --no-cache-dir -r requirements.lock && pip install --no-cache-dir --no-deps . \
+    && mkdir -p /var/cache/fastembed
 # Bake the embedding model into the image, so a fresh container never downloads it on start.
 RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"
 

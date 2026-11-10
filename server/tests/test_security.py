@@ -132,6 +132,7 @@ async def test_security_headers_on_every_response(client):
         assert r.headers["x-frame-options"] == "DENY"
         assert r.headers["referrer-policy"] == "no-referrer"
         assert r.headers["cache-control"] == "no-store"
+        assert r.headers["strict-transport-security"] == "max-age=31536000; includeSubDomains"
 
 
 @needs_db

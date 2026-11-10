@@ -7,6 +7,9 @@ labelled `now` / `next` / `later` / `parked`, with `P0`–`P2` and an `area:` la
 ## Now (this week)
 - Re-point both laptops' plugins to Railway (#2)
 - Review real capture after a week of use (#6)
+- Prove recall helps a coding agent: the four-way test on trap tasks, then memories shown to five teams
+- Operator steps left for production: a Slack address for alerts, an outside uptime check, a monthly
+  limit on the Anthropic key, a lawyer's review of `/terms` and `/privacy`
 
 ## Next (this month)
 - Cursor plugin (#8) · self-serve sign-up with free credits and a cost preview (#9)
@@ -27,3 +30,9 @@ review loop; memory that ages; history and activity feed; recency weighting; per
 rules and categories; profiles; background consolidation; security pass; Connect page; Claude Code
 plugin 0.7.2 and Codex plugin 0.6.1; the local memory check (agent test: 9/9 right with memory,
 0/9 without) and the production smoke test.
+
+## Shipped (November 2026)
+Addresses `api.`, `app.` and `www.memvine.dev`; nightly backups, each one restore-tested; recall
+that lets the fast model pick what the task needs; production readiness for invited teams: health
+checks on `api` and `console`, pinned server dependencies, HSTS on the API, terms and privacy drafts,
+and a runbook (`deploy/railway/README.md` section 9).

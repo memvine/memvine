@@ -253,6 +253,8 @@ SECURITY_HEADERS = [
     (b"x-frame-options", b"DENY"),
     (b"referrer-policy", b"no-referrer"),
     (b"cache-control", b"no-store"),
+    # Browsers ignore this over plain http, so a local server is unaffected.
+    (b"strict-transport-security", b"max-age=31536000; includeSubDomains"),
 ]
 
 

@@ -3,5 +3,5 @@
 FROM nginx:1.27-alpine
 ENV PORT=8080
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
-COPY index.html styles.css vine.js icon.svg /usr/share/nginx/html/
+COPY index.html terms.html privacy.html styles.css vine.js icon.svg /usr/share/nginx/html/
 EXPOSE 8080

@@ -1,7 +1,8 @@
 # memvine.dev
 
-The homepage. Four static files, no build step: `index.html`, `styles.css`, `vine.js` (the vine
-that grows as the page is read) and `icon.svg`. Open `index.html` in a browser, or
+The homepage. Static files, no build step: `index.html`, `styles.css`, `vine.js` (the vine
+that grows as the page is read) and `icon.svg`, plus `terms.html` and `privacy.html` (served at
+`/terms` and `/privacy`; drafts until a lawyer has reviewed them). Open `index.html` in a browser, or
 `python3 -m http.server 8787` here and visit `http://127.0.0.1:8787/`.
 
 Deployed on Railway as the `www` service, root directory `site/`, custom domain `memvine.dev`
