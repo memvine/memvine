@@ -28,5 +28,13 @@ ExaBase's prompts unchanged.
 - The ExaBase-derived portions of `exabase_prompts.py` remain ExaBase's work and are excluded
   from this repository's MIT license. This attribution does not relicense those portions.
 
-Past Corp's original harness code is covered by the repository's MIT license. The third-party
-material identified above retains its separate terms.
+**Past Corp's BEAM harness**
+- The dataset loading (`dataset.py`), model calls (`llm.py`), scoring (`scoring.py`), logging
+  (`log.py`), prompt verification (`verify.py`) and the run loop in `run.py` started from the
+  harness Past Corp published for its own BEAM run
+  ([source](https://github.com/pastdotdev/benchmarks/tree/main/beam)), under the MIT license in
+  `LICENSE-past-harness`. That copyright notice stays with those portions.
+- Memvine's additions (the pluggable backends and reference arms in `memory_api.py`,
+  `coverage.py`, local-subscription grading, the tests) are under this repository's license.
+
+The third-party material identified above retains its separate terms.

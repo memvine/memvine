@@ -4,10 +4,11 @@
     python run.py --backend fullcontext --split 100k
     python run.py --backend rag --split 100k
 
-Forked from past.dev's open harness (see NOTICE.md and LICENSE-past-harness): the dataset handling,
-ExaBase's prompts, the answer and judge model and the scoring are theirs, unchanged, so a score here
-compares with their published numbers. What changed is that the memory system is a pluggable
-backend (memory_api.py) with two reference arms beside Memvine.
+The evaluation procedure is the published one, unchanged (the dataset, ExaBase's prompts, the answer
+and judge model, the scoring rules), so a score here compares with other systems' published BEAM
+scores. The memory system is a pluggable backend (memory_api.py) with two reference arms beside
+Memvine. The dataset, model and scoring code started from Past Corp's MIT-licensed harness: see
+NOTICE.md and LICENSE-past-harness.
 
 The run has three phases, each over every conversation:
 
@@ -51,7 +52,7 @@ from memory_api import (
     make_backend,
 )
 
-HARNESS_VERSION = "2-memvine"  # past.dev harness 2, with pluggable backends
+HARNESS_VERSION = "2-memvine"  # the published procedure (harness version 2), with pluggable backends
 TOLERATE_MEMORY_ERRORS = os.environ.get("BEAM_TOLERATE_MEMORY_ERRORS", "") == "1"
 
 CONVERSATIONS_SENT_AT_ONCE = 4
@@ -78,7 +79,7 @@ async def answer_question(backend, handle: Handle, conversation: Conversation, q
         if llm.stops_the_run(error):
             raise
         # A failing memory system is a broken run, not a wrong answer: stop rather than record zeros.
-        # (Model-side failures keep past.dev's rule and score 0.)
+        # (Model-side failures keep the published rule and score 0.)
         if isinstance(error, MemoryApiError) and (error.status or 0) >= 500 and not TOLERATE_MEMORY_ERRORS:
             raise IngestionFailed(f"recall failed for {question.id}: {error}") from error
         # A recall or an answer that failed even after retries scores the question 0, and the

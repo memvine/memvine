@@ -2,8 +2,8 @@
 
 A backend opens one store per conversation, takes the conversation's turns, says when it has
 finished processing them, and answers a recall at a moment in time. The harness never looks
-inside: the answer model reads whatever `recall` returns, as JSON, exactly as past.dev's harness
-reads past.dev's recall response.
+inside: the answer model reads whatever `recall` returns, as JSON, the way published BEAM runs hand a
+memory system's recall response to the answer model.
 
     memvine      the Memvine server (MEMVINE_API_URL, MEMVINE_MANAGEMENT_KEY)
     fullcontext  no memory system: every turn up to the question's moment, in order, capped
@@ -29,7 +29,7 @@ from log import log
 
 BACKENDS = ("memvine", "fullcontext", "rag")
 
-# One recall: at most this many results, within this many tokens of evidence (past.dev's settings).
+# One recall: at most this many results, within this many tokens of evidence (the settings of published runs).
 RECALL_LIMIT = 100
 RECALL_MAX_TOKENS = 8_000
 

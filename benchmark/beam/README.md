@@ -1,4 +1,4 @@
-# BEAM on Memvine
+# Memvine's BEAM runner
 
 Runs the [BEAM](https://arxiv.org/abs/2510.27246) long-conversation memory benchmark against the
 Memvine server, and against two reference arms on the same harness, prompts, models and judge:
@@ -9,12 +9,22 @@ Memvine server, and against two reference arms on the same harness, prompts, mod
 | `fullcontext` | every turn up to that moment, verbatim (capped) | the ceiling when the conversation fits the model's context |
 | `rag` | top chunks of the raw turns by local embeddings + keyword overlap, same 8,000-token budget | whether synthesis earns its cost over plain retrieval |
 
-This is a fork of [past.dev's open harness](https://github.com/pastdotdev/benchmarks/tree/main/beam)
-(MIT, see `LICENSE-past-harness` and `NOTICE.md`). The dataset handling (`dataset.py`), ExaBase's
-answer and judge prompts (`exabase_prompts.py`, unchanged, SHA-256 checked by `verify.py --prompts`),
-the model (`llm.py`: `openai/gpt-5.6-luna` via OpenRouter, reasoning off) and the scoring
-(`scoring.py`) are theirs, so a number from here compares with their published 90.02%. Only the
-memory system is pluggable (`memory_api.py`).
+The evaluation procedure is the published one, unchanged, so a score from here compares with
+other systems' published BEAM scores:
+
+- the dataset as its authors publish it (`dataset.py` downloads it and records the revision);
+- ExaBase's answer and judge prompts (`exabase_prompts.py`, SHA-256 checked by `verify.py --prompts`);
+- the answer and judge model other published runs use (`llm.py`: `openai/gpt-5.6-luna` via
+  OpenRouter, reasoning off);
+- the scoring rules (`scoring.py`).
+
+What is Memvine's: the pluggable memory backend and the two reference arms (`memory_api.py`), the
+answer coverage check (`coverage.py`), and grading on a local Claude subscription for early rounds
+(`BEAM_LOCAL_JUDGE`; real scores, but not comparable with published ones).
+
+The dataset loading, model calls and scoring code started from the MIT-licensed harness that
+Past Corp published for its own BEAM run. Credits and licences are in `NOTICE.md` and
+`LICENSE-past-harness`.
 
 ## Run
 
@@ -50,7 +60,7 @@ BEAM_FAKE_MODEL=1 .venv/bin/python run.py --backend rag --split 100k --conversat
 
 Consecutive turns of one session go together as one episode, up to `BEAM_EPISODE_CHARS`
 (default 6,000) characters, rendered as `## Author · time` blocks, timestamped at the first turn.
-One project per conversation, as in past.dev's run, created in Memvine's conversation mode
+One project per conversation, created in Memvine's conversation mode
 (`BEAM_MEMORY_MODE`, default `conversation`; `coding` measures the keep-little mode on the same data). Recall asks with `as_of` set to the question's
 moment and an 8,000-token budget, and the answer model reads the recall response (briefing plus
 items with their dates, status and previous value) as JSON.
