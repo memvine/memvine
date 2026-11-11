@@ -31,6 +31,7 @@ from .extraction.extract import normalize, parse_json
 from .extraction.llm import LLM, fast
 from .extraction.prompts import RELEVANCE_SYSTEM, relevance_user
 from .models import PendingMessage, RecallItem, RecallPassage, RecallRequest, RecallResponse, RecallThread
+from .rerank import Reranker, get_reranker
 from .store import MEMORY_COLUMNS, evidence_for, memory_out
 from .threads import item_words, relevant_threads, render_page, render_page_brief, same_item
 
@@ -341,6 +342,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
             return await abstain("below_threshold")
         return await abstain("no_candidates" if await has_memory(conn, project_id, audiences) else "empty_store")
 
+    if detail and len(ranked_ids) > 1 and (reranker := get_reranker()) is not None:
+        ranked_ids = await reranked(reranker, req.query, ranked_ids, rows, scores)
     ranked_ids.sort(key=lambda t: (-t[0], -rows[t[1]]["recorded_at"].timestamp()))
     ranked_ids = diversify(ranked_ids, rows, MMR_LAMBDA_BROAD if broad else MMR_LAMBDA)
     picked = None
@@ -797,6 +800,25 @@ async def thread_knowledge(conn, thread_ids: list[UUID], time_clause: str, time_
     for r in rows:
         if len(out.setdefault(r["thread_id"], [])) < THREAD_KNOWLEDGE_PER_PAGE:
             out[r["thread_id"]].append(r)
+    return out
+
+
+async def reranked(reranker: Reranker, query: str, ranked: list[tuple[float, UUID]], rows: dict,
+                   fused: dict[UUID, float]) -> list[tuple[float, UUID]]:
+    """The candidates scored by their place in the reranker's order instead of the fused one (same
+    scale: the reciprocal rank of two lists), keeping each one's trust, currency and recency weights.
+    A reranker that fails leaves the fused order."""
+    try:
+        marks = await reranker.scores(query, [rows[mid]["statement"] for _, mid in ranked])
+    except Exception:
+        log.exception("reranker failed; keeping the fused order")
+        return ranked
+    order = sorted(range(len(ranked)), key=lambda i: -marks[i])
+    out = []
+    for position, i in enumerate(order):
+        score, mid = ranked[i]
+        weights = score / fused[mid] if fused.get(mid) else 1.0
+        out.append((weights * 2.0 / (RRF_K + position + 1), mid))
     return out
 
 

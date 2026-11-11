@@ -11,8 +11,10 @@ COPY memvine_server ./memvine_server
 # The exact versions come from requirements.lock (see server/README.md to refresh it).
 RUN pip install --no-cache-dir -r requirements.lock && pip install --no-cache-dir --no-deps . \
     && mkdir -p /var/cache/fastembed
-# Bake the embedding model into the image, so a fresh container never downloads it on start.
-RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"
+# Bake the embedding model and conversation mode's reranker into the image, so a fresh container never
+# downloads them on start.
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')" \
+    && python -c "from fastembed.rerank.cross_encoder import TextCrossEncoder; TextCrossEncoder('jinaai/jina-reranker-v1-turbo-en')"
 
 EXPOSE 8400
 # MEMVINE_HOST=:: listens on IPv6 and IPv4 together (Railway's private network is IPv6).

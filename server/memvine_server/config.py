@@ -105,6 +105,10 @@ class Settings(BaseSettings):
     # and judging) a half scored 0.77, a quarter 0.85 and none 0.86: the original words answer better
     # than many derived lines, which mostly earn their place by saying what changed and what conflicts.
     recall_detail_fact_share: float = 0.25
+    # Conversation mode (rerank.py): the local cross-encoder that orders the candidate details against
+    # the question. Empty turns it off. On a 500k-token BEAM conversation (2,888 details) the line that
+    # answered a question sat 135th by vector and 41st by keyword; this model put it first.
+    recall_rerank_model: str = "jinaai/jina-reranker-v1-turbo-en"
     recall_gate_timeout: float = 3.0
     # A memory this many days old that no briefing served in this many days is listed for review
     # (GET /v1/memories?unused=true, the project's unused_count). Never hidden or deleted for it.

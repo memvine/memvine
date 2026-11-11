@@ -89,6 +89,26 @@ async def test_a_conversation_project_keeps_details_and_recalls_wide(client):
     assert r["passages"] and "ends on March 29" in r["passages"][0]["content"]
     assert "--- source excerpts (the original words) ---" in r["briefing"]
 
+    # With a reranker, its order of the candidates decides which detail leads (rerank.py).
+    from memvine_server import rerank
+
+    class LastFirst:
+        async def scores(self, query, texts):
+            self.asked = (query, len(texts))
+            return [float(i) for i in range(len(texts))]
+
+    wide = "The user's sprint, design review and login page"
+    before = (await client.post("/v1/recall", json={"query": wide})).json()["items"]
+    stub = LastFirst()
+    rerank.set_reranker(stub)
+    try:
+        after = (await client.post("/v1/recall", json={"query": wide})).json()["items"]
+    finally:
+        rerank.set_reranker(None)
+    assert len(before) > 1 and stub.asked == (wide, len(before))
+    assert {i["memory"]["id"] for i in after} == {i["memory"]["id"] for i in before}
+    assert after[0]["memory"]["id"] != before[0]["memory"]["id"]
+
     # Nothing in memory or the sources shares a word with the question: nothing to return.
     r = (await client.post("/v1/recall", json={"query": "zebra migration patterns"})).json()
     assert r["abstained"] and r["briefing"] == ""
