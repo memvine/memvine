@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from .llm import LLM
-from .prompts import KNOWLEDGE_SYSTEM, knowledge_user
+from .prompts import CONVERSATION_SYSTEM, KNOWLEDGE_SYSTEM, conversation_user, knowledge_user
 
 KINDS = {"semantic", "episodic", "procedural", "prospective", "preference"}
 ASSERTIONS = {"observed", "stated", "claimed", "inferred"}
@@ -160,7 +160,9 @@ def end_date(value, valid_from: datetime | None) -> datetime | None:
     return end
 
 
-def candidates_from(raw, source: str, custom: frozenset[str] = frozenset()) -> ExtractionResult:
+def candidates_from(raw, source: str, custom: frozenset[str] = frozenset(), *, claims: bool = True) -> ExtractionResult:
+    """`claims`: downgrade completion claims (CLAIM_WORDS) to 'claimed'; off for a conversation, where
+    "the user said all tests pass" is a detail to remember, not an agent's self-report."""
     result = ExtractionResult(items=[], raw=raw if isinstance(raw, str) else "")
     data = parse_json(raw) if isinstance(raw, str) else raw
     if isinstance(data, dict) and isinstance(data.get("items"), list):
@@ -188,7 +190,7 @@ def candidates_from(raw, source: str, custom: frozenset[str] = frozenset()) -> E
             continue
         seen.add(key)
 
-        if CLAIM_WORDS.search(statement) and assertion != "observed":
+        if claims and CLAIM_WORDS.search(statement) and assertion != "observed":
             assertion = "claimed"
         confidence = str(entry.get("confidence", "medium"))
         if confidence not in CONFIDENCES:
@@ -321,3 +323,43 @@ async def extract_knowledge(llm: LLM, *, label: str, occurred_at: datetime, cont
                              max_tokens=8192)
     return knowledge_from(raw, content, categories)
 
+
+
+# ------------------------------------------------------------------ conversation mode
+# Details of a conversation (CONVERSATION_SYSTEM): the categories it may use and the memory kind each
+# is stored under. "event" and "plan" exist only here.
+DETAIL_KIND = {"fact": "semantic", "decision": "semantic", "preference": "preference", "rule": "procedural",
+               "event": "episodic", "plan": "prospective"}
+
+
+def details_from(raw, source: str) -> ExtractionResult:
+    """Detail candidates: a known category and a verbatim quote. No gate: progress, states of the
+    moment and one-off values are exactly what a conversation's memory is asked about later. Dates
+    are the episode's own (valid_from, valid_until unset), so a plan for next month is on record from
+    the day it was said and never expires by itself."""
+    data = parse_json(raw) if isinstance(raw, str) else raw
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        data = data["items"]
+    if not isinstance(data, list):
+        raise ValueError("details output is not a list")
+    kept, invalid = [], 0
+    for entry in data:
+        category = str(entry.get("category") or "").strip().lower() if isinstance(entry, dict) else ""
+        if category not in DETAIL_KIND:
+            invalid += 1
+            continue
+        kept.append({**entry, "category": category, "kind": DETAIL_KIND[category], "assertion": "stated",
+                     "valid_from": None, "valid_until": None, "thread_key": None, "scope": "project"})
+    result = candidates_from(kept, source, frozenset(DETAIL_KIND), claims=False)
+    result.raw = raw if isinstance(raw, str) else ""
+    result.dropped_invalid += invalid
+    return result
+
+
+async def extract_details(llm: LLM, *, label: str, occurred_at: datetime, content: str, project: str,
+                          context: str = "", instructions: str | None = None) -> ExtractionResult:
+    """Every concrete detail in `content`, for a project in conversation mode."""
+    raw = await llm.complete(CONVERSATION_SYSTEM, conversation_user(label, occurred_at.isoformat(), content, project, context,
+                                                                    instructions=instructions),
+                             max_tokens=16000)
+    return details_from(raw, content)

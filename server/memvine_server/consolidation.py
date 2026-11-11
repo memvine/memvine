@@ -417,6 +417,10 @@ def _as_bool(v) -> bool | None:
 
 
 async def _bar(run: _Run) -> None:
+    # The bar is the coding rule (keep little). A conversation's memory keeps every detail on purpose.
+    mode = await (await run.conn.execute("SELECT memory_mode FROM projects WHERE id = %s", (run.project_id,))).fetchone()
+    if mode and mode["memory_mode"] == "conversation":
+        return
     builtins = list(BUILTIN_CATEGORIES)
     rows = await (await run.conn.execute(
         f"""

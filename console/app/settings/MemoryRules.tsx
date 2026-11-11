@@ -1,11 +1,48 @@
 "use client";
 import { useActionState, useState } from "react";
 import { Plus, X } from "lucide-react";
-import { addCategory, removeCategory, saveMemoryInstructions, type MemoryRulesState } from "@/app/actions";
+import { addCategory, removeCategory, saveMemoryInstructions, saveMemoryMode, type MemoryRulesState } from "@/app/actions";
 import { Badge, button, cx, FormError, inputClass } from "@/components/ui";
-import { MAX_MEMORY_INSTRUCTIONS, MAX_PROJECT_CATEGORIES, type ProjectCategory } from "@/lib/types";
+import { MAX_MEMORY_INSTRUCTIONS, MAX_PROJECT_CATEGORIES, type MemoryMode, type ProjectCategory } from "@/lib/types";
 
 const PLACEHOLDER = "Also keep: on-call runbook steps.\nNever keep: customer names or ticket text from Zendesk.";
+
+const MODES: { value: MemoryMode; title: string; text: string }[] = [
+  { value: "coding", title: "Coding sessions", text: "Keeps little: decisions, rules, gotchas and a page per piece of work. Recall returns only what the task needs." },
+  { value: "conversation", title: "Conversations", text: "Keeps every detail a person says: facts, dates, numbers, plans, preferences. Recall returns the matching details with the original words." },
+];
+
+/** What the current project's memory is for: decides how much is kept and how much recall returns. */
+export function ModeForm({ value, canEdit }: { value: MemoryMode; canEdit: boolean }) {
+  const [mode, setMode] = useState<MemoryMode>(value);
+  const [state, run, pending] = useActionState<MemoryRulesState, FormData>(saveMemoryMode, {});
+  return (
+    <form action={run} className="space-y-2">
+      <fieldset disabled={!canEdit} className="space-y-2">
+        <legend className="mb-2 block text-[12.5px] font-medium text-text-2">What this memory is for</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {MODES.map((m) => (
+            <label key={m.value} className={cx("flex cursor-pointer gap-2.5 rounded-lg border px-3 py-2.5", mode === m.value ? "border-text-2" : "border-border")}>
+              <input type="radio" name="mode" value={m.value} checked={mode === m.value} onChange={() => setMode(m.value)} className="mt-1" />
+              <span>
+                <span className="block text-[13px] font-medium text-text">{m.title}</span>
+                <span className="mt-0.5 block text-[12.5px] text-text-2">{m.text}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="flex-1 text-[12px] text-text-3">Applies to what is sent from now on. Memory already made stays as it is.</p>
+        {canEdit && (
+          <button type="submit" disabled={pending || mode === value} className={button("primary")}>{pending ? "Saving…" : "Save"}</button>
+        )}
+      </div>
+      {state.error && <FormError>{state.error}</FormError>}
+      {state.saved && !pending && mode === value && <p className="text-[12.5px] text-good">Saved.</p>}
+    </form>
+  );
+}
 
 /** The current project's memory instructions: free text added to extraction, with a character counter. */
 export function InstructionsForm({ value, canEdit }: { value: string; canEdit: boolean }) {

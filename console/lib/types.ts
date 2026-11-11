@@ -4,6 +4,8 @@
 
 export type Role = "owner" | "admin" | "member" | "billing";
 
+export type MemoryMode = "coding" | "conversation";
+
 export interface Project {
   slug: string;
   name: string;
@@ -33,6 +35,8 @@ export interface Project {
   reviewCount?: number;
   /** What this project's memory should and should not keep, added to extraction (≤1500 chars); null for none. */
   memoryInstructions?: string | null;
+  /** What the memory is for: "coding" keeps little (durable knowledge and work pages), "conversation" keeps every detail. */
+  memoryMode?: MemoryMode;
   /** The project's own categories (at most five), besides the built-ins. */
   categories?: ProjectCategory[];
   /** Current memories consolidation flagged for review. */
@@ -617,7 +621,7 @@ export interface MemvineApi {
   listProjects(): Promise<Project[]>;
   /** Creates the project and its first API key; the clear key is returned once. */
   createProject(name: string, tags: string[], options?: { description?: string | null; sample?: boolean }): Promise<{ project: Project; secret: string }>;
-  updateProject(slug: string, patch: { name?: string; tags?: string[]; monthlyCreditCap?: number | null; retentionDays?: number | null; recallMinRelevance?: number | null; recallHalfLifeDays?: number | null; memoryInstructions?: string | null }): Promise<void>;
+  updateProject(slug: string, patch: { name?: string; tags?: string[]; monthlyCreditCap?: number | null; retentionDays?: number | null; recallMinRelevance?: number | null; recallHalfLifeDays?: number | null; memoryInstructions?: string | null; memoryMode?: MemoryMode }): Promise<void>;
   createCategory(project: string, category: { slug: string; name: string; description: string }): Promise<ProjectCategory>;
   updateCategory(project: string, slug: string, patch: { name?: string; description?: string }): Promise<void>;
   deleteCategory(project: string, slug: string): Promise<void>;

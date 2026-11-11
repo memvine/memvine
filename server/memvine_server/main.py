@@ -892,7 +892,7 @@ async def charge(conn, project_id, kind: str, chars: int) -> None:
 
 PROJECT_SELECT = """
     SELECT p.id, p.slug, p.name, p.created_at, p.tags, p.monthly_credit_cap, p.retention_days, p.processing_paused,
-           p.description, p.recall_min_relevance, p.recall_half_life_days, p.memory_instructions,
+           p.description, p.recall_min_relevance, p.recall_half_life_days, p.memory_instructions, p.memory_mode,
            (SELECT coalesce(jsonb_agg(jsonb_build_object('slug', c.slug, 'name', c.name, 'description', c.description,
                                                          'created_at', c.created_at) ORDER BY c.created_at, c.slug), '[]'::jsonb)
               FROM project_categories c WHERE c.project_id = p.id) AS categories,
@@ -952,9 +952,9 @@ async def create_project(body: ProjectCreate, request: Request, admin: Admin = D
             candidate = slug if attempt == 0 else f"{slug}-{secrets.token_hex(2)}"
             row = await (
                 await conn.execute(
-                    "INSERT INTO projects (slug, name, tags, org_id, description) VALUES (%s, %s, %s, %s, %s) "
+                    "INSERT INTO projects (slug, name, tags, org_id, description, memory_mode) VALUES (%s, %s, %s, %s, %s, %s) "
                     "ON CONFLICT (slug) DO NOTHING RETURNING id",
-                    (candidate, body.name, sorted(set(body.tags)), org_id, body.description),
+                    (candidate, body.name, sorted(set(body.tags)), org_id, body.description, body.memory_mode),
                 )
             ).fetchone()
             if row or body.slug:
@@ -981,7 +981,7 @@ async def projects(request: Request, admin: Admin = Depends(require_management))
 @app.patch("/v1/projects/{slug}", response_model=ProjectOut)
 async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: Admin = Depends(require_manager)):
     """Rename, retag, pause, describe, or change the cap, retention, recall relevance threshold,
-    recall recency half-life or memory instructions of a project. The slug never changes."""
+    recall recency half-life, memory instructions or memory mode of a project. The slug never changes."""
     async with request.app.state.pool.connection() as conn, conn.transaction():
         project = await _owned(conn, admin, slug)
         before = await (await conn.execute("SELECT memory_instructions FROM projects WHERE id = %s FOR UPDATE",
@@ -996,7 +996,8 @@ async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: 
                 description = CASE WHEN %s THEN %s ELSE description END,
                 recall_min_relevance = CASE WHEN %s THEN %s ELSE recall_min_relevance END,
                 recall_half_life_days = CASE WHEN %s THEN %s ELSE recall_half_life_days END,
-                memory_instructions = CASE WHEN %s THEN %s ELSE memory_instructions END
+                memory_instructions = CASE WHEN %s THEN %s ELSE memory_instructions END,
+                memory_mode = COALESCE(%s, memory_mode)
             WHERE id = %s
             """,
             (body.name, sorted(set(body.tags)) if body.tags is not None else None,
@@ -1005,7 +1006,7 @@ async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: 
              "description" in body.model_fields_set, (body.description or "").strip() or None,
              "recall_min_relevance" in body.model_fields_set, body.recall_min_relevance,
              "recall_half_life_days" in body.model_fields_set, body.recall_half_life_days,
-             "memory_instructions" in body.model_fields_set, instructions, project["id"]),
+             "memory_instructions" in body.model_fields_set, instructions, body.memory_mode, project["id"]),
         )
         if "memory_instructions" in body.model_fields_set and instructions != before["memory_instructions"]:
             # The activity feed says the rules changed and by whom; the text itself stays out of events.

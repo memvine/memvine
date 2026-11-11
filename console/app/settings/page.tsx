@@ -6,7 +6,7 @@ import {
   Badge, button, Card, CardBody, formatDate, Mono, PageHeader, Select, Table, TableEmpty, TBody, Td, Th, THead, timeAgo, Tr,
 } from "@/components/ui";
 import { currentProject, listAudit, listInvites, listMembers, listOrgKeys, listOrgs, listProjects, orgInfo } from "@/lib/api";
-import { CategoriesEditor, InstructionsForm } from "./MemoryRules";
+import { CategoriesEditor, InstructionsForm, ModeForm } from "./MemoryRules";
 import { InviteForm, PasswordForm } from "./PeopleForms";
 import { SecretForm } from "./SecretForm";
 
@@ -85,6 +85,7 @@ export default async function SettingsPage() {
             <Card>
               <CardBody className="space-y-6">
                 {/* key: another project resets the field */}
+                <ModeForm key={`mode-${project.slug}-${project.memoryMode ?? "coding"}`} value={project.memoryMode ?? "coding"} canEdit={manager} />
                 <InstructionsForm key={project.slug} value={project.memoryInstructions ?? ""} canEdit={manager} />
                 <CategoriesEditor categories={project.categories ?? []} canEdit={manager} />
               </CardBody>

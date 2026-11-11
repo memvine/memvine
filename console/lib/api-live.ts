@@ -8,6 +8,7 @@ import { forwarded } from "./forwarded";
 import { buildGraph, relatedFromDetail } from "./graph";
 import type {
   ConsolidationStats,
+  MemoryMode,
   ProjectCategory,
   AddResult, ApiKey, Audience, EdgeDirection, EventPage, MemoryEventItem, EdgeKind, GraphEdge, GraphFile, GraphNode, MemoryGraph, MemoryRelated, RelatedEdge, RelatedRef, RelatedThread, AuditEvent, Invite, Role, Episode, Identity, OrgInfo, OrgKey, Profile, OrgSummary, SessionSummary, EpisodeSummary, Member, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project,
   RecallResult, RequestLog, SampleResult, SynthesisHealth, SynthesisIssue, ThreadDetail, ThreadSummary, UsageDay,
@@ -158,7 +159,7 @@ interface ServerProject {
   key_count: number; last_activity_at: string | null; monthly_credit_cap: string | null; retention_days: number | null;
   month_credits: string; recall_min_relevance?: number | null; recall_half_life_days?: number | null; sample_source_count?: number;
   description?: string | null; unused_count?: number; unused_days?: number; review_count?: number;
-  memory_instructions?: string | null; categories?: ServerCategory[];
+  memory_instructions?: string | null; memory_mode?: MemoryMode; categories?: ServerCategory[];
   flagged_count?: number; consolidated_at?: string | null; last_consolidation?: ConsolidationStats | null;
 }
 
@@ -178,6 +179,7 @@ const toProject = (p: ServerProject): Project => ({
   unusedDays: Number(p.unused_days ?? 60),
   reviewCount: Number(p.review_count ?? 0),
   memoryInstructions: p.memory_instructions ?? null,
+  memoryMode: p.memory_mode ?? "coding",
   categories: (p.categories ?? []).map(toCategory),
   flaggedCount: Number(p.flagged_count ?? 0),
   consolidatedAt: p.consolidated_at ?? null,
@@ -259,6 +261,7 @@ export const liveApi: MemvineApi = {
     if (patch.recallMinRelevance !== undefined) body.recall_min_relevance = patch.recallMinRelevance;
     if (patch.recallHalfLifeDays !== undefined) body.recall_half_life_days = patch.recallHalfLifeDays;
     if (patch.memoryInstructions !== undefined) body.memory_instructions = patch.memoryInstructions;
+    if (patch.memoryMode !== undefined) body.memory_mode = patch.memoryMode;
     await call(`/v1/projects/${slug}`, { method: "PATCH", body });
   },
   async createCategory(project, category) {

@@ -43,7 +43,13 @@ Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local
 
 ## Decisions to keep
 
-- **Too much memory is worse than too little.** A memory is kept only if it passes three tests:
+- **Two modes, chosen per project** (`projects.memory_mode`). `coding` (the default) keeps little, as
+  the next decisions say. `conversation` keeps every concrete detail of a person's long conversation
+  with an assistant, has no thread pages, and recalls wide with source excerpts
+  (`CONVERSATION_SYSTEM`, `extract_details`, the `detail` path in `recall.py`). BEAM measures
+  conversation mode; the memory check measures coding mode. A change must not move one mode's
+  behaviour into the other.
+- **In coding mode, too much memory is worse than too little.** A memory is kept only if it passes three tests:
   an agent on a *different* task would act differently because of it; the code, config, README,
   ticket or git history can't tell them (except traps where the code misleads); it is still true
   after the task. Work in flight, bug traces, test results, PR contents, release scope, "as of"
@@ -52,7 +58,7 @@ Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local
 - **One memory model.** Thread pages are for *work* (release, task, PR, ticket, multi-step effort),
   never for a single fact; durable knowledge (decision, rule, gotcha, fact, preference) is memory.
   There is no "v1/v2" anywhere.
-- **Recall carries what the question needs and nothing twice**, abstains on unrelated questions,
+- **In coding mode, recall carries what the question needs and nothing twice**, abstains on unrelated questions,
   and keeps standing rules in their own always-on section.
 - **Unreviewed memories are served.** Review (Keep / Wrong / Forget) is feedback, not a gate;
   forgotten memories become private drop cases and are never re-learned.

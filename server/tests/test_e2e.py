@@ -109,6 +109,9 @@ async def test_ingest_synthesize_recall(client):
     # Point-in-time question.
     r = (await client.post("/v1/recall", json={"query": "launch date", "as_of": "2026-09-25T00:00:00Z"})).json()
     assert [i["memory"]["statement"][:20] for i in r["items"]] == ["Launch date is 29 Oc"]
+    # At that moment it was the current value: the later replacement does not show on it.
+    then = r["items"][0]["memory"]
+    assert then["status"] == "active" and then["valid_to"] is None and "superseded" not in r["briefing"]
 
     # Budget and exclusion are honoured; nothing relevant means abstain.
     r = (await client.post("/v1/recall", json={"query": "When is the launch?", "exclude": [new["id"]]})).json()

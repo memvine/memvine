@@ -50,7 +50,8 @@ BEAM_FAKE_MODEL=1 .venv/bin/python run.py --backend rag --split 100k --conversat
 
 Consecutive turns of one session go together as one episode, up to `BEAM_EPISODE_CHARS`
 (default 6,000) characters, rendered as `## Author · time` blocks, timestamped at the first turn.
-One project per conversation, as in past.dev's run. Recall asks with `as_of` set to the question's
+One project per conversation, as in past.dev's run, created in Memvine's conversation mode
+(`BEAM_MEMORY_MODE`, default `conversation`; `coding` measures the keep-little mode on the same data). Recall asks with `as_of` set to the question's
 moment and an 8,000-token budget, and the answer model reads the recall response (briefing plus
 items with their dates, status and previous value) as JSON.
 

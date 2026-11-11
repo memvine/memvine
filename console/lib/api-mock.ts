@@ -213,6 +213,7 @@ export const mockApi: MemvineApi = {
     if (patch.retentionDays !== undefined) p.retentionDays = patch.retentionDays;
     if (patch.recallMinRelevance !== undefined) p.recallMinRelevance = patch.recallMinRelevance;
     if (patch.recallHalfLifeDays !== undefined) p.recallHalfLifeDays = patch.recallHalfLifeDays;
+    if (patch.memoryMode !== undefined) p.memoryMode = patch.memoryMode;
     if (patch.memoryInstructions !== undefined) {
       const next = patch.memoryInstructions?.trim() || null;
       if (next !== (p.memoryInstructions ?? null)) {

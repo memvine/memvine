@@ -254,6 +254,29 @@ it is restated, with each restatement's quote kept as evidence. Progress is refu
 and the State and Next steps items it leaves on a thread page are dropped when the page is next
 rewritten, if their newest source is more than 30 days older than the one being written.
 
+### Two modes: coding and conversation
+
+Everything above describes a **coding** project, the default: agent sessions on a codebase, where
+memory is read on every task and too much of it is worse than too little. A project can instead be
+in **conversation** mode (console: Settings → Memory rules; API: `memory_mode` on
+`POST /v1/projects` or `PATCH /v1/projects/{slug}`), for one person talking with an assistant over
+time. There the question is usually about a small detail ("when does my first sprint end?"), so the
+rule turns round:
+
+| | coding | conversation |
+|---|---|---|
+| What is kept | Durable knowledge that passes the three tests; usually nothing or one item per excerpt | Every concrete detail: facts, events, plans, decisions, preferences, instructions, with exact values |
+| Thread pages | One per piece of work | None |
+| Progress and states of the moment | Refused | Kept (`event`, `plan`, `fact`) |
+| Updates and contradictions | Reconciled | Judged only between near restatements, against memory as it was before the excerpt; one detail replaces another only when it says something changed ("moved", "now", "switched") |
+| Recall | What the task needs: the fast model picks, and abstains when nothing applies | Wide: the matching details in a quarter of the budget (`MEMVINE_RECALL_DETAIL_FACT_SHARE`), then source excerpts: the ones those details came from and the closest others |
+| Recency | Facts and gotchas fade | Nothing fades |
+| Consolidation's bar check | Flags what fails the three tests | Skipped |
+
+The mode applies to what is sent from now on; memory already made stays as it is. The BEAM
+benchmark (`benchmark/beam`) runs in conversation mode; the memory check (`benchmark/memory`) is
+the gate for coding mode.
+
 ### Per-project memory rules
 
 A project's owners and admins can adjust what its memory keeps (console: Settings → Memory rules;

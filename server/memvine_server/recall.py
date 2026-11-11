@@ -9,6 +9,11 @@ with ids so it can cite or fetch evidence.
 Nothing is served unless something is relevant enough (see recall() for what counts as a hit):
 thread pages, standing instructions and pending messages are context around a hit, never a hit by
 themselves, so an unrelated question gets an abstention instead of the same few memories.
+
+A project in conversation mode (projects.memory_mode) is recalled wide instead: its memory holds every
+detail of a long conversation and the question is usually about one of them, so recall returns as
+many matching details as the budget holds, with the source excerpts beside them, and leaves the
+choosing to the reader. No model pick, no margin, no relevance threshold, no recency.
 """
 from __future__ import annotations
 
@@ -228,11 +233,12 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
         time_params = [*time_params, audiences]
 
     broad = len(req.query) <= BROAD_MAX_CHARS and bool(BROAD.search(req.query))
-    pool = BROAD_CANDIDATES if broad else CANDIDATES
     embedding = (await embedder.embed([req.query]))[0]
     project_visible = audiences is None or "project" in audiences
     project = await (await conn.execute(
-        "SELECT recall_min_relevance, recall_half_life_days FROM projects WHERE id = %s", (project_id,))).fetchone()
+        "SELECT recall_min_relevance, recall_half_life_days, memory_mode FROM projects WHERE id = %s", (project_id,))).fetchone()
+    detail = bool(project) and project["memory_mode"] == "conversation"
+    pool = BROAD_CANDIDATES if broad or detail else CANDIDATES
     min_relevance = min_relevance_for(project, embedder)
     half_life = 0.0 if include_history else half_life_for(project)
     threads = []
@@ -280,6 +286,14 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
                 rows[r["id"]]["similarity"] = r["similarity"]
             scores[r["id"]] = scores.get(r["id"], 0.0) + 1.0 / (RRF_K + position + 1)
 
+    if req.as_of:
+        # The view at a past moment: what was replaced only after it was still the current value then,
+        # so it is neither labelled superseded nor given the end date it got later.
+        moment = req.as_of if req.as_of.tzinfo else req.as_of.replace(tzinfo=UTC)
+        for r in rows.values():
+            if r["status"] == "superseded" and r.get("valid_to") and r["valid_to"] > moment:
+                r["status"], r["valid_to"], r["superseded_by"] = "active", None, None
+
     def relevance(mid: UUID) -> float:
         return float(rows[mid].get("similarity") or 0) + (KEYWORD_BONUS if mid in keyword_hit else 0.0)
 
@@ -321,7 +335,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
                               abstain_reason=reason, min_relevance=min_relevance, top_relevance=top_relevance)
 
     page_or_message = any(thread_is_hit(t) for t in threads) or any(shared_terms(terms, m.content) for m in pending)
-    if not page_or_message and not any(relevance(mid) >= min_relevance for _, mid in ranked_ids):
+    # Conversation mode decides at the end: it abstains only when there is nothing to return at all.
+    if not detail and not page_or_message and not any(relevance(mid) >= min_relevance for _, mid in ranked_ids):
         if candidates:
             return await abstain("below_threshold")
         return await abstain("no_candidates" if await has_memory(conn, project_id, audiences) else "empty_store")
@@ -332,7 +347,7 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     # A page found only by similarity is a candidate beside the memories: the model reads its title and
     # summary, so a question about a piece of work gets its page even when no memory is needed.
     similar_pages = [t for t in threads if not thread_is_hit(t)]
-    if llm is not None and settings.recall_gate and (ranked_ids or similar_pages) and not broad and not req.profiles:
+    if llm is not None and settings.recall_gate and (ranked_ids or similar_pages) and not broad and not detail and not req.profiles:
         ids = [mid for _, mid in ranked_ids[:GATE_CANDIDATES]]
         picked = await gate(llm, req.query, [*ids, *(t["id"] for t in similar_pages)],
                             [*(rows[mid]["statement"] for mid in ids), *(page_line(t) for t in similar_pages)])
@@ -352,7 +367,7 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
         # A standing rule the model picked is the answer: it is served in its own section.
         if not ranked_ids and not threads and not page_or_message and not picked & standing_ids:
             return await abstain("not_needed")
-    elif not broad:
+    elif not broad and not detail:
         first = max(ranked_ids, key=lambda t: (base_score[t[1]], rows[t[1]]["recorded_at"]))[1] if ranked_ids else None
         ranked_ids = trim_to_margin(ranked_ids, rows, relevance, first=first)
         similar = [thread_similarity(t) for t in threads if not thread_is_hit(t)]
@@ -475,7 +490,7 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
                 shown_threads.append(thread)
                 served_knowledge += served
                 break
-    fact_cap = int(budget * FACT_BUDGET_SHARE)
+    fact_cap = int(budget * (settings.recall_detail_fact_share if detail else FACT_BUDGET_SHARE))
     packed: list[tuple[float, dict, str | None]] = []
     for score, mid in ranked_ids:
         r = rows[mid]
@@ -515,9 +530,12 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     evidence = {r["id"]: said_evidence.get(r["id"], []) for _, r in chosen}
     sources = [(e.episode_id, e.quote) for _, r in chosen for e in evidence[r["id"]]]
     excerpts = []
-    if req.include and req.include.passages:
+    if detail or (req.include and req.include.passages):
         excerpts = await relevant_passages(conn, project_id, req, embedding, audiences, sources, budget - spent, best=best,
-                                           min_relevance=min_relevance, broad=broad, include_history=include_history)
+                                           min_relevance=min_relevance, broad=broad, include_history=include_history,
+                                           wide=detail)
+    if detail and not chosen and not excerpts and not thread_lines and not pending:
+        return await abstain("no_candidates" if await has_memory(conn, project_id, audiences) else "empty_store")
     excerpt_lines = []
     if excerpts:
         excerpt_lines.append("--- source excerpts (the original words) ---")
@@ -576,9 +594,12 @@ def min_relevance_for(project, embedder: Embedder) -> float:
 
 
 def half_life_for(project) -> float:
-    """The project's recency half-life in days, else the server's; 0 means no recency weighting."""
+    """The project's recency half-life in days, else the server's; 0 means no recency weighting.
+    A conversation's details do not fade: without a half-life of its own, such a project has none."""
     if project and project.get("recall_half_life_days") is not None:
         return float(project["recall_half_life_days"])
+    if project and project.get("memory_mode") == "conversation":
+        return 0.0
     return float(settings.recall_half_life_days or 0)
 
 
@@ -872,7 +893,7 @@ async def standing_instructions(conn, project_id: UUID, req: RecallRequest, audi
 
 async def relevant_passages(conn, project_id: UUID, req: RecallRequest, embedding: list[float], audiences: list[str] | None,
                             sources: list[tuple[str, str]], budget: int, *, best: float | None, min_relevance: float,
-                            broad: bool, include_history: bool) -> list[dict]:
+                            broad: bool, include_history: bool, wide: bool = False) -> list[dict]:
     """Source excerpts within the budget the facts left, nothing after `as_of`, returned in
     conversation order so a reader sees events in sequence.
 
@@ -881,7 +902,11 @@ async def relevant_passages(conn, project_id: UUID, req: RecallRequest, embeddin
     vector and any-term keyword search fused by reciprocal rank: for a broad question as many as fit,
     otherwise at most OTHER_PASSAGES within RELEVANCE_MARGIN of the best item's relevance. An other
     passage is never the source of a standing rule (said already) or, unless the question asks for
-    history, of a superseded value."""
+    history, of a superseded value.
+
+    `wide` (conversation mode): the excerpts are part of the answer, not only evidence. Being the
+    source of a chosen fact is a third ranked list beside vector and keyword, and as many of the best
+    as fit are returned."""
     if budget < 150:
         return []
     clauses, params = ["project_id = %s"], [project_id]
@@ -935,8 +960,11 @@ async def relevant_passages(conn, project_id: UUID, req: RecallRequest, embeddin
             scores[key] = scores.get(key, 0.0) + 1.0 / (RRF_K + position + 1)
             relevance[key] = max(relevance.get(key, 0.0), float(p["similarity"] or 0) + (KEYWORD_BONUS if ranked is by_words else 0.0))
 
-    others = [key for key, _ in sorted(scores.items(), key=lambda kv: -kv[1]) if key not in evidence_keys]
-    if others:
+    if wide:
+        for position, key in enumerate(evidence_keys):
+            scores[key] = scores.get(key, 0.0) + 1.0 / (RRF_K + position + 1)
+    others = [key for key, _ in sorted(scores.items(), key=lambda kv: -kv[1]) if wide or key not in evidence_keys]
+    if others and not wide:
         # Quotes behind what an other passage must not repeat: standing rules, and replaced values.
         said = await (await conn.execute(
             "SELECT v.episode_id, v.quote FROM evidence v JOIN memory_items m ON m.id = v.memory_id "
@@ -947,12 +975,12 @@ async def relevant_passages(conn, project_id: UUID, req: RecallRequest, embeddin
             content = normalize(found[key]["content"])
             return any(r["episode_id"] == key[0] and _quote(r["quote"]) and _quote(r["quote"]) in content for r in said)
         others = [key for key in others if not repeats(key)]
-    if not broad:
+    if not broad and not wide:
         floor = max(min_relevance, (best if best is not None else min_relevance) - RELEVANCE_MARGIN)
         others = [key for key in others if relevance[key] >= floor][:OTHER_PASSAGES]
 
     picked, spent = [], 10
-    for key in [*evidence_keys, *others]:
+    for key in (others if wide else [*evidence_keys, *others]):
         cost = tokens_of(found[key]["content"]) + 4
         if spent + cost > budget:
             continue

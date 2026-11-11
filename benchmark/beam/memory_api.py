@@ -73,6 +73,10 @@ class Handle:
 # question loses who decided what) while each call stays small enough to extract carefully.
 EPISODE_CHARS = int(os.environ.get("BEAM_EPISODE_CHARS", "6000"))
 ITEMS_PER_PUSH = 100
+# BEAM is a long conversation with one person, so its projects use Memvine's conversation mode (every
+# concrete detail is kept, recall returns details with source excerpts). "coding" measures the
+# keep-little mode on the same data.
+MEMORY_MODE = os.environ.get("BEAM_MEMORY_MODE", "conversation")
 POLL_SECONDS = 3
 
 
@@ -122,12 +126,13 @@ class MemvineBackend:
         return f"BEAM {self.tag} {conversation_id}"
 
     def config(self) -> dict:
-        return {"episodeChars": EPISODE_CHARS, "recallBudgetTokens": RECALL_MAX_TOKENS}
+        return {"episodeChars": EPISODE_CHARS, "recallBudgetTokens": RECALL_MAX_TOKENS, "memoryMode": MEMORY_MODE}
 
     async def open(self, conversation: Conversation) -> Handle:
         name = self.project_name(conversation.id)
         slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40]
-        project = await _call(self._management, "POST", "/v1/projects", {"name": name, "slug": slug}, accept=(201, 409))
+        project = await _call(self._management, "POST", "/v1/projects", {"name": name, "slug": slug, "memory_mode": MEMORY_MODE},
+                              accept=(201, 409))
         slug = project.get("slug", slug)
         key = await _call(self._management, "POST", f"/v1/projects/{slug}/keys", {"name": "beam"})
         self._projects[slug] = httpx.AsyncClient(

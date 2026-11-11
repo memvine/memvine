@@ -578,6 +578,19 @@ export async function saveMemoryInstructions(_prev: MemoryRulesState, formData: 
   return { saved: true };
 }
 
+export async function saveMemoryMode(_prev: MemoryRulesState, formData: FormData): Promise<MemoryRulesState> {
+  const { slug } = await api.currentProject();
+  const mode = String(formData.get("mode") ?? "");
+  if (mode !== "coding" && mode !== "conversation") return { error: "Choose one of the two." };
+  try {
+    await api.updateProject(slug, { memoryMode: mode });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not save." };
+  }
+  revalidatePath("/settings");
+  return { saved: true };
+}
+
 export async function addCategory(_prev: MemoryRulesState, formData: FormData): Promise<MemoryRulesState> {
   const project = (await api.currentProject()).slug;
   const name = String(formData.get("name") ?? "").trim();

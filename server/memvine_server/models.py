@@ -18,6 +18,8 @@ Status = Literal["active", "superseded", "retired", "stale"]
 Assertion = Literal["observed", "stated", "claimed", "inferred"]
 Category = Literal["decision", "rule", "gotcha", "fact", "preference"]  # the built-ins
 BUILTIN_CATEGORIES = ("decision", "rule", "gotcha", "fact", "preference")
+# What a project's memory is for (migration 0011): "coding" keeps little, "conversation" keeps every detail.
+MemoryMode = Literal["coding", "conversation"]
 # A project's own category (project_categories, migration 0008); a memory's category is a built-in or one of these.
 CATEGORY_SLUG = r"^[a-z0-9-]{2,24}$"
 CategorySlug = Annotated[str, Field(pattern=CATEGORY_SLUG)]
@@ -457,6 +459,7 @@ class ProjectCreate(BaseModel):
     tags: list[Annotated[str, Field(pattern=TAG)]] = Field(default_factory=list, max_length=20)
     org: str | None = Field(default=None, description="operator only: the organization slug")
     description: str | None = Field(default=None, max_length=2000)
+    memory_mode: MemoryMode = "coding"
     # Start with the sample memory (POST /v1/sample) so recall can be tried before any agent is connected.
     sample: bool = False
 
@@ -485,6 +488,8 @@ class ProjectPatch(BaseModel):
     # What this project's memory should and should not keep, added to the extraction prompt
     # (prompts.instructions_block). It narrows or points the rules; it cannot switch them off. Send null to clear.
     memory_instructions: Redacted | None = Field(default=None, max_length=MAX_MEMORY_INSTRUCTIONS)
+    # "coding" or "conversation". It applies to what is sent from now on; memory already made stays as it is.
+    memory_mode: MemoryMode | None = None
 
 
 class ProjectCategoryOut(BaseModel):
@@ -532,6 +537,7 @@ class ProjectOut(BaseModel):
     last_consolidation: dict | None = None
     flagged_count: int = 0
     memory_instructions: str | None = None
+    memory_mode: MemoryMode = "coding"
     categories: list[ProjectCategoryOut] = []  # the project's own categories, besides the built-ins
 
 

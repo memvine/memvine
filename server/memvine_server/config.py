@@ -100,6 +100,11 @@ class Settings(BaseSettings):
     # needs from the closest candidates (recall.py: gate). Past the timeout, or with this off, recall
     # falls back to the similarity margin. The plugins' prompt hook gives recall 8 seconds in all.
     recall_gate: bool = True
+    # Conversation mode (recall.py): the share of a recall's budget that kept details may take; the
+    # source excerpts fill the rest. On a first BEAM conversation (20 questions, Claude Sonnet answering
+    # and judging) a half scored 0.77, a quarter 0.85 and none 0.86: the original words answer better
+    # than many derived lines, which mostly earn their place by saying what changed and what conflicts.
+    recall_detail_fact_share: float = 0.25
     recall_gate_timeout: float = 3.0
     # A memory this many days old that no briefing served in this many days is listed for review
     # (GET /v1/memories?unused=true, the project's unused_count). Never hidden or deleted for it.
