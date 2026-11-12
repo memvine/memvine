@@ -38,7 +38,7 @@ cd server && .venv/bin/python ../benchmark/memory/check.py            # ~5 min, 
 cd server && .venv/bin/python ../benchmark/memory/check.py --agent-e2e  # + real Claude Code with/without memory (~30 min)
 ```
 Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local machine) or
-`anthropic` with `ANTHROPIC_API_KEY`. Last results: 23/23; agent test 9/9 right with memory,
+`anthropic` with `ANTHROPIC_API_KEY`. Last results: 25/25; agent test 9/9 right with memory,
 0/9 without. Don't ship a change to extraction, reconciliation or recall without running it.
 
 ## Decisions to keep
@@ -87,4 +87,4 @@ Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next
   lawyer has not reviewed.
 - Pending, the operator's: a Slack webhook for alerts, an outside uptime check, a monthly limit on
   the Anthropic key, re-pointing each laptop's plugin (#2).
-- Later: password reset by email, billing, SSO; the open-core split is undecided.
+- Later: password reset by email, SSO. No billing or paid plans: Memvine is an open-source project.

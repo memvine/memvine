@@ -38,4 +38,4 @@ seeded with two demo projects (`lib/mock-data.ts`); the sidebar shows a
 ## Not built yet
 
 Sign-in and members, audiences and identities, entity pages, live sessions,
-webhooks, billing.
+webhooks.

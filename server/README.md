@@ -98,7 +98,7 @@ the versions a client has now marks memories whose files changed (or were delete
 "MAY BE OUTDATED". Restating the fact in a later conversation, or confirming it, re-anchors it.
 The Claude Code plugin does all of this itself.
 
-Billing: 1 credit per 1,000 characters ingested (a re-send of identical text is free), 0.1 per
+Usage is metered in credits, which are counted and can be capped but are never charged: 1 credit per 1,000 characters ingested (a re-send of identical text is free), 0.1 per
 recall made with a project key. Sample data costs nothing. A project at its monthly cap gets `429 project-cap-reached` on
 ingest and session events; recall is never refused. Retention drops old raw text and keeps
 memories.

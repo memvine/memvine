@@ -9,6 +9,27 @@ When the code a memory depends on changes, the memory is marked stale instead of
 
 ![The sample project's memory graph: threads as hubs, facts around them, files at the rim; a superseded launch date, two contradicting rules, and a gotcha whose anchor to src/queue.py is broken because the file changed.](docs/memory-graph.svg)
 
+## Does it work
+
+Two checks, both in this repository and both runnable:
+
+- **Team coding memory (keep little).** The memory check (`benchmark/memory/check.py`) runs real
+  model calls over cases of what must be kept, dropped and recalled: 25 of 25. In its agent test,
+  Claude Code answered 9 of 9 questions right with Memvine's memory and 0 of 9 without.
+- **Conversation memory (keep every detail).** On the [BEAM](benchmark/beam/README.md) long-term
+  memory benchmark, a local reading against plain search over the same conversations:
+
+  | Conversations | Questions | Memvine | Plain search |
+  | --- | ---: | ---: | ---: |
+  | 100K tokens, three | 60 | 0.894 | 0.869 |
+  | 500K tokens, two | 40 | 0.761 | 0.790 |
+
+  Memvine is ahead on summaries (0.88 against 0.57 at 100K) and level elsewhere; at 500K it is not
+  ahead. These were answered and graded by Claude Sonnet on a few conversations, so they compare
+  the two with each other and are **not comparable with published BEAM scores**. A run scored the
+  published way is still to come. Memvine also costs far more to ingest: 25 to 60 minutes of model
+  calls per 100K conversation, where plain search needs only embeddings.
+
 ## Ten lines
 
 With a project key and the sample data loaded (`POST /v1/sample`, or **Load sample data** in the
@@ -59,8 +80,11 @@ nothing is relevant enough, and returns standing rules separately on every call.
 | Your own agent | The [TypeScript](sdk/typescript) or [Python](sdk/python) SDK, or the HTTP API in [`server/`](server). |
 | Any MCP client | `/mcp` on the server: `memory_recall`, `memory_remember`, `memory_session_brief`, `memory_forget`. |
 
-Pricing: 1 credit per 1,000 characters ingested (re-sending identical text is free), 0.1 credit
-per recall. Sample data is free.
+Usage is counted in credits so a project can be capped; nothing is charged. 1 credit per 1,000
+characters ingested (re-sending identical text costs none), 0.1 per recall.
+
+To run your own server: [`deploy/README.md`](deploy/README.md) (Docker Compose: Postgres, the API
+and the console).
 
 ## What is in this repository
 
@@ -69,7 +93,7 @@ The hosted service lives on the `platform` branch, beside the CLI:
 | Directory | What it is |
 | --- | --- |
 | `server/` | The memory API and the tending worker (Python, FastAPI, Postgres + pgvector). Ingest, extraction with verified quotes, reconciliation, thread pages and knowledge, live sessions, code-change staleness, recall. |
-| `console/` | The customer web app (Next.js): keys, threads, knowledge, memories, sources, sample data, recall playground, requests, usage. |
+| `console/` | The web console (Next.js): keys, threads, knowledge, memories, sources, sample data, recall playground, requests, usage. |
 | `sdk/typescript/`, `sdk/python/` | Client libraries for the API. |
 | `docs/how-memory-works.md` | What a memory is, the edges, tending and forgetting. |
 | `plugins/claude-code/` | The Claude Code plugin: every session starts briefed, and what is said becomes memory. |

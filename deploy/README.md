@@ -1,8 +1,12 @@
-# Deploying Memvine for a private beta
+# Running your own Memvine server
 
 One host, three containers: Postgres with pgvector, the API (with its synthesis worker), and the
-console. Each beta customer is an **organization**: it gets one management key, signs in to the
-console with it, and sees only its own projects.
+console. You need Docker and an Anthropic API key (extraction runs on it). People are grouped into
+**organizations**: each gets a management key, signs in to the console with it, and sees only its
+own projects. For one person or one team, one organization is enough.
+
+Other ways to run it: `deploy/railway/` (the hosted setup) and `deploy/laptop/` (a team server on
+one Mac, using a Claude subscription instead of an API key).
 
 ## 1. Run the stack
 
@@ -25,20 +29,20 @@ the console sets its session cookie `Secure` in production, so it only works ove
 
 The embedding model (BGE-small, ~130 MB) downloads on first use into the `fastembed` volume.
 
-## 2. Onboard a beta customer
+## 2. Create an organization and connect an agent
 
 Create the organization with the operator key (keep that key to yourself):
 
 ```sh
 curl -s -X POST https://api.example.com/v1/orgs \
   -H "Authorization: Bearer $MEMVINE_OPERATOR_KEY" -H 'content-type: application/json' \
-  -d '{"name": "Acme Inc"}'
-# → {"slug": "acme-inc", "key": "mv_mk_..."}   the key is shown once
+  -d '{"name": "Northwind"}'
+# → {"slug": "northwind", "key": "mv_mk_..."}   the key is shown once
 ```
 
-or, on the host: `docker compose exec api memvine-server create-org "Acme Inc"`.
+or, on the host: `docker compose exec api memvine-server create-org "Northwind"`.
 
-Send the customer the console address and their `mv_mk_` key. They:
+With the console address and that `mv_mk_` key:
 
 1. Sign in to the console, open **Projects**, create a project per repository or app, and copy the
    project key and the ready-made connect command it shows.
@@ -46,19 +50,22 @@ Send the customer the console address and their `mv_mk_` key. They:
    ```
    /plugin marketplace add memvine/memvine
    /plugin install memvine@memvine
-   /memvine:connect mv_sk_... their@email.com https://api.example.com --here
+   /memvine:connect mv_sk_... you@example.com https://api.example.com --here
    ```
    (Until the plugin is on the default branch, use a local checkout path for the marketplace.)
 3. Or any MCP client: `claude mcp add --transport http memvine https://api.example.com/mcp --header "Authorization: Bearer mv_sk_..."`.
 
-They can add or revoke organization keys through the API (`/v1/org/keys`); the console's
-Settings page will grow a screen for it.
+Organization keys are added and revoked through the API (`/v1/org/keys`).
+
+A project is in `coding` mode unless you choose otherwise: it keeps few, durable memories. Choose
+`conversation` for a long conversation with an assistant, where every concrete detail is kept
+(`memory_mode` on the project; `docs/how-memory-works.md`).
 
 ## 3. Operate
 
 - **Usage and caps.** Projects shows each project's credits this month; set a monthly cap there to
-  stop ingestion at a limit (recall keeps working). Credits: 1 per 1,000 characters ingested, 0.1
-  per recall.
+  stop ingestion at a limit (recall keeps working). Credits only count usage, nothing is charged:
+  1 per 1,000 characters ingested, 0.1 per recall.
 - **Retention.** Set per project; raw transcripts older than the window are dropped, memories stay.
 - **Model spend.** Extraction runs on `ANTHROPIC_API_KEY`. Roughly one extraction call per ~6,000
   characters of conversation, plus one reconciliation call per extracted fact and a page rebuild
@@ -71,8 +78,7 @@ Settings page will grow a screen for it.
   apply at startup, each in a transaction (`docker compose exec api memvine-server migrations`
   lists them; see "Schema and migrations" in `server/README.md`).
 
-## Not in the beta yet
+## Not built
 
-Payment collection (credits are metered and capped, not charged), per-user accounts inside an
-organization (one shared organization key), SSO and data residency. The audit log (Settings, or `GET /v1/audit`)
+Password reset by email and SSO. The audit log (Settings, or `GET /v1/audit`)
 records every administrative change and memory edit per organization.

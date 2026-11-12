@@ -1,25 +1,29 @@
 # Roadmap
 
-The product hub (vision, decisions, competitor comparison, open questions) lives in Notion:
-**Memvine — Product Hub** (private to the founders). Work items are GitHub issues in this repo,
-labelled `now` / `next` / `later` / `parked`, with `P0`–`P2` and an `area:` label.
+Memvine is an open-source project. The aim is memory that demonstrably works, for a long
+conversation with an assistant (keep every detail) and for a team's coding agents (keep little),
+with results anyone can reproduce. There are no paid plans and none are planned. Work items are
+GitHub issues in this repo, labelled `now` / `next` / `later` / `parked`, with `P0`–`P2` and an
+`area:` label.
 
 ## Now (this week)
 - Re-point both laptops' plugins to Railway (#2)
 - Review real capture after a week of use (#6)
-- Prove recall helps a coding agent: the four-way test on trap tasks, then memories shown to five teams
+- A BEAM result scored the published way, beside plain search and full context, with cost and
+  limits stated (#17; the local reading so far is in `benchmark/beam/README.md`)
+- Self-hosting that works from a clean checkout (`deploy/README.md`)
 - Operator steps left for production: a Slack address for alerts, an outside uptime check, a monthly
   limit on the Anthropic key, a lawyer's review of `/terms` and `/privacy`
 
 ## Next (this month)
-- Cursor plugin (#8) · self-serve sign-up with free credits and a cost preview (#9)
+- Cursor plugin (#8) · self-serve sign-up (#9)
 - MCP with OAuth for Claude.ai and ChatGPT (#10) · publish the SDKs (#11)
 - Files, PDFs and URLs as sources (#12) · webhooks on memory events (#13)
 - Ask the team: judges for agent questions (#20, #21, #22; plan in `docs/plans/judges-plan.md`)
 
 ## Later
-Principles per person for judges (#23), GitHub connector (#15), agent framework integrations (#16), published benchmarks (#17),
-billing (#18), SSO/MFA, SOC 2 and VPC self-hosting.
+Principles per person for judges (#23), GitHub connector (#15), agent framework integrations (#16),
+password reset by email, SSO/MFA.
 
 ## Parked
 Context graph (#19; plans in `docs/plans/`) — until plain-text memory is proven with real teams.
@@ -35,4 +39,6 @@ plugin 0.7.2 and Codex plugin 0.6.1; the local memory check (agent test: 9/9 rig
 Addresses `api.`, `app.` and `www.memvine.dev`; nightly backups, each one restore-tested; recall
 that lets the fast model pick what the task needs; production readiness for invited teams: health
 checks on `api` and `console`, pinned server dependencies, HSTS on the API, terms and privacy drafts,
-and a runbook (`deploy/railway/README.md` section 9).
+and a runbook (`deploy/railway/README.md` section 9). Conversation mode (a project keeps every
+concrete detail and recalls wide), with reranked recall and digests of the conversation for summary
+questions; the BEAM runner with a plain-search baseline.
