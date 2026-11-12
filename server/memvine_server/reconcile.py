@@ -40,6 +40,11 @@ IDENTICAL_SIMILARITY = 0.97
 # synthesis does not write near-copies. A changed value (an update) can score this high too, so the
 # numbers must match and the new wording must not announce a change; the model judges those.
 NEAR_DUPLICATE_SIMILARITY = 0.92
+# An update retires the older item, so the model's word is not enough for a pair this far apart. The
+# fast model now and then calls two unrelated facts of one project an update (in the memory check,
+# "always deploy with make deploy" replaced "the database runs on port 5544", about one run in ten).
+# On BGE-small such pairs score 0.66-0.69 and real changed values 0.78-0.88; below the embedder's
+# floor (its `update_min_similarity`, cosine scales differ between models) both stay.
 _NUMBERS = re.compile(r"\d+(?:[.:]\d+)*")
 _CHANGE = re.compile(r"\b(now|no longer|moved|switched|changed|replaced|instead|renamed|anymore|not)\b")
 
@@ -59,6 +64,10 @@ def same_values(before: str, after: str) -> bool:
     if set(_CHANGE.findall(after)) - set(_CHANGE.findall(before)):
         return False
     return set(_NUMBERS.findall(before)) == set(_NUMBERS.findall(after))
+
+
+def update_floor(embedder: Embedder) -> float:
+    return float(getattr(embedder, "update_min_similarity", 0.0))
 
 
 @dataclass
@@ -93,7 +102,8 @@ async def _related(conn, project_id: UUID, cand: Candidate, embedding: list[floa
     return [r for r in rows if r["similarity"] >= min_similarity]
 
 
-async def _classify(llm: LLM, cand: Candidate, new_date: datetime, related: list) -> tuple[str, dict | None]:
+async def _classify(llm: LLM, cand: Candidate, new_date: datetime, related: list, *,
+                    update_floor: float = 0.0) -> tuple[str, dict | None]:
     """One judgement over all related items: which one the candidate matches, and how."""
     for old in related:
         if old["similarity"] >= IDENTICAL_SIMILARITY and normalize(old["statement"]) == normalize(cand.statement):
@@ -115,6 +125,8 @@ async def _classify(llm: LLM, cand: Candidate, new_date: datetime, related: list
         # When the judge fails, keeping both items is the safe default.
         return "different", None
     if relation not in {"same", "update", "contradiction", "extends"} or not isinstance(match, int) or not 1 <= match <= len(related):
+        return "different", None
+    if relation == "update" and float(related[match - 1]["similarity"]) < update_floor:
         return "different", None
     return relation, related[match - 1]
 
@@ -158,7 +170,7 @@ async def judge_batch(conn, llm: LLM, embedder: Embedder, project_id: UUID, cand
     related = [await _related(conn, project_id, c, v, audience, min_similarity) for c, v in zip(cands, vectors, strict=True)]
 
     async def one(cand: Candidate, rel: list) -> tuple[str, dict | None]:
-        return await _classify(llm, cand, recorded_at, rel) if rel else ("different", None)
+        return await _classify(llm, cand, recorded_at, rel, update_floor=update_floor(embedder)) if rel else ("different", None)
 
     verdicts = await asyncio.gather(*(one(c, r) for c, r in zip(cands, related, strict=True)))
     out, replaced = [], set()
@@ -183,7 +195,7 @@ async def reconcile(conn, llm: LLM, embedder: Embedder, project_id: UUID, cand: 
     else:
         embedding = (await embedder.embed([cand.statement]))[0]
         related = await _related(conn, project_id, cand, embedding, audience, min_similarity)
-        relation, old = await _classify(llm, cand, recorded_at, related) if related else ("different", None)
+        relation, old = await _classify(llm, cand, recorded_at, related, update_floor=update_floor(embedder)) if related else ("different", None)
     if old is not None:
         if relation == "same":
             await add_evidence(conn, project_id, old["id"], episode_id, cand.quote)

@@ -110,7 +110,7 @@ What passes:
 - rule: a standing always/never for this project ("Never deploy to the shared demo environment with --skip-migrations").
 - gotcha: a trap in the environment, tools, process or code that will catch the next person too, with the way around it ("The test harness's saved `qa` connection actually points at the staging database").
 - preference: how a person on the team likes things done.
-- fact: only about the world outside the code that the code cannot show: shared resources and who else uses them, which environment or account is which, ownership, external deadlines and vendor changes that affect the project ("The payment provider turns on a 30-day idle refresh-token limit in production from 4 Nov 2026").
+- fact: only about the world outside the code that the code cannot show: shared resources and who else uses them, which environment or account is which, what a person says runs in a shared or production environment (its database, version, host or port: the repo does not show what production runs), ownership, external deadlines and vendor changes that affect the project ("The payment provider turns on a 30-day idle refresh-token limit in production from 4 Nov 2026").
 
 Never memory, however true or interesting:
 - the work and its findings: root-cause analyses and code traces of a bug, what a fix changes, what a PR contains, test or QA results, how many runs passed, what was reproduced, a known bug (it belongs in its ticket), a release's scope, merge order, who is doing what, workers or agents started, plans, proposals, options, open questions, next steps.

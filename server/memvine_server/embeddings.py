@@ -26,6 +26,8 @@ class FastEmbedEmbedder:
     # Recall's default relevance threshold (cosine). BGE-small compresses similarities: off-topic
     # questions still score about 0.40-0.47 against a project's memories, on-topic ones 0.64-0.80.
     min_relevance = 0.55
+    # Reconciliation: the least similar pair in which one item may replace the other (reconcile.py).
+    update_min_similarity = 0.72
 
     def __init__(self) -> None:
         from fastembed import TextEmbedding
