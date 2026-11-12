@@ -142,6 +142,9 @@ def main() -> int:
                     help="environment variable holding the operator or organization key (mv_mk_...); default MEMVINE_SMOKE_KEY")
     ap.add_argument("--no-synthesis", action="store_true",
                     help="the server has no model key yet: check that ingest queues instead of learning from it")
+    ap.add_argument("--conversation", action="store_true",
+                    help="also check conversation mode in a second throwaway project: a small detail is kept and recalled, "
+                         "and a summary question is answered from digests (needs the model key)")
     ap.add_argument("--timeout", type=float, default=30.0, help="seconds per ordinary call (default 30)")
     ap.add_argument("--synthesis-timeout", type=float, default=180.0, help="seconds for the instant ingest (default 180)")
     args = ap.parse_args()
@@ -206,6 +209,8 @@ def main() -> int:
             f"set {args.management_key_env} to the operator or an organization key (mv_mk_...) to run the project checks")))
     else:
         project_flow(api, http, run, mkey, args)
+        if args.conversation and not args.no_synthesis:
+            conversation_flow(api, http, run, mkey, args)
 
     # ------------------------------------------------------------------ 3. latency and summary
     report_latency(http, run)
@@ -334,6 +339,81 @@ def project_flow(api: str, http: Http, run: Run, mkey: str, args) -> None:
                 run.step("recall an unrelated question: abstains", recall_unrelated)
                 run.step("forget the memory: recall no longer serves it", forget)
             run.step("synthesis health for the project", synthesis_health)
+    finally:
+        if s.get("created"):
+            cleanup(api, http, run, mkey, slug, s.get("key"))
+
+
+CONVERSATION = """## Priya · 2026-11-03T09:00:00Z
+I ran the dry run of the invoice backfill for Northwind this morning. It took 47 minutes and touched 18,204 invoices. \
+I'd like the result as a CSV file, not a PDF.
+
+## Assistant
+Noted: 47 minutes for 18,204 invoices. I'll write the result to backfill-report.csv. Do you want the 312 invoices \
+that failed validation in a separate file?
+
+## Priya
+Yes, put the 312 failures in failures.csv. We'll run the real backfill on Thursday at 06:00 UTC.
+"""
+DETAIL_QUESTION = "How many minutes did the dry run of the invoice backfill take?"
+SUMMARY_QUESTION = "Can you give me a summary of what we discussed about the invoice backfill?"
+
+
+def conversation_flow(api: str, http: Http, run: Run, mkey: str, args) -> None:
+    """Conversation mode in its own throwaway project: every concrete detail is kept (the coding-mode
+    flow above proves the opposite, that progress is dropped), a detail question is answered with the
+    number, and a summary question gets digests of the conversation."""
+    slug = f"smoke-conv-{secrets.token_hex(4)}"
+    s: dict = {}
+
+    def create_project():
+        status, body, _ = http.call("POST", f"{api}/v1/projects", token=mkey, label="POST /v1/projects", body={
+            "name": slug, "slug": slug, "tags": ["smoke"], "memory_mode": "conversation",
+            "description": "Smoke-test project for conversation mode, deleted at the end of the run."})
+        need(status == 201 and isinstance(body, dict) and body.get("memory_mode") == "conversation", f"HTTP {status}: {short(body)}")
+        s["created"] = True
+        status, body, _ = http.call("POST", f"{api}/v1/projects/{slug}/keys", token=mkey, label="POST /v1/projects/{slug}/keys",
+                                    body={"name": "smoke"})
+        need(status == 201 and isinstance(body, dict) and str(body.get("key", "")).startswith("mv_sk_"), f"key: HTTP {status}")
+        s["key"] = body["key"]
+        return slug
+
+    def ingest():
+        episode = {"id": f"smoke-{secrets.token_hex(4)}", "content": CONVERSATION, "label": "Memvine smoke test (conversation)",
+                   "timestamp": "2026-11-03T09:05:00+00:00"}
+        status, body, _ = http.call("POST", f"{api}/v1/ingest", token=s["key"], label="POST /v1/ingest instant", synthesis=True,
+                                    timeout=args.synthesis_timeout, body={"items": [episode], "instant": True})
+        need(status in (200, 202) and isinstance(body, dict), f"HTTP {status}: {short(body)}")
+        instant = body.get("instant") or {}
+        need(instant.get("status") == "done", f"not learned within the request: {instant.get('reason') or short(body)}")
+        statements = [m["memory"]["statement"] for m in instant.get("memories", [])]
+        need(len(statements) >= 3, f"conversation mode kept only {len(statements)} detail(s): {statements}")
+        need(any("47" in t for t in statements), f"the 47 minutes is not among the kept details: {statements}")
+        return f"{len(statements)} details kept, the 47 minutes among them"
+
+    def recall(query: str) -> dict:
+        status, body, _ = http.call("POST", f"{api}/v1/recall", token=s["key"], label="POST /v1/recall", body={"query": query})
+        need(status == 200 and isinstance(body, dict), f"HTTP {status}: {short(body)}")
+        need(not body.get("abstained"), f"abstained ({body.get('abstain_reason')})")
+        return body
+
+    def recall_detail():
+        body = recall(DETAIL_QUESTION)
+        need("47" in body.get("briefing", ""), f"the 47 minutes is not in the briefing: {short(body.get('briefing'))}")
+        need(body.get("passages"), "no source excerpts beside the details")
+        return f"47 minutes in the briefing, with {len(body['passages'])} source excerpt(s)"
+
+    def recall_summary():
+        body = recall(SUMMARY_QUESTION)
+        digests = body.get("digests") or []
+        need(digests, f"a summary question got no digests: {short(body.get('briefing'))}")
+        return f"{len(digests)} digest(s): {short(digests[0].get('content'), 120)!r}"
+
+    try:
+        if run.step(f"conversation mode: create project {slug}", create_project):
+            if run.step("conversation mode: every detail of a short conversation is kept", ingest):
+                run.step("conversation mode: a detail question is answered with the number", recall_detail)
+                run.step("conversation mode: a summary question gets digests", recall_summary)
     finally:
         if s.get("created"):
             cleanup(api, http, run, mkey, slug, s.get("key"))
