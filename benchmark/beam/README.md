@@ -117,27 +117,29 @@ What it shows: the two are level except on summaries, where digests of the conve
 ahead on information extraction and preferences, by one question's worth. Ingestion took 25 to 60
 minutes per 100K conversation on the local model; plain search needs only embeddings.
 
-500K, conversations 1-2 (40 questions, four per category), same setup. Ingestion took about three
+500K, conversations 1-3 (60 questions, six per category), same setup. Ingestion took about three
 and a half hours per conversation.
 
 | Category | Memvine (conversation mode) | Plain search (`rag`) |
 | --- | ---: | ---: |
-| abstention | 0.625 | 0.500 |
-| contradiction_resolution | 0.750 | 0.656 |
-| event_ordering | 0.827 | 0.793 |
-| information_extraction | 0.594 | 0.750 |
-| instruction_following | 0.667 | 0.875 |
-| knowledge_update | 1.000 | 1.000 |
-| multi_session_reasoning | 0.521 | 0.667 |
+| abstention | 0.750 | 0.667 |
+| contradiction_resolution | 0.750 | 0.688 |
+| event_ordering | 0.833 | 0.806 |
+| information_extraction | 0.729 | 0.833 |
+| instruction_following | 0.694 | 0.917 |
+| knowledge_update | 0.833 | 0.833 |
+| multi_session_reasoning | 0.639 | 0.681 |
 | preference_following | 1.000 | 1.000 |
-| summarization | 0.750 | 0.657 |
-| temporal_reasoning | 0.875 | 1.000 |
-| **overall** | **0.761** | **0.790** |
+| summarization | 0.746 | 0.632 |
+| temporal_reasoning | 0.917 | 1.000 |
+| **overall** | **0.789** | **0.806** |
 
-What it shows: at this size Memvine is not ahead. The overall gap is about one question in forty,
-and each category moves by a quarter on a single question, so the per-category differences are
-within noise. Where Memvine lost a detail question, the passage with the answer was in what it
-recalled; the answer model picked an earlier, similar line.
+What it shows: at this size the two are level overall (one question in sixty apart; Memvine won
+the third conversation 0.846 to 0.837 and lost the first two together 0.761 to 0.790). Memvine is
+ahead on summaries, as at 100K, and behind on instruction following. A model-free count of how much
+of each reference answer reached the answer model (`coverage.py`) is level between the two in
+every category, so the differences elsewhere come from how the answer model read the question,
+not from what was retrieved.
 
 The answer model reads Memvine's briefing, the text an agent is given (`BEAM_MEMVINE_CONTEXT`,
 default `briefing`). The recall response also carries the same lines as a list; sending both says

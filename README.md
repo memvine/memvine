@@ -22,10 +22,10 @@ Two checks, both in this repository and both runnable:
   | Conversations | Questions | Memvine | Plain search |
   | --- | ---: | ---: | ---: |
   | 100K tokens, three | 60 | 0.894 | 0.869 |
-  | 500K tokens, two | 40 | 0.761 | 0.790 |
+  | 500K tokens, three | 60 | 0.789 | 0.806 |
 
-  Memvine is ahead on summaries (0.88 against 0.57 at 100K) and level elsewhere; at 500K it is not
-  ahead. These were answered and graded by Claude Sonnet on a few conversations, so they compare
+  Memvine is ahead on summaries at both sizes (0.88 against 0.57 at 100K, 0.75 against 0.63 at
+  500K) and level elsewhere; overall at 500K the two are level. These were answered and graded by Claude Sonnet on a few conversations, so they compare
   the two with each other and are **not comparable with published BEAM scores**. A run scored the
   published way is still to come. Memvine also costs far more to ingest: 25 to 60 minutes of model
   calls per 100K conversation, where plain search needs only embeddings.
