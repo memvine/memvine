@@ -62,8 +62,7 @@ Consecutive turns of one session go together as one episode, up to `BEAM_EPISODE
 (default 6,000) characters, rendered as `## Author · time` blocks, timestamped at the first turn.
 One project per conversation, created in Memvine's conversation mode
 (`BEAM_MEMORY_MODE`, default `conversation`; `coding` measures the keep-little mode on the same data). Recall asks with `as_of` set to the question's
-moment and an 8,000-token budget, and the answer model reads the recall response (briefing plus
-items with their dates, status and previous value) as JSON.
+moment and an 8,000-token budget, and the answer model reads the briefing of the recall response as JSON (see `BEAM_MEMVINE_CONTEXT` below).
 
 ## Answer coverage (no model account needed)
 
@@ -101,24 +100,28 @@ the two arms with each other, on six questions per category.
 
 | Category | Memvine (conversation mode) | Plain search (`rag`) |
 | --- | ---: | ---: |
-| abstention | 0.833 | 1.000 |
-| contradiction_resolution | 0.771 | 0.646 |
-| event_ordering | 0.983 | 0.983 |
-| information_extraction | 0.944 | 0.972 |
+| abstention | 1.000 | 1.000 |
+| contradiction_resolution | 0.667 | 0.646 |
+| event_ordering | 1.000 | 0.983 |
+| information_extraction | 0.875 | 0.972 |
 | instruction_following | 0.917 | 0.917 |
 | knowledge_update | 1.000 | 1.000 |
-| multi_session_reasoning | 0.667 | 0.646 |
-| preference_following | 0.958 | 1.000 |
-| summarization | 0.854 | 0.571 |
+| multi_session_reasoning | 0.688 | 0.646 |
+| preference_following | 0.917 | 1.000 |
+| summarization | 0.882 | 0.571 |
 | temporal_reasoning | 1.000 | 0.958 |
-| **overall** | **0.893** | **0.869** |
+| **overall** | **0.894** | **0.869** |
 
 What it shows: the two are level except on summaries, where digests of the conversation
-(`docs/how-memory-works.md`) carry the points a ranking of excerpts misses, and on contradictions.
-Plain search is ahead on abstention: recalling wide gives the answer model near misses to answer
-from when the reference says nothing was said. On one 500K conversation (20 questions) Memvine
-scored 0.794 and plain search 0.765. Ingestion took about 50 minutes per 100K conversation on the
-local model; plain search needs only embeddings.
+(`docs/how-memory-works.md`) carry the points a ranking of excerpts misses. Plain search is a little
+ahead on information extraction and preferences, by one question's worth. On one 500K conversation
+(20 questions) Memvine scored 0.794 and plain search 0.765. Ingestion took 25 to 60 minutes per
+100K conversation on the local model; plain search needs only embeddings.
+
+The answer model reads Memvine's briefing, the text an agent is given (`BEAM_MEMVINE_CONTEXT`,
+default `briefing`). The recall response also carries the same lines as a list; sending both says
+everything twice (about 17,600 tokens of context against plain search's 8,700) and scored the same
+(0.893).
 
 ## Tests
 

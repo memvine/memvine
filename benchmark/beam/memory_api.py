@@ -32,6 +32,10 @@ BACKENDS = ("memvine", "fullcontext", "rag")
 # One recall: at most this many results, within this many tokens of evidence (the settings of published runs).
 RECALL_LIMIT = 100
 RECALL_MAX_TOKENS = 8_000
+# What of Memvine's recall response the answer model reads: "briefing" (the text an agent is given),
+# "results" (the same lines as a list) or "both". Both says everything twice: about 17,600 tokens of
+# context where plain search sends 8,700, for the same score (0.893 against 0.894 over 60 questions).
+CONTEXT = os.environ.get("BEAM_MEMVINE_CONTEXT", "briefing")
 
 RETRY_DELAYS_SECONDS = (1, 2, 4)
 TIMEOUT_SECONDS = 300
@@ -199,8 +203,9 @@ class MemvineBackend:
                    for d in response.get("digests") or []]
         return {
             "asOf": as_of,
-            "briefing": response["briefing"],
-            "results": digests + results + excerpts,
+            **({"briefing": response["briefing"]} if CONTEXT in ("briefing", "both") else {}),
+            **({"results": digests + results + excerpts} if CONTEXT in ("results", "both") else {}),
+            "resultCount": len(digests + results + excerpts),
             "usedEvidenceTokens": response["tokens"],
         }
 

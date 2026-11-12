@@ -92,7 +92,7 @@ async def answer_question(backend, handle: Handle, conversation: Conversation, q
         }
 
     score, verdicts = await scoring.score_question(question, answer)
-    log(f"{question.id}: {len(recalled.get('results') or [])} results recalled "
+    log(f"{question.id}: {recalled.get('resultCount', len(recalled.get('results') or []))} results recalled "
         f"({recalled.get('usedEvidenceTokens', '?')} evidence tokens), score {score:.2f}", conversation.id)
     return {
         "questionId": question.id, "conversationId": conversation.id, "category": question.category,
