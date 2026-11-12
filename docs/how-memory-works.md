@@ -269,9 +269,20 @@ rule turns round:
 | Thread pages | One per piece of work | None |
 | Progress and states of the moment | Refused | Kept (`event`, `plan`, `fact`) |
 | Updates and contradictions | Reconciled | Judged only between near restatements, against memory as it was before the excerpt; one detail replaces another only when it says something changed ("moved", "now", "switched") |
-| Recall | What the task needs: the fast model picks, and abstains when nothing applies | Wide: the candidate details are put in order by a local reranking model that reads each one with the question (`MEMVINE_RECALL_RERANK_MODEL`), the best fill a quarter of the budget (`MEMVINE_RECALL_DETAIL_FACT_SHARE`), (a question asking for a summary gets most of the budget as details instead, in time order: `MEMVINE_RECALL_DETAIL_SUMMARY_FACT_SHARE`), then source excerpts: the ones those details came from and the closest others |
+| Recall | What the task needs: the fast model picks, and abstains when nothing applies | Wide: the candidate details are put in order by a local reranking model that reads each one with the question (`MEMVINE_RECALL_RERANK_MODEL`), the best fill a quarter of the budget (`MEMVINE_RECALL_DETAIL_FACT_SHARE`), then source excerpts: the ones those details came from and the closest others. A question asking for a summary is answered from digests instead (below) |
 | Recency | Facts and gotchas fade | Nothing fades |
 | Consolidation's bar check | Flags what fails the three tests | Skipped |
+
+**Digests, for summaries.** A question such as "summarize how the project went" resembles no single
+detail, so the points a good answer needs rank hundreds deep in any search. In conversation mode the
+fast model therefore writes a digest of each excerpt as it is synthesized: about forty words naming
+what was worked on, the problem, and what was decided. Every four consecutive digests are rolled up
+into one, and those again, so a conversation of any length has a cover that fits a briefing. A
+summary question gets that cover in time order: recall starts from the coarsest roll-ups and opens
+the ones closest to the question into the digests under them while the budget lasts
+(`MEMVINE_RECALL_DETAIL_SUMMARY_DIGEST_SHARE` of it), then adds details and source excerpts. Other
+questions never see digests. A store built before digests existed gets them with
+`memvine-server backfill-digests <slug>` (one fast-model call per excerpt).
 
 The mode applies to what is sent from now on; memory already made stays as it is. The BEAM
 benchmark (`benchmark/beam`) runs in conversation mode; the memory check (`benchmark/memory`) is

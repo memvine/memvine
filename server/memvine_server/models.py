@@ -315,6 +315,13 @@ class RecallPassage(BaseModel):
     content: str
 
 
+class RecallDigest(BaseModel):
+    level: int  # 1: one excerpt; higher: a roll-up of consecutive digests
+    starts_at: datetime
+    occurred_at: datetime
+    content: str
+
+
 class PendingMessage(BaseModel):
     session_id: str
     seq: int
@@ -329,6 +336,8 @@ class RecallResponse(BaseModel):
     standing: list[str] = []  # standing instructions, included in every recall
     threads: list[RecallThread] = []  # the thread pages the briefing includes
     passages: list[RecallPassage] = []
+    # Conversation mode, a question that asks for a summary: digests of the conversation's excerpts, in time order.
+    digests: list[RecallDigest] = []
     items: list[RecallItem]
     tokens: int
     abstained: bool

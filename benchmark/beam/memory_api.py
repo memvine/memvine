@@ -195,10 +195,12 @@ class MemvineBackend:
         } for item in response["items"][:RECALL_LIMIT]]
         excerpts = [{"content": p["content"], "occurredAt": p["occurred_at"], "kind": "source_excerpt"}
                     for p in response.get("passages") or []]
+        digests = [{"content": d["content"], "from": d["starts_at"], "occurredAt": d["occurred_at"], "kind": "digest"}
+                   for d in response.get("digests") or []]
         return {
             "asOf": as_of,
             "briefing": response["briefing"],
-            "results": results + excerpts,
+            "results": digests + results + excerpts,
             "usedEvidenceTokens": response["tokens"],
         }
 

@@ -175,6 +175,26 @@ def backfill_passages(project: str = typer.Option("", help="a project slug; all 
 
 
 @app.command()
+def backfill_digests(project: str = typer.Argument(..., help="the slug of a conversation-mode project"),
+                     at_once: int = typer.Option(4, help="model calls in flight")):
+    """Write the digests a conversation-mode project lacks (one fast-model call per excerpt)."""
+    from . import digests
+    from .embeddings import make_embedder
+    from .extraction.llm import make_llm
+
+    async def go(conn):
+        row = await (await conn.execute("SELECT id, memory_mode FROM projects WHERE slug = %s", (project,))).fetchone()
+        if not row:
+            raise typer.BadParameter(f"no project with slug {project!r}")
+        if row["memory_mode"] != "conversation":
+            raise typer.BadParameter(f"{project} is in {row['memory_mode']} mode; digests belong to conversation mode")
+        return await digests.backfill(conn, make_llm(), make_embedder(), row["id"], at_once=at_once)
+
+    written, rolled = _run(_with_pool(go))
+    typer.echo(f"wrote {written} digests and {rolled} roll-ups")
+
+
+@app.command()
 def feedback_export(slug: str, out: str = typer.Option("", "--out", help="a file to write; standard output when empty")):
     """Write a project's feedback cases (memories people forgot or corrected) as JSONL, for the local
     extraction gate: append them to ~/.memvine/eval/drop-cases.jsonl (benchmark/knowledge/cases.py).

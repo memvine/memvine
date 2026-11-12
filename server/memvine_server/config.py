@@ -105,10 +105,14 @@ class Settings(BaseSettings):
     # and judging) a half scored 0.77, a quarter 0.85 and none 0.86: the original words answer better
     # than many derived lines, which mostly earn their place by saying what changed and what conflicts.
     recall_detail_fact_share: float = 0.25
-    # ...and when the question asks for a summary: most of the budget, because a summary needs many
-    # separate points from across the conversation and a kept detail says one in a line where its
-    # source excerpt takes a paragraph.
-    recall_detail_summary_fact_share: float = 0.7
+    # ...and when the question asks for a summary: nearly all of it, because a summary needs many
+    # separate points from across the conversation. Digests of the conversation (digests.py) come
+    # first, up to their share of the budget, then details up to this one; excerpts get the rest.
+    # On the two BEAM summary questions of a 100k and a 500k conversation (Sonnet answering and
+    # judging): details alone 0.45 and 0.41; digests at 0.6 of the budget 0.65 and 0.47; at 0.85,
+    # 0.80 and 0.53. Digests did not help questions about the order of events, which do not get them.
+    recall_detail_summary_fact_share: float = 0.92
+    recall_detail_summary_digest_share: float = 0.85
     # Conversation mode (rerank.py): the local cross-encoder that orders the candidate details against
     # the question. Empty turns it off. On a 500k-token BEAM conversation (2,888 details) the line that
     # answered a question sat 135th by vector and 41st by keyword; this model put it first.

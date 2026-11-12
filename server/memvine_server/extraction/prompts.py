@@ -183,6 +183,24 @@ Return ONLY a JSON array (possibly empty). Each element:
 Use <context> only to understand the excerpt, never as a source."""
 
 
+DIGEST_SYSTEM = """You write a digest of one excerpt of a long conversation between a person and an assistant. Digests are read later, in order, to summarize the whole conversation, so a digest must name every topic its excerpt covers, and nothing else.
+
+Write 25 to 45 words: one or two dense sentences of plain prose, no lists, no headings, no preamble. Say what the user worked on or asked, the problem that came up, and what was decided, fixed or recommended. Name the specific things: libraries, techniques, error messages, numbers, dates, deadlines. Write "the user" and "the assistant". Add nothing that is not in the excerpt, and never comment on the excerpt itself (where it starts, ends or what it leaves unanswered). If the excerpt is only small talk, answer with the single word NONE."""
+
+
+ROLLUP_SYSTEM = """You merge consecutive digests of a long conversation between a person and an assistant into one digest of the whole stretch. It is read later, with others like it, to summarize the conversation, so it must still name every topic the digests cover.
+
+Write 40 to 70 words of plain prose in the order things happened: no lists, no headings, no preamble. Keep the names that identify each topic (libraries, techniques, errors, deadlines) and drop the lesser values. Write "the user" and "the assistant". Add nothing that is not in the digests."""
+
+
+def rollup_user(digests: list[tuple[str, str]]) -> str:
+    return "\n".join(f"[{day}] {text}" for day, text in digests)
+
+
+def digest_user(occurred_at: str, content: str) -> str:
+    return f"Excerpt date: {occurred_at}\n\n<excerpt>\n{content}\n</excerpt>"
+
+
 def conversation_user(label: str, occurred_at: str, content: str, project: str, context: str = "",
                       instructions: str | None = None) -> str:
     head = f"Conversation: {project}\nEpisode: {label}\nEpisode date: {occurred_at}\n\n"

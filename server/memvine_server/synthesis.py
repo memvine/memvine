@@ -11,7 +11,7 @@ import asyncio
 import logging
 from uuid import UUID
 
-from . import code, events
+from . import code, digests, events
 from .checkpoints import mark_processed
 from .embeddings import Embedder
 from .extraction.extract import extract_details, extract_knowledge
@@ -85,7 +85,15 @@ async def synthesize_episode(conn, llm: LLM, embedder: Embedder, project, ep, co
     # a conversation is not a piece of work with a state.
     details = project.get("memory_mode") == "conversation"
     if details:
-        extraction = await details_of(conn, llm, project, ep, profile, context, instructions)
+        # The digest reads the excerpt alone, so it is written while the details are extracted.
+        digest = asyncio.create_task(digests.compose(llm, ep))
+        try:
+            extraction = await details_of(conn, llm, project, ep, profile, context, instructions)
+        except BaseException:
+            digest.cancel()
+            raise
+        if await digests.store(conn, embedder, project_id, ep, await digest):
+            await digests.roll_up(conn, llm, embedder, project_id)
     else:
         # Pages are project-wide; an episode for a narrower audience feeds only audience-scoped knowledge.
         if ep["audience"] == "project":

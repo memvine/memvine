@@ -118,6 +118,7 @@ class Run:
         self.output = Path(args.output or f"results/{args.backend}-{args.split}")
         self.results = self.output / "results.jsonl"
         self.reusing = bool(getattr(args, "reuse", None))
+        self.categories = set(args.categories or [])
         self.tag = args.reuse if self.reusing else datetime.now(UTC).strftime("%m%d-%H%M%S")
         self.backend = make_backend(args.backend, f"{args.split} {self.tag}")
         self.sending_slots = asyncio.Semaphore(CONVERSATIONS_SENT_AT_ONCE)
@@ -156,7 +157,8 @@ class Run:
             conversation = sent.conversation
             started = time.monotonic()
             rows = await asyncio.gather(*(answer_question(self.backend, sent.handle, conversation, question, self.recall_slots)
-                                          for question in conversation.questions))
+                                          for question in conversation.questions
+                                          if not self.categories or question.category in self.categories))
             await self.save(rows)
             self.scored += 1
             mean = sum(row["score"] for row in rows) / len(rows) if rows else 0.0
@@ -298,6 +300,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--conversations", type=positive_number, help="only the first N conversations (after --offset)")
     parser.add_argument("--offset", type=int, default=0, help="skip the first N conversations")
     parser.add_argument("--output", help="results directory (default: results/<backend>-<split>)")
+    parser.add_argument("--categories", nargs="+", metavar="CATEGORY",
+                        help="score only these question categories (for work on one category; not a benchmark result)")
     parser.add_argument("--reuse", metavar="TAG", help="score again against the stores of an earlier run (memvine only)")
     return parser.parse_args()
 

@@ -24,13 +24,14 @@ import re
 from datetime import UTC, datetime
 from uuid import UUID
 
+from . import digests
 from .config import settings
 from .edges import edges_for, recall_refs
 from .embeddings import Embedder
 from .extraction.extract import normalize, parse_json
 from .extraction.llm import LLM, fast
 from .extraction.prompts import RELEVANCE_SYSTEM, relevance_user
-from .models import PendingMessage, RecallItem, RecallPassage, RecallRequest, RecallResponse, RecallThread
+from .models import PendingMessage, RecallDigest, RecallItem, RecallPassage, RecallRequest, RecallResponse, RecallThread
 from .rerank import Reranker, get_reranker
 from .store import MEMORY_COLUMNS, evidence_for, memory_out
 from .threads import item_words, relevant_threads, render_page, render_page_brief, same_item
@@ -86,6 +87,7 @@ SUMMARY = re.compile(r"\b(summar\w*|overview|recap\w*)\b", re.IGNORECASE)
 # A broad question is short. A longer text that happens to say "summary" or "all the" is a task: a pasted
 # ticket, or a PR description with a Summary heading.
 BROAD_MAX_CHARS = 300
+DIGEST_HEADER = "--- the conversation in order, as digests of its excerpts ---"
 MMR_LAMBDA = 0.25        # weight of novelty against relevance for ordinary questions
 MMR_LAMBDA_BROAD = 0.6
 MIN_SIMILARITY = 0.30
@@ -498,6 +500,19 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
                 shown_threads.append(thread)
                 served_knowledge += served
                 break
+    # A summary question reads the conversation's digests first: every topic named once, in time order,
+    # where a ranking of single details returns the few that read most like the question.
+    digest_rows, digest_lines = [], []
+    if summary:
+        digest_rows = await digests.relevant(conn, project_id, embedding, audiences=audiences, as_of=req.as_of,
+                                             budget=int(budget * settings.recall_detail_summary_digest_share), tokens_of=tokens_of)
+    if digest_rows:
+        digest_lines.append(DIGEST_HEADER)
+        spent += tokens_of(DIGEST_HEADER)
+        for d in digest_rows:
+            days = _day(d["starts_at"]) if _day(d["starts_at"]) == _day(d["occurred_at"]) else f"{_day(d['starts_at'])} to {_day(d['occurred_at'])}"
+            digest_lines.append(f"[{days}] {d['content']}")
+            spent += tokens_of(d["content"]) + 6
     detail_share = settings.recall_detail_summary_fact_share if summary else settings.recall_detail_fact_share
     fact_cap = int(budget * (detail_share if detail else FACT_BUDGET_SHARE))
     packed: list[tuple[float, dict, str | None]] = []
@@ -543,7 +558,7 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
         excerpts = await relevant_passages(conn, project_id, req, embedding, audiences, sources, budget - spent, best=best,
                                            min_relevance=min_relevance, broad=broad, include_history=include_history,
                                            wide=detail)
-    if detail and not chosen and not excerpts and not thread_lines and not pending:
+    if detail and not chosen and not excerpts and not thread_lines and not pending and not digest_rows:
         return await abstain("no_candidates" if await has_memory(conn, project_id, audiences) else "empty_store")
     excerpt_lines = []
     if excerpts:
@@ -577,10 +592,11 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     served_threads = [RecallThread(id=t["id"], key=t["key"], title=t["title"], status=t["status"], summary=t["summary"])
                       for t in shown_threads]
     served_passages = [RecallPassage(episode_id=p["episode_id"], occurred_at=p["occurred_at"], content=p["content"]) for p in excerpts]
-    lines = [*standing_lines, HEADER, *conflict_lines, *thread_lines, *fact_lines,
+    served_digests = [RecallDigest(level=d["level"], starts_at=d["starts_at"], occurred_at=d["occurred_at"], content=d["content"]) for d in digest_rows]
+    lines = [*standing_lines, HEADER, *conflict_lines, *thread_lines, *digest_lines, *fact_lines,
              *pending_lines, *excerpt_lines]
     return RecallResponse(briefing="\n".join(lines), standing=standing, pending=pending, threads=served_threads,
-                          passages=served_passages, items=items, tokens=spent, abstained=False,
+                          passages=served_passages, digests=served_digests, items=items, tokens=spent, abstained=False,
                           min_relevance=min_relevance, top_relevance=top_relevance, picked_by_model=picked is not None)
 
 

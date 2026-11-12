@@ -46,7 +46,8 @@ Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local
 - **Two modes, chosen per project** (`projects.memory_mode`). `coding` (the default) keeps little, as
   the next decisions say. `conversation` keeps every concrete detail of a person's long conversation
   with an assistant, has no thread pages, and recalls wide with source excerpts
-  (`CONVERSATION_SYSTEM`, `extract_details`, the `detail` path in `recall.py`). BEAM measures
+  (`CONVERSATION_SYSTEM`, `extract_details`, the `detail` path in `recall.py`), and answers a
+  summary question from digests of the conversation (`digests.py`). BEAM measures
   conversation mode; the memory check measures coding mode. A change must not move one mode's
   behaviour into the other.
 - **In coding mode, too much memory is worse than too little.** A memory is kept only if it passes three tests:
