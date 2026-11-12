@@ -269,7 +269,7 @@ rule turns round:
 | Thread pages | One per piece of work | None |
 | Progress and states of the moment | Refused | Kept (`event`, `plan`, `fact`) |
 | Updates and contradictions | Reconciled | Judged only between near restatements, against memory as it was before the excerpt; one detail replaces another only when it says something changed ("moved", "now", "switched") |
-| Recall | What the task needs: the fast model picks, and abstains when nothing applies | Wide: the candidate details are put in order by a local reranking model that reads each one with the question (`MEMVINE_RECALL_RERANK_MODEL`), the best fill a quarter of the budget (`MEMVINE_RECALL_DETAIL_FACT_SHARE`), then source excerpts: the ones those details came from and the closest others |
+| Recall | What the task needs: the fast model picks, and abstains when nothing applies | Wide: the candidate details are put in order by a local reranking model that reads each one with the question (`MEMVINE_RECALL_RERANK_MODEL`), the best fill a quarter of the budget (`MEMVINE_RECALL_DETAIL_FACT_SHARE`), (a question asking for a summary gets most of the budget as details instead, in time order: `MEMVINE_RECALL_DETAIL_SUMMARY_FACT_SHARE`), then source excerpts: the ones those details came from and the closest others |
 | Recency | Facts and gotchas fade | Nothing fades |
 | Consolidation's bar check | Flags what fails the three tests | Skipped |
 

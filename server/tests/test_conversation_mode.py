@@ -103,9 +103,13 @@ async def test_a_conversation_project_keeps_details_and_recalls_wide(client):
     rerank.set_reranker(stub)
     try:
         after = (await client.post("/v1/recall", json={"query": wide})).json()["items"]
+        # A summary is answered from the breadth of the fused lists: the reranker is not asked.
+        asked, stub.asked = stub.asked, None
+        summary = (await client.post("/v1/recall", json={"query": "Give me a summary of my sprint, design review and login page"})).json()
+        assert stub.asked is None and len(summary["items"]) > 1
     finally:
         rerank.set_reranker(None)
-    assert len(before) > 1 and stub.asked == (wide, len(before))
+    assert len(before) > 1 and asked == (wide, len(before))
     assert {i["memory"]["id"] for i in after} == {i["memory"]["id"] for i in before}
     assert after[0]["memory"]["id"] != before[0]["memory"]["id"]
 

@@ -81,6 +81,8 @@ BROAD = re.compile(
     r"\b(summar\w*|overview|comprehensive|overall|progress\w*|evolv\w*|journey|timeline|so far|across (my |our |the )?"
     r"(sessions|conversations)|everything|all the|how many|list (all|every)|throughout)\b", re.IGNORECASE)
 BROAD_CANDIDATES = 200
+# Conversation mode: a question that asks for a summary, which is answered from many kept details.
+SUMMARY = re.compile(r"\b(summar\w*|overview|recap\w*)\b", re.IGNORECASE)
 # A broad question is short. A longer text that happens to say "summary" or "all the" is a task: a pasted
 # ticket, or a PR description with a Summary heading.
 BROAD_MAX_CHARS = 300
@@ -239,6 +241,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     project = await (await conn.execute(
         "SELECT recall_min_relevance, recall_half_life_days, memory_mode FROM projects WHERE id = %s", (project_id,))).fetchone()
     detail = bool(project) and project["memory_mode"] == "conversation"
+    summary = detail and bool(SUMMARY.search(req.query))
+    broad = broad or summary
     pool = BROAD_CANDIDATES if broad or detail else CANDIDATES
     min_relevance = min_relevance_for(project, embedder)
     half_life = 0.0 if include_history else half_life_for(project)
@@ -342,7 +346,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
             return await abstain("below_threshold")
         return await abstain("no_candidates" if await has_memory(conn, project_id, audiences) else "empty_store")
 
-    if detail and len(ranked_ids) > 1 and (reranker := get_reranker()) is not None:
+    # A summary wants the breadth of the fused lists, not the few lines that read most like the question.
+    if detail and not summary and len(ranked_ids) > 1 and (reranker := get_reranker()) is not None:
         ranked_ids = await reranked(reranker, req.query, ranked_ids, rows, scores)
     ranked_ids.sort(key=lambda t: (-t[0], -rows[t[1]]["recorded_at"].timestamp()))
     ranked_ids = diversify(ranked_ids, rows, MMR_LAMBDA_BROAD if broad else MMR_LAMBDA)
@@ -493,7 +498,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
                 shown_threads.append(thread)
                 served_knowledge += served
                 break
-    fact_cap = int(budget * (settings.recall_detail_fact_share if detail else FACT_BUDGET_SHARE))
+    detail_share = settings.recall_detail_summary_fact_share if summary else settings.recall_detail_fact_share
+    fact_cap = int(budget * (detail_share if detail else FACT_BUDGET_SHARE))
     packed: list[tuple[float, dict, str | None]] = []
     for score, mid in ranked_ids:
         r = rows[mid]
