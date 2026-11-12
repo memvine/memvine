@@ -92,6 +92,34 @@ First reading (2026-10-25, 100K, conversations 1-3, 8,000-token budget for rag):
 | **overall** | **0.781** | **0.919** |
 | mean evidence tokens | 7,801 | 121,146 |
 
+## A local reading (2026-11-12): not a published result
+
+100K, conversations 1-3 (60 questions), 8,000-token budget, both arms answered and judged by Claude
+Sonnet on a subscription (`BEAM_LOCAL_JUDGE=sonnet`). The published procedure uses another answer
+and judge model, so these numbers are **not comparable** with published BEAM scores; they compare
+the two arms with each other, on six questions per category.
+
+| Category | Memvine (conversation mode) | Plain search (`rag`) |
+| --- | ---: | ---: |
+| abstention | 0.833 | 1.000 |
+| contradiction_resolution | 0.771 | 0.646 |
+| event_ordering | 0.983 | 0.983 |
+| information_extraction | 0.944 | 0.972 |
+| instruction_following | 0.917 | 0.917 |
+| knowledge_update | 1.000 | 1.000 |
+| multi_session_reasoning | 0.667 | 0.646 |
+| preference_following | 0.958 | 1.000 |
+| summarization | 0.854 | 0.571 |
+| temporal_reasoning | 1.000 | 0.958 |
+| **overall** | **0.893** | **0.869** |
+
+What it shows: the two are level except on summaries, where digests of the conversation
+(`docs/how-memory-works.md`) carry the points a ranking of excerpts misses, and on contradictions.
+Plain search is ahead on abstention: recalling wide gives the answer model near misses to answer
+from when the reference says nothing was said. On one 500K conversation (20 questions) Memvine
+scored 0.794 and plain search 0.765. Ingestion took about 50 minutes per 100K conversation on the
+local model; plain search needs only embeddings.
+
 ## Tests
 
 ```sh
