@@ -75,6 +75,7 @@ class Handle:
 # Consecutive turns of one session are sent together as one episode, up to this many characters,
 # so extraction sees a stretch of conversation rather than one line (an answer read without its
 # question loses who decided what) while each call stays small enough to extract carefully.
+MAX_ITEM_CHARS = 150_000
 EPISODE_CHARS = int(os.environ.get("BEAM_EPISODE_CHARS", "6000"))
 ITEMS_PER_PUSH = 100
 # BEAM is a long conversation with one person, so its projects use Memvine's conversation mode (every
@@ -94,14 +95,17 @@ def episodes_of(conversation: Conversation) -> list[dict]:
             return
         first = group[0]
         body = "\n\n".join(f"## {m.author} · {utc_iso(m.timestamp)}\n{m.content}" for m in group)
-        out.append({
-            "id": f"{conversation.id}_{first.session_id}_{first.ordinal:05d}",
-            "content": body,
-            "timestamp": utc_iso(first.timestamp),
-            "identity": conversation.user_identity,
-            "label": conversation.title,
-            "metadata": {"session": first.session_id, "turns": [m.message_id for m in group]},
-        })
+        # The API takes at most 200,000 characters per item; a longer turn is sent as consecutive parts.
+        parts = [body[at : at + MAX_ITEM_CHARS] for at in range(0, len(body), MAX_ITEM_CHARS)]
+        for number, part in enumerate(parts):
+            out.append({
+                "id": f"{conversation.id}_{first.session_id}_{first.ordinal:05d}" + (f"_p{number}" if number else ""),
+                "content": part if not number else f"## {first.author} · {utc_iso(first.timestamp)} (continued)\n{part}",
+                "timestamp": utc_iso(first.timestamp),
+                "identity": conversation.user_identity,
+                "label": conversation.title,
+                "metadata": {"session": first.session_id, "turns": [m.message_id for m in group]},
+            })
         group.clear()
 
     size = 0
