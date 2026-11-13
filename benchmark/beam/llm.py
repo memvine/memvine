@@ -179,12 +179,24 @@ async def _post(payload: dict) -> dict:
     raise AssertionError("unreachable")
 
 
+# OpenRouter holds back part of the account's credit for every request in flight, by its size. Many
+# whole-conversation requests at once can exceed it (402, "in_flight_budget_exhausted") with credit
+# to spare: BEAM_MODEL_CONCURRENCY bounds the calls in flight, and that refusal is retried.
+MODEL_CONCURRENCY = int(os.environ.get("BEAM_MODEL_CONCURRENCY", "16"))
+_model_slots: asyncio.Semaphore | None = None
+
+
 async def _post_once(payload: dict) -> dict:
-    response = await _client().post("/chat/completions", json=payload)
+    global _model_slots
+    if _model_slots is None:
+        _model_slots = asyncio.Semaphore(MODEL_CONCURRENCY)
+    async with _model_slots:
+        response = await _client().post("/chat/completions", json=payload)
     if response.is_error:
+        in_flight = response.status_code == 402 and "in_flight_budget_exhausted" in response.text
         raise ModelError(f"OpenRouter returned {response.status_code}: {response.text[:1_000]}",
-                         retryable=response.status_code == 429 or response.status_code >= 500,
-                         status=response.status_code)
+                         retryable=in_flight or response.status_code == 429 or response.status_code >= 500,
+                         status=None if in_flight else response.status_code)
     data = response.json()
     if not isinstance(data, dict):
         raise ModelError("OpenRouter returned a non-object response", retryable=True)
