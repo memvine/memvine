@@ -260,16 +260,16 @@ Everything above describes a **coding** project, the default: agent sessions on 
 memory is read on every task and too much of it is worse than too little. A project can instead be
 in **conversation** mode (console: Settings → Memory rules; API: `memory_mode` on
 `POST /v1/projects` or `PATCH /v1/projects/{slug}`), for one person talking with an assistant over
-time. There the question is usually about a small detail ("when does my first sprint end?"), so the
-rule turns round:
+time. There the conversation itself is stored whole and searched word for word, and memory is a
+small profile of the person beside it:
 
 | | coding | conversation |
 |---|---|---|
-| What is kept | Durable knowledge that passes the three tests; usually nothing or one item per excerpt | Every concrete detail: facts, events, plans, decisions, preferences, instructions, with exact values |
+| What is kept | Durable knowledge that passes the three tests; usually nothing or one item per excerpt | A profile of the person: who they are, the people in their life, goals, plans, limits, preferences, decisions and standing instructions, each the value of a named slot (`constraint/monthly-book-budget`). An item must be about the person, said or decided by them (its quote must come from one of their own turns), and change a later answer. Usually nothing or one item per excerpt; a few dozen for a long conversation |
 | Thread pages | One per piece of work | None |
-| Progress and states of the moment | Refused | Kept (`event`, `plan`, `fact`) |
-| Updates and contradictions | Reconciled | Judged only between near restatements, against memory as it was before the excerpt; one detail replaces another only when it says something changed ("moved", "now", "switched") |
-| Recall | What the task needs: the fast model picks, and abstains when nothing applies | Wide, and from the original words: the standing instructions, then source excerpts found by keyword and by meaning, one passage per turn, so the person's own short turns are not buried in the assistant's long ones. The kept details take no share of the briefing by default (`MEMVINE_RECALL_DETAIL_FACT_SHARE`, 0): on BEAM they restated the conversation and misled the answer. Given a share, they are put in order by a local reranking model (`MEMVINE_RECALL_RERANK_MODEL`) and served first. A question asking for a summary is answered from digests instead (below) |
+| Progress and states of the moment | Refused | Left to the conversation's own words, except a value the person says has changed, which is always kept. A plan is current until the day it is for |
+| Updates and contradictions | Reconciled | By slot, with no similarity search: the extractor reads the whole profile and names the slot of what it keeps. A new value replaces the slot's and the old one stays as history, in the order said; a statement that cannot be true together with the slot's, with no change said, is kept beside it and recall shows both. Only the extractor's "update" for a slot it was shown retires a value. An item about to get a slot of its own is first compared with the lines it most resembles (the fast model): already covered, it only adds evidence to that line; adding something lasting, it is folded into it; otherwise it is new. That check can drop or fold, never replace (`slots.py`) |
+| Recall | What the task needs: the fast model picks, and abstains when nothing applies | The standing instructions; then the few profile lines closest to the question (at most `MEMVINE_RECALL_PROFILE_LINES`, within `MEMVINE_RECALL_DETAIL_FACT_SHARE` of the budget), each with its date and the value it replaced, conflicts first as pairs; then the original words: source excerpts found by keyword and by meaning, one passage per turn, so the person's own short turns are not buried in the assistant's long ones. A question asking for a summary is answered from digests instead (below) |
 | Recency | Facts and gotchas fade | Nothing fades |
 | Consolidation's bar check | Flags what fails the three tests | Skipped |
 
@@ -280,9 +280,16 @@ what was worked on, the problem, and what was decided. Every four consecutive di
 into one, and those again, so a conversation of any length has a cover that fits a briefing. A
 summary question gets that cover in time order: recall starts from the coarsest roll-ups and opens
 the ones closest to the question into the digests under them while the budget lasts
-(`MEMVINE_RECALL_DETAIL_SUMMARY_DIGEST_SHARE` of it), then adds details and source excerpts. Other
+(`MEMVINE_RECALL_DETAIL_SUMMARY_DIGEST_SHARE` of it), then adds profile lines and source excerpts. Other
 questions never see digests. A store built before digests existed gets them with
 `memvine-server backfill-digests <slug>` (one fast-model call per excerpt).
+
+The first version of this mode kept every concrete detail as a memory: about 800 lines for a
+100,000-token conversation, half of them the assistant's advice restated. On BEAM it scored below a
+plain search of the conversation, because those lines pushed the original words out of the briefing
+and read as things the person had done. Details kept then have no slot and are no longer served;
+`memvine-server rebuild-memory <slug>` re-reads a project's stored excerpts under the current rules
+and replaces them (an excerpt keeps its digest).
 
 The mode applies to what is sent from now on; memory already made stays as it is. The BEAM
 benchmark (`benchmark/beam`) runs in conversation mode; the memory check (`benchmark/memory`) is

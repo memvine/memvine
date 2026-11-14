@@ -13,7 +13,7 @@ from .models import Evidence, MemoryOut
 MEMORY_COLUMNS = """
     id, kind, statement, subjects, valid_from, valid_to, recorded_at, status,
     supersedes, superseded_by, assertion, confidence, audience, conflicts_with, standing, stale_reason,
-    category, why, thread_id, scope,
+    category, why, thread_id, scope, slot,
     last_recalled_at, recall_count, review, origin,
     flag, flag_reason, flag_related, retired_reason, merged_into
 """
@@ -40,14 +40,14 @@ async def insert_item(conn, project_id: UUID, cand: Candidate, embedding: list[f
             f"""
             INSERT INTO memory_items
                 (project_id, kind, statement, subjects, valid_from, recorded_at, assertion, confidence, embedding, supersedes, audience, standing,
-                 category, why, valid_to, origin, review)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 category, why, valid_to, origin, review, slot)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING {MEMORY_COLUMNS}
             """,
             (
                 project_id, cand.kind, cand.statement, cand.subjects, cand.valid_from or recorded_at, recorded_at,
                 cand.assertion, cand.confidence, embedding, supersedes, audience, cand.standing,
-                cand.category, cand.why, cand.valid_until, origin, review,
+                cand.category, cand.why, cand.valid_until, origin, review, cand.slot,
             ),
         )
     ).fetchone()
@@ -92,6 +92,7 @@ def memory_out(row, evidence: list[Evidence] | None = None) -> MemoryOut:
         why=row.get("why"),
         thread_id=row.get("thread_id"),
         scope=row.get("scope"),
+        slot=row.get("slot"),
         expired=row["status"] in ("active", "stale") and row["valid_to"] is not None
         and row["valid_to"] <= datetime.now(UTC),
         last_recalled_at=row.get("last_recalled_at"),

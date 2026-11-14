@@ -116,7 +116,7 @@ interface ServerMemory {
   id: string; kind: MemoryItem["kind"]; statement: string; subjects: string[]; valid_from: string; valid_to: string | null;
   recorded_at: string; status: MemoryItem["status"]; supersedes: string | null; superseded_by: string | null;
   assertion: MemoryItem["assertion"]; confidence: MemoryItem["confidence"]; audience: string;
-  evidence: { episode_id: string; quote: string; identity?: string | null }[]; conflicts_with?: string[]; stale_reason?: string | null; scope?: "project" | "thread" | null;
+  evidence: { episode_id: string; quote: string; identity?: string | null }[]; conflicts_with?: string[]; stale_reason?: string | null; scope?: "project" | "thread" | null; slot?: string | null;
   category?: MemoryItem["category"]; why?: string | null; thread_id?: string | null; review?: "new" | "kept";
   expired?: boolean; last_recalled_at?: string | null; recall_count?: number;
   flag?: MemoryItem["flag"]; flag_reason?: string | null; flag_related?: string | null;
@@ -131,6 +131,7 @@ const toMemory = (m: ServerMemory): MemoryItem => ({
   conflictsWith: m.conflicts_with ?? [],
   staleReason: m.stale_reason ?? null,
   scope: m.scope ?? null,
+  slot: m.slot ?? null,
   category: m.category ?? null,
   why: m.why ?? null,
   threadId: m.thread_id ?? null,

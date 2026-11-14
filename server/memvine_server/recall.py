@@ -10,9 +10,9 @@ Nothing is served unless something is relevant enough (see recall() for what cou
 thread pages, standing instructions and pending messages are context around a hit, never a hit by
 themselves, so an unrelated question gets an abstention instead of the same few memories.
 
-A project in conversation mode (projects.memory_mode) is recalled wide instead: its memory holds every
-detail of a long conversation and the question is usually about one of them, so recall returns as
-many matching details as the budget holds, with the source excerpts beside them, and leaves the
+A project in conversation mode (projects.memory_mode) is recalled wide instead: the question is usually
+about one detail of a long conversation, so recall returns the few lines of the person's profile
+closest to it (slots.py), then as many source excerpts as the budget holds, and leaves the
 choosing to the reader. No model pick, no margin, no relevance threshold, no recency.
 """
 from __future__ import annotations
@@ -89,6 +89,9 @@ SUMMARY = re.compile(r"\b(summar\w*|overview|recap\w*)\b", re.IGNORECASE)
 # ticket, or a PR description with a Summary heading.
 BROAD_MAX_CHARS = 300
 DIGEST_HEADER = "--- the conversation in order, as digests of its excerpts ---"
+# Conversation mode: the profile lines come before the excerpts and say what they are, since an
+# excerpt found by search may carry a value the person has changed since.
+PROFILE_HEADER = "--- what memory holds about the person (the current value of each, with the day it was said) ---"
 MMR_LAMBDA = 0.25        # weight of novelty against relevance for ordinary questions
 MMR_LAMBDA_BROAD = 0.6
 MIN_SIMILARITY = 0.30
@@ -256,6 +259,10 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
         # A page found only by similarity must be as relevant as a memory would have to be.
         threads = [t for t in threads if thread_is_hit(t) or thread_similarity(t) >= min_relevance]
     base = f"FROM memory_items WHERE project_id = %s AND status = ANY(%s) {time_clause} AND scope IS DISTINCT FROM 'thread'"
+    if detail:
+        # A conversation's memory is the profile of the person (slots.py). Details kept before there
+        # were slots restate the conversation and are not served; its own words are (relevant_passages).
+        base += " AND slot IS NOT NULL"
 
     vector_rows = await (
         await conn.execute(
@@ -521,6 +528,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
         r = rows[mid]
         if r["statement"] in shown:
             continue
+        if detail and not summary and len(packed) >= settings.recall_profile_lines:
+            break
         line = line_for(r)
         cost = tokens_of(line)
         if spent + cost > fact_cap:
@@ -551,6 +560,9 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
         # Selected for breadth by relevance; told in time order so the answer can follow the story.
         packed.sort(key=lambda p: p[1]["valid_from"])
     fact_lines = [line for _, _, line in packed if line]
+    if detail and fact_lines:
+        fact_lines.insert(0, PROFILE_HEADER)
+        spent += tokens_of(PROFILE_HEADER)
     chosen = [(score, r) for score, r, _ in packed]
     evidence = {r["id"]: said_evidence.get(r["id"], []) for _, r in chosen}
     sources = [(e.episode_id, e.quote) for _, r in chosen for e in evidence[r["id"]]]

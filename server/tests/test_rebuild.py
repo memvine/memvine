@@ -33,8 +33,8 @@ LATE_FEE = "Northwind charges a late fee of 2 percent once an invoice is 30 days
 HALF_UP = "Northwind rounds every invoice total to the nearest cent, half up."
 
 
-def detail(statement, quote, category="fact"):
-    return {"statement": statement, "category": category, "subjects": ["northwind billing"], "confidence": "high",
+def detail(statement, quote, slot):
+    return {"slot": slot, "statement": statement, "relation": "new", "subjects": ["northwind billing"], "confidence": "high",
             "standing": False, "quote": quote}
 
 
@@ -48,11 +48,11 @@ class Model(FakeLLM):
         return await super().complete(system, user, max_tokens=max_tokens)
 
 
-ROUNDING_RULES = {"2024-03-14T09:00": json.dumps([detail(HALF_UP, "rounds every invoice total")]),
-                  "2024-03-20T09:00": json.dumps([detail(HALF_UP, "rounds every invoice total")])}
+ROUNDING_RULES = {"2024-03-14T09:00": json.dumps([detail(HALF_UP, "rounds every invoice total", "state/invoice-rounding")]),
+                  "2024-03-20T09:00": json.dumps([detail(HALF_UP, "rounds every invoice total", "state/invoice-rounding")])}
 # The older rules kept a sentence about the office; the current ones keep the late fee instead.
-OLDER_RULES = {"2024-03-12T09:00": json.dumps([detail(COLD, "The office was cold", "event")]), **ROUNDING_RULES}
-CURRENT_RULES = {"2024-03-12T09:00": json.dumps([detail(LATE_FEE, "a late fee of 2 percent")]), **ROUNDING_RULES}
+OLDER_RULES = {"2024-03-12T09:00": json.dumps([detail(COLD, "The office was cold", "history/cold-office")]), **ROUNDING_RULES}
+CURRENT_RULES = {"2024-03-12T09:00": json.dumps([detail(LATE_FEE, "a late fee of 2 percent", "constraint/late-fee")]), **ROUNDING_RULES}
 
 
 async def a_conversation(client, app):
@@ -92,9 +92,9 @@ async def test_a_rebuild_replaces_what_older_rules_kept(client):
 
     project_id, llm = await a_conversation(client, app)
     async with app.state.pool.connection() as conn:
-        memories, digests, _ = await snapshot(conn, project_id)
+        memories, written, _ = await snapshot(conn, project_id)
     assert [(m["statement"], m["sources"]) for m in memories] == [(HALF_UP, ["rounding", "rounding-again"]), (COLD, ["fees"])]
-    assert [d["episode_id"] for d in digests] == ["fees", "rounding", "rounding-again"]
+    assert [d["episode_id"] for d in written] == ["fees", "rounding", "rounding-again"]
 
     llm.responses = dict(CURRENT_RULES)
     async with app.state.pool.connection() as conn:
@@ -116,8 +116,10 @@ async def test_a_rebuild_replaces_what_older_rules_kept(client):
     # one item backed by both, as before.
     assert [(m["statement"], m["status"], m["sources"]) for m in memories] == [
         (LATE_FEE, "active", ["fees"]), (HALF_UP, "active", ["rounding", "rounding-again"])]
-    # One digest per excerpt: each was replaced, not added to.
-    assert [d["episode_id"] for d in digests] == ["fees", "rounding", "rounding-again"]
+    # The excerpts did not change, so their digests are the ones written the first time: a rebuild
+    # asks the model for what memory keeps, not for every digest again.
+    assert digests == written
+    assert [s for s, _ in llm.calls].count(DIGEST_SYSTEM) == 3
 
 
 @pytest.mark.asyncio

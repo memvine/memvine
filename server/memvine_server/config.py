@@ -100,15 +100,16 @@ class Settings(BaseSettings):
     # needs from the closest candidates (recall.py: gate). Past the timeout, or with this off, recall
     # falls back to the similarity margin. The plugins' prompt hook gives recall 8 seconds in all.
     recall_gate: bool = True
-    # Conversation mode (recall.py): the share of a recall's budget that kept details may take; the
-    # source excerpts fill the rest. None by default: a briefing is the person's standing instructions
-    # and the original words. On 15 BEAM 100K conversations scored the published way (300 questions),
-    # a quarter scored 0.869 and none 0.878, because the kept details restate the conversation (half of
-    # them the assistant's own advice) and read as things the person did; with one passage per turn
-    # ranked by density (passages.py, relevant_passages) none scored 0.892, beside plain search at 0.889
-    # and the whole conversation in the prompt at 0.903. docs/plans/conversation-memory-plan.md says what
-    # kept details must become before they earn a share again.
-    recall_detail_fact_share: float = 0.0
+    # Conversation mode (recall.py): the share of a recall's budget that the person's profile may take,
+    # and how many of its lines at most; the source excerpts fill the rest. The profile is a few dozen
+    # lines (slots.py) and a question needs the few about its subject: the current value of what was
+    # asked, and a conflict on record. History, on 15 BEAM 100K conversations scored the published way
+    # (300 questions), when memory still kept every detail (about 800 lines a conversation, half of
+    # them the assistant's advice restated): a quarter of the budget for them scored 0.869, none 0.878,
+    # and none with one passage per turn ranked by density 0.892, beside plain search at 0.889 and the
+    # whole conversation in the prompt at 0.903. Those details are no longer served at any share.
+    recall_detail_fact_share: float = 0.12
+    recall_profile_lines: int = 10
     # ...and when the question asks for a summary: nearly all of it, because a summary needs many
     # separate points from across the conversation. Digests of the conversation (digests.py) come
     # first, up to their share of the budget, then details up to this one; excerpts get the rest.

@@ -48,9 +48,10 @@ async def process_episode(conn, llm: LLM, embedder: Embedder, project_id: UUID, 
         await delete_derived(conn, project_id, ep["id"])
     passages = await index_episode(conn, embedder, project_id, ep["id"])
     metadata = ep["metadata"] or {}
-    context = await boundary_context(conn, embedder, project_id, ep, metadata)
     project = await (await conn.execute("SELECT id, name, description, memory_instructions, memory_mode FROM projects WHERE id = %s",
                                         (project_id,))).fetchone()
+    # A conversation's extraction reads the whole profile of the person instead (synthesis.py, slots.py).
+    context = await boundary_context(conn, embedder, project_id, ep, metadata, related=project["memory_mode"] != "conversation")
     return {**await synthesize_episode(conn, llm, embedder, project, ep, context), "passages": passages}
 
 
@@ -68,9 +69,10 @@ PREVIOUS_CONTEXT_CHARS = 1_500
 RELATED_MEMORIES = 8
 
 
-async def boundary_context(conn, embedder: Embedder, project_id: UUID, ep, metadata: dict) -> str:
+async def boundary_context(conn, embedder: Embedder, project_id: UUID, ep, metadata: dict, *, related: bool = True) -> str:
     """What the extractor needs to interpret an episode without extracting it again: the end of
-    the conversation just before it (for a session range) and the memories it most resembles."""
+    the conversation just before it (for a session range) and, with `related`, the memories it most
+    resembles."""
     parts: list[str] = []
     session_id, from_seq = metadata.get("session_id"), metadata.get("from_seq")
     if session_id and isinstance(from_seq, int) and from_seq > 1:
@@ -89,14 +91,16 @@ async def boundary_context(conn, embedder: Embedder, project_id: UUID, ep, metad
                 break
         if tail:
             parts.append("Earlier in this conversation (already processed):\n" + "\n\n".join(reversed(tail)))
+    if not related:
+        return "\n\n".join(parts)
     vector = (await embedder.embed([ep["content"][:2000]]))[0]
-    related = await (await conn.execute(
+    rows = await (await conn.execute(
         "SELECT statement, recorded_at FROM memory_items WHERE project_id = %s AND audience = %s AND status = 'active' "
         "AND embedding IS NOT NULL ORDER BY embedding <=> %s::vector LIMIT %s",
         (project_id, ep["audience"], vector, RELATED_MEMORIES))).fetchall()
-    if related:
+    if rows:
         parts.append("What memory already knows (current values):\n" + "\n".join(
-            f"- {r['statement']} ({r['recorded_at'].date().isoformat()})" for r in related))
+            f"- {r['statement']} ({r['recorded_at'].date().isoformat()})" for r in rows))
     return "\n\n".join(parts)
 
 

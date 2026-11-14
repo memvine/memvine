@@ -57,6 +57,10 @@ person and an assistant, where today it is as good as plain search and no better
 
 - Stores the whole conversation and searches the original words by keyword and by meaning, one
   passage per turn.
+- Keeps a small profile of the person beside it: who they are, the people in their life, goals,
+  limits, preferences and decisions, each the value of a named slot. Only what the person said
+  counts, a changed value replaces the old one and keeps it as history, and two statements that
+  cannot both be true are kept together. A new item is written only for what it adds.
 - Applies the person's standing instructions ("always name the narrator") to every answer.
 - Answers "summarize how this went" from digests of the conversation, in order.
 
@@ -77,7 +81,7 @@ person and an assistant, where today it is as good as plain search and no better
 | --- | --- |
 | Memory check for coding mode: what is kept, dropped, updated and recalled, with a real model | 25 of 25 |
 | Agent test: Claude Code answering questions about a project | 9 of 9 right with Memvine, 0 of 9 without |
-| BEAM long-conversation benchmark, 100K tokens, scored the published way, 300 questions | Memvine 0.892, plain search 0.889, the whole conversation in the prompt 0.903 |
+| BEAM long-conversation benchmark, 100K tokens, scored the published way, 300 questions | Memvine 0.892 (before the person's profile was added), plain search 0.889, the whole conversation in the prompt 0.903 |
 | Smoke test on the hosted service, including Ask and conversation mode | 18 of 18 |
 
 ## What it cannot do
@@ -88,11 +92,12 @@ person and an assistant, where today it is as good as plain search and no better
   level with search, and both lose to simply putting the whole conversation in the prompt while
   that still fits.
 - **It costs model calls to take a conversation in.** Plain search needs only embeddings.
-- **Conversation mode does not yet know the person.** It does not build a profile of their tastes,
-  goals and people. An earlier version kept about 800 sentence-level details per conversation; they
-  are still stored but no longer served, because they misled answers.
-- **Changed values in a conversation are not tracked reliably.** Asked for "my budget", it can give
-  the old and the new figure side by side instead of the current one.
+- **The profile in conversation mode is new and barely measured.** On three BEAM conversations (60
+  questions) it scored 0.885 against 0.863 for plain search, a gap that could be chance. A profile
+  holds 50 to 100 items for a long conversation, and many still overlap. An earlier version kept
+  about 800 sentence-level details per conversation; those are no longer served.
+- **A changed value is tracked only when the model sees the change.** On the benchmark's questions
+  about updated values the profile is level with plain search, not ahead.
 - **It can serve a wrong memory.** Unreviewed memories are served; review is feedback, not a gate.
 - **Quality depends on the model.** Extraction and answers use Anthropic models (an API key, or a
   Claude subscription on a local machine). No other provider is supported.
@@ -101,7 +106,8 @@ person and an assistant, where today it is as good as plain search and no better
 ### Limits of the evidence
 
 - The BEAM result covers 15 of the benchmark's 20 conversations at 100K, with one run per system,
-  and the current recall was worked out on those same conversations. There is no result yet on
+  and the current recall was worked out on those same conversations. It was measured before the
+  profile was added: with the profile, only three conversations have been scored. There is no result yet on
   held-out conversations or at 500K and above scored the published way.
 - The coding-mode checks are built by the author. Nobody outside has yet used Memvine on real
   work for long enough to show it helps a team.
@@ -127,5 +133,5 @@ person and an assistant, where today it is as good as plain search and no better
   that are not in the repository. This is the part that is measured and works.
 - **People building assistants that talk to the same person over time,** who want a transcript they
   can search, standing instructions that are always applied, and answers that show their source.
-  The person-centred memory that would make Memvine better than search here is planned in
-  [conversation-memory-plan.md](plans/conversation-memory-plan.md) and not built.
+  The person-centred profile meant to make Memvine better than search here is built and still being
+  measured ([conversation-memory-plan.md](plans/conversation-memory-plan.md)).

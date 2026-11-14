@@ -35,7 +35,7 @@ export interface Project {
   reviewCount?: number;
   /** What this project's memory should and should not keep, added to extraction (≤1500 chars); null for none. */
   memoryInstructions?: string | null;
-  /** What the memory is for: "coding" keeps little (durable knowledge and work pages), "conversation" keeps every detail. */
+  /** What the memory is for: "coding" keeps little (durable knowledge and work pages), "conversation" keeps a small profile of the person beside the searchable conversation. */
   memoryMode?: MemoryMode;
   /** The project's own categories (at most five), besides the built-ins. */
   categories?: ProjectCategory[];
@@ -145,6 +145,8 @@ export interface MemoryItem {
   /** What sort of durable knowledge this is; null or absent for plain memory. */
   /** "project" knowledge concerns everyone; "thread" knowledge only matters inside its thread. */
   scope?: "project" | "thread" | null;
+  /** Conversation mode: the slot of the person's profile this is the value of, e.g. "constraint/monthly-book-budget". */
+  slot?: string | null;
   /** Past the end it stated (validTo) while still active or stale: recall no longer serves it as current. */
   expired?: boolean;
   /** When a recall briefing last served it, and how many times one has. */

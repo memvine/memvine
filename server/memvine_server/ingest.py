@@ -77,6 +77,8 @@ async def ingest_episode(conn, project_id: UUID, ep: EpisodeIn) -> IngestItemRes
     outcome = "queued"
     if existing:
         await delete_derived(conn, project_id, ep.id)
+        # Its digest was written from the old text; synthesis writes one only where there is none.
+        await conn.execute("DELETE FROM digests WHERE project_id = %s AND episode_id = %s AND level = 1", (project_id, ep.id))
         outcome = "replaced"
 
     await conn.execute(

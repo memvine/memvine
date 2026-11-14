@@ -9,7 +9,7 @@ const PLACEHOLDER = "Also keep: on-call runbook steps.\nNever keep: customer nam
 
 const MODES: { value: MemoryMode; title: string; text: string }[] = [
   { value: "coding", title: "Coding sessions", text: "Keeps little: decisions, rules, gotchas and a page per piece of work. Recall returns only what the task needs." },
-  { value: "conversation", title: "Conversations", text: "Keeps every detail a person says: facts, dates, numbers, plans, preferences. Recall returns the matching details with the original words." },
+  { value: "conversation", title: "Conversations", text: "Keeps a small profile of the person: who they are, their goals, decisions, preferences and what changed. The whole conversation stays searchable, and recall returns the profile lines a question needs with the original words." },
 ];
 
 /** What the current project's memory is for: decides how much is kept and how much recall returns. */

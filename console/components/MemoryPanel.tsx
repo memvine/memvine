@@ -47,6 +47,7 @@ export function MemoryFacts({ m, thread }: { m: MemoryItem; thread?: ThreadSumma
     <KeyValueList>
       <KeyValue label="Status"><StatusBadge status={m.status} /></KeyValue>
       {m.category && <KeyValue label="Category"><CategoryBadge category={m.category} /></KeyValue>}
+      {m.slot && <KeyValue label="Slot"><span className="font-mono text-[12px]">{m.slot}</span></KeyValue>}
       {m.why && <KeyValue label="Why">{m.why}</KeyValue>}
       {(thread || m.threadId) && (
         <KeyValue label="Thread">

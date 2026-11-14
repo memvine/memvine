@@ -110,6 +110,8 @@ class MemoryOut(BaseModel):
     thread_id: UUID | None = None
     # "project" (anyone in the project), "thread" (only beside its thread's page); None reads as project.
     scope: Literal["project", "thread"] | None = None
+    # Conversation mode: the slot of the person's profile this is the value of ("constraint/book-budget").
+    slot: str | None = None
     # Past valid_to while still active or stale: the item said when it stops being true and that moment
     # has passed. Recall no longer serves it as current; its status is unchanged.
     expired: bool = False

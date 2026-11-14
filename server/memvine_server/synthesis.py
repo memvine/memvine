@@ -11,52 +11,16 @@ import asyncio
 import logging
 from uuid import UUID
 
-from . import code, digests, events
+from . import code, digests, events, slots
 from .checkpoints import mark_processed
 from .embeddings import Embedder
-from .extraction.extract import extract_details, extract_knowledge
+from .extraction.extract import extract_knowledge, extract_profile
 from .extraction.llm import LLM
-from .reconcile import DETAIL_MIN_SIMILARITY, judge_batch, reconcile
+from .reconcile import reconcile
 from .review import has_forgotten, matches_forgotten
 from .threads import forget_episode, resolve_thread, update_threads
 
 log = logging.getLogger("memvine.synthesis")
-
-# Conversation mode reads ahead: while one episode is reconciled, the details of the next few queued
-# episodes of the project are already being extracted, since extraction reads the excerpt alone and is
-# the slow step of a long import. Kept in this process only; a restart just extracts again.
-AHEAD = 3
-_ahead: dict[tuple[UUID, str, int], asyncio.Task] = {}
-
-
-async def details_of(conn, llm: LLM, project, ep, profile: str, context: str, instructions: str | None):
-    """The episode's details: the extraction started ahead for it when there is one (made without
-    <context>), else extracted now. Either way the next queued episodes are started."""
-    project_id = project["id"]
-
-    def start(e, ctx: str = "") -> asyncio.Task:
-        return asyncio.create_task(extract_details(llm, label=e["label"] or e["id"], occurred_at=e["occurred_at"],
-                                                   content=e["content"], project=profile, context=ctx, instructions=instructions))
-
-    task = _ahead.pop((project_id, ep["id"], hash(ep["content"])), None)
-    for key in [k for k in _ahead if k[0] == project_id and k[1] == ep["id"]]:  # an older version of this episode
-        _ahead.pop(key).cancel()
-    queued = await (await conn.execute(
-        "SELECT e.id, e.content, e.occurred_at, e.label FROM jobs j JOIN episodes e ON e.project_id = j.project_id AND e.id = j.episode_id "
-        "WHERE j.project_id = %s AND j.kind = 'extract' AND j.status = 'queued' ORDER BY j.background, j.id LIMIT %s",
-        (project_id, AHEAD))).fetchall()
-    for e in queued:
-        key = (project_id, e["id"], hash(e["content"]))
-        if key not in _ahead and len(_ahead) < 50:
-            _ahead[key] = start(e)
-            _ahead[key].add_done_callback(lambda t: t.cancelled() or t.exception())  # read later, or never
-    if task is not None:
-        try:
-            return await task
-        except Exception as exc:  # noqa: BLE001 - extract it now instead, where a failure belongs to this job
-            log.info("extraction ahead failed (%s); extracting now", type(exc).__name__)
-    return await start(ep, context)
-
 
 def project_profile(project) -> str:
     """What extraction judges relevance against: the project's name and description."""
@@ -81,18 +45,26 @@ async def synthesize_episode(conn, llm: LLM, embedder: Embedder, project, ep, co
     await forget_episode(conn, project_id, ep["id"])
     profile = project_profile(project)
     written, thread_stats = [], {}
-    # Conversation mode (migration 0011): every concrete detail is kept and there are no pages, since
-    # a conversation is not a piece of work with a state.
-    details = project.get("memory_mode") == "conversation"
-    if details:
-        # The digest reads the excerpt alone, so it is written while the details are extracted.
-        digest = asyncio.create_task(digests.compose(llm, ep))
+    # Conversation mode (migrations 0011, 0013): memory is a small profile of the person, and there are
+    # no pages, since a conversation is not a piece of work with a state.
+    person = project.get("memory_mode") == "conversation"
+    if person:
+        # The digest reads the excerpt alone, so it is written while the profile is extracted. An excerpt
+        # that still has its digest has the text it had (ingest drops the digest of a changed one), so a
+        # rebuild of memory under new rules does not write every digest again.
+        has_digest = await (await conn.execute(
+            "SELECT 1 FROM digests WHERE project_id = %s AND episode_id = %s AND level = 1", (project_id, ep["id"]))).fetchone()
+        digest = None if has_digest else asyncio.create_task(digests.compose(llm, ep))
         try:
-            extraction = await details_of(conn, llm, project, ep, profile, context, instructions)
+            extraction = await extract_profile(llm, label=ep["label"] or ep["id"], occurred_at=ep["occurred_at"],
+                                               content=ep["content"], project=profile,
+                                               profile=await slots.profile(conn, project_id, ep["audience"], ep["occurred_at"]),
+                                               context=context, instructions=instructions)
         except BaseException:
-            digest.cancel()
+            if digest is not None:
+                digest.cancel()
             raise
-        if await digests.store(conn, embedder, project_id, ep, await digest):
+        if digest is not None and await digests.store(conn, embedder, project_id, ep, await digest):
             await digests.roll_up(conn, llm, embedder, project_id)
     else:
         # Pages are project-wide; an episode for a narrower audience feeds only audience-scoped knowledge.
@@ -109,17 +81,18 @@ async def synthesize_episode(conn, llm: LLM, embedder: Embedder, project, ep, co
     # A person forgot it once: never learn it again (review.py).
     forgotten = await has_forgotten(conn, project_id) and bool(extraction.items)
     vectors = await embedder.embed([c.statement for c in extraction.items]) if forgotten else []
-    # Conversation mode judges the whole excerpt against memory as it was before it (reconcile.judge_batch).
-    judged = await judge_batch(conn, llm, embedder, project_id, extraction.items, recorded_at=ep["occurred_at"],
-                               audience=ep["audience"], min_similarity=DETAIL_MIN_SIMILARITY) if details else None
     for i, cand in enumerate(extraction.items):
         if forgotten and (match := await matches_forgotten(conn, project_id, cand.statement, vectors[i])):
             dropped_forgotten += 1
             await events.record(conn, project_id, "refused", memory_id=match, actor=events.SYNTHESIS,
                                 detail={"reason": "forgotten"}, episode_id=ep["id"])
             continue
-        decision = await reconcile(conn, llm, embedder, project_id, cand, recorded_at=ep["occurred_at"], episode_id=ep["id"],
-                                   audience=ep["audience"], judgement=judged[i] if judged else None)
+        if person:  # the value of a slot of the profile, placed by lookup (slots.py)
+            decision = await slots.place(conn, llm, embedder, project_id, cand, recorded_at=ep["occurred_at"],
+                                         episode_id=ep["id"], audience=ep["audience"])
+        else:
+            decision = await reconcile(conn, llm, embedder, project_id, cand, recorded_at=ep["occurred_at"], episode_id=ep["id"],
+                                       audience=ep["audience"])
         relations[decision.relation] = relations.get(decision.relation, 0) + 1
         thread_id = await resolve_thread(conn, project_id, cand.thread_key, written)
         # Thread-scoped knowledge is shown only beside its page; without a page it is everyone's.

@@ -1,6 +1,6 @@
 # Plan: conversation memory that keeps little and knows the person
 
-Status: plan, 14 Nov 2026. Step 1 done (below); the rest not started. Coding mode is not touched by anything here.
+Status: 14 Nov 2026. Step 1 done; steps 2 and 3 built and tried on three conversations (both below); steps 4 to 6 not started. Coding mode is not touched by anything here.
 
 ## Why
 
@@ -148,6 +148,86 @@ Two things were found on the way:
 
 The pass mark was "no lower than plain search". It is met by one question, on the conversations the
 change was worked out on.
+
+## Steps 2 and 3, first trial (14 Nov 2026)
+
+Built: the keep rule (about the person, theirs, changes a later answer), slots, and conflicts kept
+as such (`CONVERSATION_SYSTEM`, `extract_profile`, `slots.py`, migration 0013). The "theirs" test is
+also checked without a model: an item's quote must come from one of the person's own turns. Recall
+serves at most ten profile lines, then the excerpts. Three stored conversations (13, 14, 15) were
+rebuilt on a copy of the benchmark database with `rebuild-memory` and scored the published way.
+
+What the stores hold, with no model involved:
+
+| | Before | After |
+| --- | ---: | ---: |
+| Memories per conversation | 795, 755, 660 | 100, 72, 69 |
+| Resting only on the assistant's words | about half | 0 |
+| With a near-twin (similarity 0.75 or more) | 88% | 53% |
+| Values replaced on their slot | | 19, 16, 16 |
+| Memories in a recorded conflict | | 6, 13, 9 |
+
+Scores on the 60 questions of those three conversations, one run per arm:
+
+| | Profile and excerpts | Excerpts only (step 1) | First version | Plain search | Full context |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Overall | 0.885 | 0.860 | 0.854 | 0.863 | 0.881 |
+| Contradiction resolution (6) | 0.854 | 0.771 | 0.792 | 0.729 | 0.729 |
+| Knowledge update (6) | 0.833 | 0.833 | 0.667 | 0.833 | 0.833 |
+| Multi-session reasoning (6) | 0.500 | 0.333 | 0.375 | 0.375 | 0.333 |
+| Information extraction (6) | 0.750 | 0.667 | 0.750 | 0.833 | 0.917 |
+| Temporal reasoning (6) | 0.917 | 1.000 | 1.000 | 0.958 | 1.000 |
+
+Paired bootstrap over the 60 questions: against step 1, +0.025 (95% interval -0.008 to +0.069);
+against plain search, +0.023 (-0.021 to +0.073). The direction is right and the sample is too small
+to claim it: one multi-session question going from 0 to 1 is 0.017 of the overall figure.
+
+Against the pass marks:
+
+| Check | Result |
+| --- | --- |
+| 60 or fewer memories per conversation | Not met: 69 to 100. One-off choices ("next series") and progress states make up the excess |
+| Under 5% restating the assistant | Met: none |
+| Knowledge update and contradiction resolution above plain search | Contradictions yes on six questions; knowledge update level |
+| Overall above plain search | Above, within noise |
+| Memory check for coding mode | 25 of 25 |
+
+The 60 in the first pass mark was an estimate from the friend test, not a measurement. A read of
+all 100 items of conversation 13 put a tidy profile at 55 to 60: about six exact repeats, and about
+forty items overlapping in clusters (thirteen "what to read next" choices, nine on print against
+audiobook, nine about one trilogy), eighteen statements ending in the request of the moment ("and
+wants a new series"), and nine of twelve plans already past.
+
+## Second trial: written only for what it adds (14 Nov 2026)
+
+Built after that read:
+
+- **The net-new check** (`slots.net_new`). An item about to get a slot of its own is compared with
+  the up to five lines it most resembles, by the fast model: covered (it only adds evidence to that
+  line), adds (it is folded into the line), or new. It can drop or fold, never replace a value, and
+  a folded line must keep every number of both.
+- **Keep rule:** one slot for a choice made again and again; the request of the moment left out;
+  a plan ends on the day it is for.
+
+The same three conversations rebuilt from an empty profile:
+
+| Conversation | First trial | Second trial |
+| --- | ---: | ---: |
+| 13 | 100 | 83 |
+| 14 | 72 | 63 |
+| 15 | 69 | 51 |
+
+About a fifth fewer, where the read suggested two fifths: 52 of conversation 13's 83 items still
+have a near-twin. This run was not scored, because it exposed a fault: the check folded a standing
+instruction ("always verify subtitle availability") into a goal, so it left the always-on section,
+and the extractor replaced one instruction with another about the same kind of question.
+Conversations 14 and 15 ended with four standing instructions where the first trial had five.
+Fixed since: instructions take no part in the check on either side, and the keep rule says two
+instructions about the same kind of question both stand.
+
+Next: rebuild the three once more with that fix and score them; then all fifteen tuning
+conversations, before touching the five held out. Open: the check is too cautious on clusters
+(running choices, format habits), which is the consolidation step's work.
 
 ## Order
 

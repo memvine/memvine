@@ -40,6 +40,10 @@ class Candidate:
     # When the item says it stops being true ("the scratch org expires on 28 Oct"): stored as valid_to,
     # and recall stops serving it as current after that moment.
     valid_until: datetime | None = None
+    # Conversation mode (profile_from): the slot of the person's profile this is the value of, and how
+    # the model says it relates to what the slot holds now (new, same, update, conflict).
+    slot: str | None = None
+    relation: str | None = None
 
 
 @dataclass
@@ -218,6 +222,8 @@ def candidates_from(raw, source: str, custom: frozenset[str] = frozenset(), *, c
                 why=why[:300] or None,
                 thread_key=thread_key[:200] or None,
                 scope=scope if scope in SCOPES else None,
+                slot=entry.get("slot") if isinstance(entry.get("slot"), str) else None,
+                relation=entry.get("relation") if isinstance(entry.get("relation"), str) else None,
             )
         )
     return result
@@ -326,40 +332,88 @@ async def extract_knowledge(llm: LLM, *, label: str, occurred_at: datetime, cont
 
 
 # ------------------------------------------------------------------ conversation mode
-# Details of a conversation (CONVERSATION_SYSTEM): the categories it may use and the memory kind each
-# is stored under. "event" and "plan" exist only here.
-DETAIL_KIND = {"fact": "semantic", "decision": "semantic", "preference": "preference", "rule": "procedural",
-               "event": "episodic", "plan": "prospective"}
+# The profile of a person (CONVERSATION_SYSTEM): each item is the value of a slot, "<type>/<name>". The
+# type decides the category it is shown under and the memory kind it is stored as. "event" and "plan"
+# exist only here.
+SLOT_TYPES = {
+    "identity": ("fact", "semantic"), "person": ("fact", "semantic"), "constraint": ("fact", "semantic"),
+    "state": ("fact", "semantic"), "goal": ("plan", "prospective"), "plan": ("plan", "prospective"),
+    "preference": ("preference", "preference"), "decision": ("decision", "semantic"),
+    "history": ("event", "episodic"), "instruction": ("rule", "procedural"),
+}
+RELATIONS = {"new", "same", "update", "conflict"}
+SLOT_CHARS = 80
+_SLOT_NAME = re.compile(r"[^a-z0-9]+")
+# A turn header as clients write it: "## user · 2024-03-12T09:00:00Z". A "## Heading" inside a reply
+# has no "·" and stays part of its turn.
+_TURN_HEAD = re.compile(r"(?m)^## (?=[^\n]*·)")
+NOT_THE_PERSON = {"assistant", "tool", "system"}
 
 
-def details_from(raw, source: str) -> ExtractionResult:
-    """Detail candidates: a known category and a verbatim quote. No gate: progress, states of the
-    moment and one-off values are exactly what a conversation's memory is asked about later. Dates
-    are the episode's own (valid_from, valid_until unset), so a plan for next month is on record from
-    the day it was said and never expires by itself."""
+def slot_key(value) -> str | None:
+    """"Constraint / Monthly book budget" -> "constraint/monthly-book-budget"; None when the type is
+    not one of SLOT_TYPES or there is no name."""
+    kind, _, name = str(value or "").strip().lower().partition("/")
+    name = _SLOT_NAME.sub("-", name).strip("-")
+    if kind.strip() not in SLOT_TYPES or not name:
+        return None
+    return f"{kind.strip()}/{name}"[:SLOT_CHARS].rstrip("-")
+
+
+def person_turns(source: str) -> str | None:
+    """The turns of `source` that are not the assistant's, a tool's or the system's. None when the
+    text has no turn headers: then nothing says who spoke."""
+    turns = _TURN_HEAD.split(source)[1:]
+    if not turns:
+        return None
+    return "\n".join(t for t in turns if t.split("·", 1)[0].strip().lower() not in NOT_THE_PERSON)
+
+
+def profile_from(raw, source: str, occurred_at: datetime | None = None) -> ExtractionResult:
+    """Profile candidates: a slot of a known type, and a verbatim quote from one of the person's own
+    turns. The second is the keep rule's "theirs" test, checked without a model: an item whose only
+    source is what the assistant said is refused (counted in dropped_gate). An item is on record from
+    the day it was said (valid_from unset). Only a plan ends: on the day it is for ("until"), after
+    which it is no longer current; a day already past when it was said (`occurred_at`) is ignored.
+    Completion claims are not downgraded: "the user says all tests pass" is the person's word here,
+    not an agent's report on itself."""
     data = parse_json(raw) if isinstance(raw, str) else raw
     if isinstance(data, dict) and isinstance(data.get("items"), list):
         data = data["items"]
     if not isinstance(data, list):
-        raise ValueError("details output is not a list")
-    kept, invalid = [], 0
+        raise ValueError("profile output is not a list")
+    theirs = person_turns(source)
+    kept, invalid, refused = [], 0, 0
     for entry in data:
-        category = str(entry.get("category") or "").strip().lower() if isinstance(entry, dict) else ""
-        if category not in DETAIL_KIND:
+        slot = slot_key(entry.get("slot")) if isinstance(entry, dict) else None
+        if slot is None:
             invalid += 1
             continue
-        kept.append({**entry, "category": category, "kind": DETAIL_KIND[category], "assertion": "stated",
-                     "valid_from": None, "valid_until": None, "thread_key": None, "scope": "project"})
-    result = candidates_from(kept, source, frozenset(DETAIL_KIND), claims=False)
+        quote = str(entry.get("quote", ""))
+        if theirs is not None and quote_in_source(quote, source) and not quote_in_source(quote, theirs):
+            refused += 1
+            continue
+        category, kind = SLOT_TYPES[slot.split("/")[0]]
+        relation = str(entry.get("relation") or "new").strip().lower()
+        until = entry.get("until") if slot.startswith("plan/") else None
+        if until and occurred_at is not None and (end_date(until, None) or occurred_at) <= occurred_at:
+            until = None
+        kept.append({**entry, "slot": slot, "relation": relation if relation in RELATIONS else "new",
+                     "category": category, "kind": kind, "assertion": "stated", "standing": category == "rule",
+                     "valid_from": None, "valid_until": until, "thread_key": None, "scope": "project"})
+    result = candidates_from(kept, source, frozenset(c for c, _ in SLOT_TYPES.values()), claims=False)
     result.raw = raw if isinstance(raw, str) else ""
     result.dropped_invalid += invalid
+    result.dropped_gate = refused
     return result
 
 
-async def extract_details(llm: LLM, *, label: str, occurred_at: datetime, content: str, project: str,
-                          context: str = "", instructions: str | None = None) -> ExtractionResult:
-    """Every concrete detail in `content`, for a project in conversation mode."""
+async def extract_profile(llm: LLM, *, label: str, occurred_at: datetime, content: str, project: str,
+                          profile: list[tuple[str, str, str]] | None = None, context: str = "",
+                          instructions: str | None = None) -> ExtractionResult:
+    """What `content` adds to the profile of the person, for a project in conversation mode.
+    `profile`: what memory holds now, as (slot, statement, the day it was said)."""
     raw = await llm.complete(CONVERSATION_SYSTEM, conversation_user(label, occurred_at.isoformat(), content, project, context,
-                                                                    instructions=instructions),
-                             max_tokens=16000)
-    return details_from(raw, content)
+                                                                    instructions=instructions, profile=profile),
+                             max_tokens=4096)
+    return profile_from(raw, content, occurred_at)

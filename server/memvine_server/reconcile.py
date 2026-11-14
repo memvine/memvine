@@ -8,7 +8,6 @@ makes the call except for near-identical statements, which need no model.
 """
 from __future__ import annotations
 
-import asyncio
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -30,10 +29,6 @@ MIN_SIMILARITY = 0.45
 # this similar is a candidate even without a shared subject: on BGE-small, restatements and changed
 # values of one fact score about 0.9, different facts about one project 0.6-0.7.
 SIMILAR_WITHOUT_SUBJECT = 0.8
-# Conversation mode keeps many details about the same few subjects, so the loose floor would send
-# nearly every one to the model. A restatement or a changed value scores about 0.9, so only those are
-# judged; the rest are different facts, kept as they are, and recall shows them side by side.
-DETAIL_MIN_SIMILARITY = 0.8
 IDENTICAL_SIMILARITY = 0.97
 # A reworded restatement of one fact (same category, same numbers and dates) this close is the same
 # item without asking the model: the existing wording stays and the restatement adds evidence, so
@@ -131,57 +126,14 @@ async def _classify(llm: LLM, cand: Candidate, new_date: datetime, related: list
     return relation, related[match - 1]
 
 
-# In conversation mode an update needs the new detail to say so. The details of a long conversation
-# repeat one subject in many versions (each code listing has its own login route, each plan its own
-# dates), and on a first benchmark conversation most "updates" the model found were two true details,
-# one of which then vanished from recall. The detail prompt writes a changed value as a change ("moved
-# the deadline from 15 Mar to 1 Apr"), so a real update carries one of these words.
-_ANNOUNCES_CHANGE = re.compile(
-    r"\b(now|no longer|anymore|instead|moved|mov(?:es|ing)|switch\w*|chang\w*|replac\w*|renam\w*|upgrad\w*|downgrad\w*|migrat\w*"
-    r"|postpon\w*|reschedul\w*|extend(?:ed|s|ing)|increas\w*|decreas\w*|rais(?:ed|es|ing)|lower(?:ed|s|ing)|reduc\w*|correct(?:ed|s|ion)"
-    r"|revis\w*|pushed|brought forward|dropped|cancel\w*)\b", re.IGNORECASE)
-
-
-def announces_change(statement: str) -> bool:
-    return bool(_ANNOUNCES_CHANGE.search(statement))
-
-
 @dataclass
 class Judgement:
-    """How a candidate relates to memory, decided before it is stored (judge_batch)."""
+    """How a candidate relates to memory, decided before it is stored: slots.place decides it by the
+    candidate's slot, with no model."""
     embedding: list[float]
     related: list
     relation: str
     old: dict | None
-
-
-async def judge_batch(conn, llm: LLM, embedder: Embedder, project_id: UUID, cands: list[Candidate], *,
-                      recorded_at: datetime, audience: str = "project",
-                      min_similarity: float = MIN_SIMILARITY) -> list[Judgement]:
-    """Judge every candidate of one episode against what memory held before the episode, the model
-    calls side by side. Conversation mode uses it: an excerpt there gives ten or more details about
-    the same subject, and judged one after another each would be compared with its own neighbours
-    (and "the assistant's schedule for November" taken for an update of "the user's plan for
-    November"). An update stands only when the candidate announces a change (announces_change), and
-    one existing item is replaced by at most one candidate; anything else is kept beside it."""
-    if not cands:
-        return []
-    vectors = await embedder.embed([c.statement for c in cands])
-    related = [await _related(conn, project_id, c, v, audience, min_similarity) for c, v in zip(cands, vectors, strict=True)]
-
-    async def one(cand: Candidate, rel: list) -> tuple[str, dict | None]:
-        return await _classify(llm, cand, recorded_at, rel, update_floor=update_floor(embedder)) if rel else ("different", None)
-
-    verdicts = await asyncio.gather(*(one(c, r) for c, r in zip(cands, related, strict=True)))
-    out, replaced = [], set()
-    for cand, vector, rel, (relation, old) in zip(cands, vectors, related, verdicts, strict=True):
-        if relation == "update" and old is not None:
-            if old["id"] in replaced or not announces_change(cand.statement):
-                relation, old = "different", None
-            else:
-                replaced.add(old["id"])
-        out.append(Judgement(vector, rel, relation, old))
-    return out
 
 
 async def reconcile(conn, llm: LLM, embedder: Embedder, project_id: UUID, cand: Candidate, *,

@@ -18,7 +18,7 @@ TOPICS = ["invoice numbering", "late fee rules", "currency rounding", "tax codes
 
 
 class Model:
-    """Details for the extraction prompt, a digest for an excerpt, a roll-up for digests."""
+    """A profile item for the extraction prompt, a digest for an excerpt, a roll-up for digests."""
 
     def __init__(self):
         self.calls: list[tuple[str, str]] = []
@@ -31,8 +31,9 @@ class Model:
             return f"The user worked on {topics[0]} for the Northwind billing service and the assistant recommended a fix."
         if system == ROLLUP_SYSTEM:
             return "The user worked through " + ", ".join(topics) + " for the Northwind billing service."
-        return json.dumps([{"statement": f"The user worked on {topics[0]} for Northwind billing.", "category": "event",
-                            "subjects": ["billing"], "confidence": "high", "standing": False, "quote": f"working on {topics[0]}"}])
+        return json.dumps([{"slot": "state/current-work", "statement": f"The user is working on {topics[0]} for Northwind billing.",
+                            "relation": "update", "subjects": ["billing"], "confidence": "high", "standing": False,
+                            "quote": f"working on {topics[0]}"}])
 
 
 def tokens_of(text: str) -> int:
@@ -87,7 +88,25 @@ async def test_a_summary_question_reads_the_digests_in_order(client):
     r = (await client.post("/v1/recall", json={"query": "What did I do about late fee rules?"})).json()
     assert r["digests"] == [] and "digests of its excerpts" not in r["briefing"]
 
-    # An excerpt synthesized again gets a new digest; the roll-up that repeated the old one is gone,
+    # An excerpt sent again with other words gets a digest of the new words. Synthesized again with the
+    # words it had (a rebuild of memory), it keeps its digest: the model is not asked.
+    from memvine_server.rebuild import rebuild_memory
+
+    def digests_written() -> int:
+        return [s for s, _ in llm.calls].count(DIGEST_SYSTEM)
+
+    assert digests_written() == 5
+    resent = {**items[2], "content": items[2]["content"] + " The late fee rules came up again."}
+    assert (await client.post("/v1/ingest", json={"items": [resent]})).json()["items"][0]["outcome"] == "replaced"
+    await drain(app.state.pool, llm, app.state.embedder, project_id)
+    async with app.state.pool.connection() as conn:
+        row = await (await conn.execute("SELECT content FROM digests WHERE project_id = %s AND episode_id = 'ep2'", (project_id,))).fetchone()
+        assert digests_written() == 6 and "late fee rules" in row["content"]
+        assert (await rebuild_memory(conn, project_id)).queued == 5
+    await drain(app.state.pool, llm, app.state.embedder, project_id)
+    assert digests_written() == 6
+
+    # A digest stored again replaces the old one; the roll-up that repeated the old one is gone,
     # and the four are rolled up again.
     async with app.state.pool.connection() as conn:
         ep = await (await conn.execute("SELECT id, content, occurred_at, audience FROM episodes WHERE project_id = %s AND id = 'ep1'",
