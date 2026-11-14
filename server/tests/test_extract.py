@@ -102,6 +102,7 @@ def test_split_passages_packs_turns_and_splits_long_ones():
     assert len(pieces) > 5 and all(len(p) <= 520 for p in pieces)
     assert pieces[0].startswith("## Craig · t1") and pieces[1].startswith("## Craig · t1 (cont.)")
     assert split_passages("plain text without headers") == ["plain text without headers"]
+    assert split_passages(short, pack=False) == ["## Craig · t1\nHello.", "## Assistant · t2\nHi there."], "one passage per turn"
 
 
 def test_standing_rules_are_flagged():

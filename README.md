@@ -16,19 +16,21 @@ Two checks, both in this repository and both runnable:
 - **Team coding memory (keep little).** The memory check (`benchmark/memory/check.py`) runs real
   model calls over cases of what must be kept, dropped and recalled: 25 of 25. In its agent test,
   Claude Code answered 9 of 9 questions right with Memvine's memory and 0 of 9 without.
-- **Conversation memory (keep every detail).** On the [BEAM](benchmark/beam/README.md) long-term
-  memory benchmark, a local reading against plain search over the same conversations:
+- **Conversation memory.** On the [BEAM](benchmark/beam/README.md) long-term memory benchmark at
+  100K tokens, scored the published way on 15 of its 20 conversations (300 questions):
 
-  | Conversations | Questions | Memvine | Plain search |
-  | --- | ---: | ---: | ---: |
-  | 100K tokens, three | 60 | 0.894 | 0.869 |
-  | 500K tokens, three | 60 | 0.789 | 0.806 |
+  | | Score |
+  | --- | ---: |
+  | The whole conversation in the prompt | 0.903 |
+  | Memvine | 0.892 |
+  | Plain search over the raw turns | 0.889 |
 
-  Memvine is ahead on summaries at both sizes (0.88 against 0.57 at 100K, 0.75 against 0.63 at
-  500K) and level elsewhere; overall at 500K the two are level. These were answered and graded by Claude Sonnet on a few conversations, so they compare
-  the two with each other and are **not comparable with published BEAM scores**. A run scored the
-  published way is still to come. Memvine also costs far more to ingest: 25 to 60 minutes of model
-  calls per 100K conversation, where plain search needs only embeddings.
+  Memvine is level with plain search, not ahead of it, and at this size the whole conversation
+  still fits in a prompt. Its first version, which kept every detail as a memory, scored 0.869:
+  the kept details restated the conversation and misled the answers. What it does now, why, and
+  what conversation memory should become is in
+  [the plan](docs/plans/conversation-memory-plan.md). Ingesting a conversation into Memvine still
+  costs model calls that plain search does not need.
 
 ## Ten lines
 

@@ -50,7 +50,7 @@ def test_details_keep_what_the_knowledge_gate_refuses():
 
 @needs_db
 @pytest.mark.asyncio
-async def test_a_conversation_project_keeps_details_and_recalls_wide(client):
+async def test_a_conversation_project_keeps_details_and_recalls_wide(client, monkeypatch):
     from memvine_server.main import app
     from memvine_server.worker import drain
 
@@ -84,10 +84,17 @@ async def test_a_conversation_project_keeps_details_and_recalls_wide(client):
     r = (await client.post("/v1/recall", json={"query": "When does my first sprint end?"})).json()
     assert not r["abstained"] and not r["picked_by_model"]
     assert RELEVANCE_SYSTEM not in [s for s, _ in llm.calls], "no model pick in conversation mode"
-    assert any("29 Mar 2024" in i["memory"]["statement"] for i in r["items"])
-    # The source excerpt comes back without being asked for.
+    # By default the briefing is the original words: the kept details take no share of it (config.py).
+    assert r["items"] == []
     assert r["passages"] and "ends on March 29" in r["passages"][0]["content"]
     assert "--- source excerpts (the original words) ---" in r["briefing"]
+
+    # Given a share, the details are served beside the excerpts.
+    from memvine_server.config import settings
+    monkeypatch.setattr(settings, "recall_detail_fact_share", 0.25)
+    r = (await client.post("/v1/recall", json={"query": "When does my first sprint end?"})).json()
+    assert any("29 Mar 2024" in i["memory"]["statement"] for i in r["items"])
+    assert r["passages"] and "ends on March 29" in r["passages"][0]["content"]
 
     # With a reranker, its order of the candidates decides which detail leads (rerank.py).
     from memvine_server import rerank

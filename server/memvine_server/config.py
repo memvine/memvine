@@ -101,10 +101,14 @@ class Settings(BaseSettings):
     # falls back to the similarity margin. The plugins' prompt hook gives recall 8 seconds in all.
     recall_gate: bool = True
     # Conversation mode (recall.py): the share of a recall's budget that kept details may take; the
-    # source excerpts fill the rest. On a first BEAM conversation (20 questions, Claude Sonnet answering
-    # and judging) a half scored 0.77, a quarter 0.85 and none 0.86: the original words answer better
-    # than many derived lines, which mostly earn their place by saying what changed and what conflicts.
-    recall_detail_fact_share: float = 0.25
+    # source excerpts fill the rest. None by default: a briefing is the person's standing instructions
+    # and the original words. On 15 BEAM 100K conversations scored the published way (300 questions),
+    # a quarter scored 0.869 and none 0.878, because the kept details restate the conversation (half of
+    # them the assistant's own advice) and read as things the person did; with one passage per turn
+    # ranked by density (passages.py, relevant_passages) none scored 0.892, beside plain search at 0.889
+    # and the whole conversation in the prompt at 0.903. docs/plans/conversation-memory-plan.md says what
+    # kept details must become before they earn a share again.
+    recall_detail_fact_share: float = 0.0
     # ...and when the question asks for a summary: nearly all of it, because a summary needs many
     # separate points from across the conversation. Digests of the conversation (digests.py) come
     # first, up to their share of the budget, then details up to this one; excerpts get the rest.

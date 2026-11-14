@@ -269,7 +269,7 @@ rule turns round:
 | Thread pages | One per piece of work | None |
 | Progress and states of the moment | Refused | Kept (`event`, `plan`, `fact`) |
 | Updates and contradictions | Reconciled | Judged only between near restatements, against memory as it was before the excerpt; one detail replaces another only when it says something changed ("moved", "now", "switched") |
-| Recall | What the task needs: the fast model picks, and abstains when nothing applies | Wide: the candidate details are put in order by a local reranking model that reads each one with the question (`MEMVINE_RECALL_RERANK_MODEL`), the best fill a quarter of the budget (`MEMVINE_RECALL_DETAIL_FACT_SHARE`), then source excerpts: the ones those details came from and the closest others. A question asking for a summary is answered from digests instead (below) |
+| Recall | What the task needs: the fast model picks, and abstains when nothing applies | Wide, and from the original words: the standing instructions, then source excerpts found by keyword and by meaning, one passage per turn, so the person's own short turns are not buried in the assistant's long ones. The kept details take no share of the briefing by default (`MEMVINE_RECALL_DETAIL_FACT_SHARE`, 0): on BEAM they restated the conversation and misled the answer. Given a share, they are put in order by a local reranking model (`MEMVINE_RECALL_RERANK_MODEL`) and served first. A question asking for a summary is answered from digests instead (below) |
 | Recency | Facts and gotchas fade | Nothing fades |
 | Consolidation's bar check | Flags what fails the three tests | Skipped |
 

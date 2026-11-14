@@ -55,6 +55,7 @@ PENDING_BUDGET_SHARE = 0.10
 PENDING_WINDOW_HOURS = 24
 PENDING_CHARS = 600  # a pending message is cut to this many characters
 PASSAGE_CANDIDATES = 40
+WIDE_PASSAGE_CANDIDATES = 60  # conversation mode: one passage per turn, so more of them fit the budget
 PASSAGE_MIN_SIMILARITY = 0.35
 # A briefing carries what the question needs: for a question that is not broad, an item is kept only
 # when its relevance is within this margin of the best item's (BGE-small on real data: the answer
@@ -982,16 +983,22 @@ async def relevant_passages(conn, project_id: UUID, req: RecallRequest, embeddin
                 if key not in evidence_keys:
                     evidence_keys.append(key)
 
+    candidates = WIDE_PASSAGE_CANDIDATES if wide else PASSAGE_CANDIDATES
     by_vector = await (await conn.execute(
         f"SELECT episode_id, ord, content, occurred_at, 1 - (embedding <=> %s::vector) AS similarity FROM passages "
         f"WHERE {where} AND embedding IS NOT NULL ORDER BY embedding <=> %s::vector LIMIT %s",
-        [embedding, *params, embedding, PASSAGE_CANDIDATES])).fetchall()
+        [embedding, *params, embedding, candidates])).fetchall()
     or_query = "replace(plainto_tsquery('english', %s)::text, '&', '|')::tsquery"
+    # Conversation mode ranks keyword hits by density (ts_rank's normalization 2, by passage length).
+    # Unnormalized, the longest passages win, and in a conversation those are the assistant's: the
+    # person's own short turn that holds the answer ranked 21st to nowhere in the first 60 on four
+    # checked questions, and 3rd on three of them once length was taken into account.
+    rank = f"ts_rank(tsv, {or_query}, 2)" if wide else f"ts_rank(tsv, {or_query})"
     by_words = await (await conn.execute(
         f"SELECT episode_id, ord, content, occurred_at, {similarity} FROM passages "
         f"WHERE {where} AND plainto_tsquery('english', %s)::text <> '' AND tsv @@ {or_query} "
-        f"ORDER BY ts_rank(tsv, {or_query}) DESC LIMIT %s",
-        [embedding, *params, req.query, req.query, req.query, PASSAGE_CANDIDATES])).fetchall()
+        f"ORDER BY {rank} DESC LIMIT %s",
+        [embedding, *params, req.query, req.query, req.query, candidates])).fetchall()
 
     scores: dict[tuple[str, int], float] = {}
     relevance: dict[tuple[str, int], float] = {}

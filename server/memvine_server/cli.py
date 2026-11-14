@@ -175,6 +175,28 @@ def backfill_passages(project: str = typer.Option("", help="a project slug; all 
 
 
 @app.command()
+def reindex_passages(project: str = typer.Argument(..., help="a project slug")):
+    """Cut a project's stored episodes into passages again and embed them (embeddings only, no LLM).
+    For a project whose passages were cut by an older rule, such as before conversation mode kept
+    one passage per turn."""
+    from .embeddings import make_embedder
+    from .passages import index_episode
+
+    async def go(conn):
+        embedder = make_embedder()
+        rows = await (await conn.execute(
+            "SELECT e.project_id, e.id FROM episodes e JOIN projects p ON p.id = e.project_id WHERE p.slug = %s ORDER BY e.occurred_at",
+            (project,))).fetchall()
+        total = 0
+        for r in rows:
+            total += await index_episode(conn, embedder, r["project_id"], r["id"])
+        return len(rows), total
+
+    episodes, passages = _run(_with_pool(go))
+    typer.echo(f"{project}: {passages} passages from {episodes} episodes")
+
+
+@app.command()
 def backfill_digests(project: str = typer.Argument(..., help="the slug of a conversation-mode project"),
                      at_once: int = typer.Option(4, help="model calls in flight")):
     """Write the digests a conversation-mode project lacks (one fast-model call per excerpt)."""

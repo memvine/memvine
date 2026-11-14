@@ -91,6 +91,48 @@ First reading (2026-10-25, 100K, conversations 1-3, 8,000-token budget for rag):
 | **overall** | **0.781** | **0.919** |
 | mean evidence tokens | 7,801 | 121,146 |
 
+## Scored the published way (2026-11-14): 100K, 15 of 20 conversations
+
+Answer and judge model `openai/gpt-5.6-luna` through OpenRouter, the ExaBase prompts and scoring
+unchanged, 8,000-token budget for the two retrieval arms. Plain search and full context were run on
+all 20 conversations; Memvine has ingested 15, so every column below is over the same 300 questions.
+
+| Category | Full context | Plain search (`rag`) | Memvine, first version | Memvine now |
+| --- | ---: | ---: | ---: | ---: |
+| abstention | 0.967 | 0.967 | 0.900 | 1.000 |
+| contradiction_resolution | 0.721 | 0.708 | 0.733 | 0.704 |
+| event_ordering | 1.000 | 1.000 | 1.000 | 1.000 |
+| information_extraction | 0.950 | 0.889 | 0.847 | 0.844 |
+| instruction_following | 0.983 | 0.967 | 0.942 | 0.983 |
+| knowledge_update | 0.833 | 0.833 | 0.733 | 0.858 |
+| multi_session_reasoning | 0.610 | 0.586 | 0.566 | 0.586 |
+| preference_following | 1.000 | 1.000 | 1.000 | 0.983 |
+| summarization | 1.000 | 0.985 | 0.998 | 0.992 |
+| temporal_reasoning | 0.967 | 0.950 | 0.967 | 0.967 |
+| **overall** | **0.903** | **0.889** | **0.869** | **0.892** |
+
+Over all 20 conversations (400 questions) full context scores 0.915 and plain search 0.899.
+
+What it shows, and its limits:
+
+- **Memvine is level with plain search** (one question in 300 apart) and behind the whole
+  conversation in the prompt, which at 100K still fits. It is not ahead.
+- **The first version lost to plain search** because it served kept details beside the excerpts.
+  About 800 details were kept per conversation, half of them the assistant's own advice restated,
+  and they read as things the person had said or done.
+- **"Memvine now"** serves the standing instructions and the original words only: one passage per
+  turn, keyword hits ranked by density, no kept details (`MEMVINE_RECALL_DETAIL_FACT_SHARE=0`, the
+  default). The stored conversations were re-cut with `memvine-server reindex-passages`; nothing
+  was ingested again.
+- **That change was worked out on these same 15 conversations**, so its score is not a held-out
+  result. The five conversations not yet ingested, and the 500K split, are the fair test.
+- One run per arm. Ingesting 15 conversations took about a day of model calls on a subscription;
+  plain search needs only embeddings. The scoring cost about $19 on OpenRouter for all arms.
+
+The local reading below was graded by Claude Sonnet, which is stricter on summaries: there
+Memvine's digests were ahead (0.88 against 0.57), and under the published grader every arm scores
+about 1.0 on summaries.
+
 ## A local reading (2026-11-12): not a published result
 
 100K, conversations 1-3 (60 questions), 8,000-token budget, both arms answered and judged by Claude
