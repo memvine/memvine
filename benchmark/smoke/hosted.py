@@ -286,6 +286,16 @@ def project_flow(api: str, http: Http, run: Run, mkey: str, args) -> None:
         need(s["statement"] in body.get("briefing", ""), f"the rule is not in the briefing: {short(body.get('briefing'))}")
         return f"rule in the briefing (relevance {body.get('top_relevance')}, {body.get('tokens')} tokens)"
 
+    def ask_related():
+        need(s.get("statement"), "no memory to ask about (the ingest step failed)")
+        status, body, _ = http.call("POST", f"{api}/v1/ask", token=pkey(), label="POST /v1/ask", synthesis=True,
+                                    timeout=args.synthesis_timeout, body={"query": RELATED_QUESTION})
+        need(status == 200 and isinstance(body, dict) and "recall" in body, f"HTTP {status}: {short(body)}")
+        need(body.get("answered") is True and (body.get("answer") or "").strip(),
+             f"no answer ({body.get('reason')}); the recall behind it: {short(body['recall'].get('briefing'))}")
+        need(s["statement"] in body["recall"].get("briefing", ""), "the answer's recall does not carry the rule")
+        return f"answered from the rule: {short(body['answer'], 110)!r}"
+
     def recall_unrelated():
         # Abstaining on an empty project proves nothing: this needs the rule in memory to pass over.
         need(s.get("memory"), "no memory to abstain over (the ingest step failed)")
@@ -336,6 +346,7 @@ def project_flow(api: str, http: Http, run: Run, mkey: str, args) -> None:
                 if run.step("instant ingest: the rule becomes memory, the progress does not", ingest_instant):
                     run.step("memory holds only the rule", memories_listing)
                 run.step("recall a related question: rule in the briefing", recall_related)
+                run.step("ask the related question: the model answers from memory", ask_related)
                 run.step("recall an unrelated question: abstains", recall_unrelated)
                 run.step("forget the memory: recall no longer serves it", forget)
             run.step("synthesis health for the project", synthesis_health)

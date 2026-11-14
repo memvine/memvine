@@ -67,7 +67,7 @@ Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local
 - Examples in code, tests and docs use the invented "Northwind" billing world. Never put real
   company, customer or employer details in the repo.
 
-## Status (12 Nov 2026)
+## Status (14 Nov 2026)
 
 Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next/later.
 
@@ -78,7 +78,7 @@ Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next
   service. The laptop server is retired.
   After each deploy: `MEMVINE_SMOKE_KEY=mv_mk_... python3 benchmark/smoke/hosted.py --api <url> --console <url>`
   (throwaway project, deleted at the end; `--no-synthesis` skips the real model; `--conversation`
-  adds conversation mode). Last run 12 Nov: 17/17.
+  adds conversation mode). Last run 14 Nov: 18/18.
 - The server image installs `server/requirements.lock`; rebuild it after changing `pyproject.toml`
   (`server/README.md`, Docker).
 - Backups: the `backup` cron service dumps the database nightly to the bucket `the backup bucket`
