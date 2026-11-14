@@ -20,6 +20,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from . import access, accounts, audit, billing, mcp_app
+from . import ask as ask_ops
 from . import code as code_ops
 from . import consolidation as consolidation_ops
 from . import edges as edge_ops
@@ -52,6 +53,7 @@ from .extraction.llm import LLMError, make_llm
 from .models import (
     BUILTIN_CATEGORIES,
     MAX_PROJECT_CATEGORIES,
+    AskResponse,
     CodeCheck,
     EventFeed,
     GraphOut,
@@ -245,20 +247,42 @@ async def ingest(body: IngestRequest, request: Request, response: Response, prin
 @app.post("/v1/recall", response_model=RecallResponse)
 async def recall(body: RecallRequest, request: Request, principal: Principal = Depends(require_project)):
     async with request.app.state.pool.connection() as conn:
-        audiences = await access.readable_audiences(conn, principal.project_id, body.identity, principal.key_id is None)
-        profile_text, profile_tokens = "", 0
-        if body.profiles:  # a session-start brief: who the caller is and what the project is, first
-            profile_text, profile_tokens = await profile_ops.brief_sections(conn, principal.project_id, body.identity)
-            budget = min(body.budget or settings.recall_default_budget, settings.recall_max_budget)
-            body = body.model_copy(update={"budget": max(100, budget - profile_tokens)})
-        # The console's playground (no project key) is a person looking, not an agent using memory.
-        result = await run_recall(conn, request.app.state.embedder, principal.project_id, body, audiences,
-                                  track=principal.key_id is not None, llm=request.app.state.llm)
-        result.profiles, result.profile_tokens = profile_text, profile_tokens
-        request.state.log_detail = recall_log_detail(result)
-        if principal.key_id is not None:  # the console's playground is not billed
-            await billing.charge_recall(conn, principal.project_id)
-        return result
+        return await serve_recall(conn, body, request, principal)
+
+
+async def serve_recall(conn, body: RecallRequest, request: Request, principal: Principal) -> RecallResponse:
+    """One recall as POST /v1/recall and POST /v1/ask both run it: what this caller may read, the
+    profiles of a session-start brief, the line for the Requests log, and the charge."""
+    audiences = await access.readable_audiences(conn, principal.project_id, body.identity, principal.key_id is None)
+    profile_text, profile_tokens = "", 0
+    if body.profiles:  # a session-start brief: who the caller is and what the project is, first
+        profile_text, profile_tokens = await profile_ops.brief_sections(conn, principal.project_id, body.identity)
+        budget = min(body.budget or settings.recall_default_budget, settings.recall_max_budget)
+        body = body.model_copy(update={"budget": max(100, budget - profile_tokens)})
+    # The console's playground (no project key) is a person looking, not an agent using memory.
+    result = await run_recall(conn, request.app.state.embedder, principal.project_id, body, audiences,
+                              track=principal.key_id is not None, llm=getattr(request.app.state, "llm", None))
+    result.profiles, result.profile_tokens = profile_text, profile_tokens
+    request.state.log_detail = recall_log_detail(result)
+    if principal.key_id is not None:  # the console's playground is not billed
+        await billing.charge_recall(conn, principal.project_id)
+    return result
+
+
+@app.post("/v1/ask", response_model=AskResponse)
+async def ask(body: RecallRequest, request: Request, principal: Principal = Depends(require_project)):
+    """A recall, then the main model's answer to the question, written only from what the recall
+    returned (ask.py). Takes what POST /v1/recall takes and is recorded and charged as that one
+    recall: the answer adds no charge. It never fails because the model does: the recall comes back
+    with `answered: false` and the reason."""
+    async with request.app.state.pool.connection() as conn:
+        result = await serve_recall(conn, body, request, principal)
+    # The connection is back in the pool: the model may take ask_timeout seconds, and the recall's
+    # tracking and charge are committed whatever the model does.
+    response = await ask_ops.answer(getattr(request.app.state, "llm", None), body.query, result, as_of=body.as_of)
+    outcome = "answered" if response.answered else f"no answer: {response.reason}"
+    request.state.log_detail = f"{recall_log_detail(result)}; {outcome}"
+    return response
 
 
 def recall_log_detail(result: RecallResponse) -> str:

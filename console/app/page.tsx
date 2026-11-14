@@ -49,7 +49,8 @@ export default async function HomePage() {
   const hasMemory = byId.size > 0;
   const tending = episodes.filter((e) => e.jobStatus === "queued" || e.jobStatus === "running").length;
   const tendedAt = [...byId.values()].reduce<string | null>((max, m) => (!max || m.recordedAt > max ? m.recordedAt : max), null);
-  const recalls = requests.filter((r) => r.path === "/v1/recall");
+  // An ask (the Ask screen) is a recall with an answer written from it.
+  const recalls = requests.filter((r) => r.path === "/v1/recall" || r.path === "/v1/ask");
 
   // Recently changed: a current value with the one it replaced, and active contradictions as pairs.
   const supersedes = live

@@ -10,7 +10,7 @@ import type {
   ConsolidationStats,
   MemoryMode,
   ProjectCategory,
-  AddResult, ApiKey, Audience, EdgeDirection, EventPage, MemoryEventItem, EdgeKind, GraphEdge, GraphFile, GraphNode, MemoryGraph, MemoryRelated, RelatedEdge, RelatedRef, RelatedThread, AuditEvent, Invite, Role, Episode, Identity, OrgInfo, OrgKey, Profile, OrgSummary, SessionSummary, EpisodeSummary, Member, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project,
+  AddResult, ApiKey, AskResult, Audience, EdgeDirection, EventPage, MemoryEventItem, EdgeKind, GraphEdge, GraphFile, GraphNode, MemoryGraph, MemoryRelated, RelatedEdge, RelatedRef, RelatedThread, AuditEvent, Invite, Role, Episode, Identity, OrgInfo, OrgKey, Profile, OrgSummary, SessionSummary, EpisodeSummary, Member, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project,
   RecallResult, RequestLog, SampleResult, SynthesisHealth, SynthesisIssue, ThreadDetail, ThreadSummary, UsageDay,
 } from "./types";
 
@@ -62,6 +62,26 @@ const toProfile = (p: ServerProfile): Profile => ({
   subjectKind: p.subject_kind, subject: p.subject, lines: p.lines.map((l) => ({ text: l.text, memoryIds: l.memory_ids })),
   description: p.description ?? null, text: p.text, tokens: p.tokens, dirty: p.dirty, builtAt: p.built_at,
 });
+
+// POST /v1/recall's response, and the `recall` inside POST /v1/ask's. abstain_reason, min_relevance,
+// top_relevance and a thread's background flag are newer than the rest; an older server leaves them out.
+interface ServerRecall {
+  briefing: string; tokens: number; abstained: boolean; abstain_reason?: string | null; min_relevance?: number | null; top_relevance?: number | null;
+  standing?: string[];
+  threads?: { id: string; key: string; title: string; summary: string; background?: boolean }[];
+  items: { memory: ServerMemory; score?: number | null; previous: string | null; related?: RelatedRef[] | null }[];
+}
+
+const toRecall = (r: ServerRecall): RecallResult => ({
+  briefing: r.briefing, tokens: r.tokens, abstained: r.abstained,
+  abstainReason: r.abstain_reason ?? null, minRelevance: r.min_relevance ?? null, topRelevance: r.top_relevance ?? null,
+  standing: r.standing ?? [],
+  pages: (r.threads ?? []).map((t) => ({ title: `${t.key} · ${t.title}`, summary: t.summary, background: Boolean(t.background), threadId: t.id })),
+  items: r.items.map((i) => ({ ...toMemory(i.memory), previous: i.previous, score: i.score ?? null, ...(i.related ? { related: i.related } : {}) })),
+});
+
+const recallBody = (query: string, budget: number, options: { related?: boolean }) =>
+  (options.related ? { query, budget, include: { related: true } } : { query, budget });
 
 async function call<T>(path: string, init: { method?: string; body?: unknown; project?: string } = {}): Promise<T> {
   const headers: Record<string, string> = { Authorization: `Bearer ${await managementKey()}`, ...(await forwarded()) };
@@ -581,21 +601,19 @@ export const liveApi: MemvineApi = {
   },
 
   async recall(project, query, budget, options = {}): Promise<RecallResult> {
-    // abstain_reason, min_relevance, top_relevance and a thread's background flag are newer than
-    // the rest of the response; an older server leaves them out.
-    const r = await call<{
-      briefing: string; tokens: number; abstained: boolean; abstain_reason?: string | null; min_relevance?: number | null; top_relevance?: number | null;
-      standing?: string[];
-      threads?: { id: string; key: string; title: string; summary: string; background?: boolean }[];
-      items: { memory: ServerMemory; score?: number | null; previous: string | null; related?: RelatedRef[] | null }[];
-    }>("/v1/recall", { method: "POST", body: options.related ? { query, budget, include: { related: true } } : { query, budget }, project });
-    return {
-      briefing: r.briefing, tokens: r.tokens, abstained: r.abstained,
-      abstainReason: r.abstain_reason ?? null, minRelevance: r.min_relevance ?? null, topRelevance: r.top_relevance ?? null,
-      standing: r.standing ?? [],
-      pages: (r.threads ?? []).map((t) => ({ title: `${t.key} · ${t.title}`, summary: t.summary, background: Boolean(t.background), threadId: t.id })),
-      items: r.items.map((i) => ({ ...toMemory(i.memory), previous: i.previous, score: i.score ?? null, ...(i.related ? { related: i.related } : {}) })),
-    };
+    return toRecall(await call<ServerRecall>("/v1/recall", { method: "POST", body: recallBody(query, budget, options), project }));
+  },
+  async ask(project, query, budget, options = {}): Promise<AskResult> {
+    try {
+      const r = await call<{ answer: string | null; answered: boolean; reason: "nothing_relevant" | "model_unavailable" | null; recall: ServerRecall }>(
+        "/v1/ask", { method: "POST", body: recallBody(query, budget, options), project });
+      return { answer: r.answer ?? null, answered: r.answered, reason: r.reason ?? null, recall: toRecall(r.recall) };
+    } catch (e) {
+      // A server that predates POST /v1/ask has no such route: a 404 without the server's own
+      // "not-found" code (which is a missing project). Its recall is still worth showing.
+      if (!(e instanceof ApiError && e.status === 404 && e.code !== "not-found")) throw e;
+      return { answer: null, answered: false, reason: "ask_unsupported", recall: await liveApi.recall(project, query, budget, options) };
+    }
   },
   async loadSample(project): Promise<SampleResult> {
     return call<SampleResult>("/v1/sample", { method: "POST", project });

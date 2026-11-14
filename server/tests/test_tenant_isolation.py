@@ -42,6 +42,7 @@ BODIES: dict[tuple[str, str], dict | None] = {
     ("GET", "/v1/health/synthesis"): None,
     ("POST", "/v1/ingest"): {"items": [{"id": "{episode_id}", "content": "Attacker text about invoices.", "timestamp": "2026-10-02T10:00:00Z"}]},
     ("POST", "/v1/recall"): {"query": "quokka invoices launch refunds", "identity": "{identity}", "profiles": True},
+    ("POST", "/v1/ask"): {"query": "quokka invoices launch refunds", "identity": "{identity}", "profiles": True},
     ("POST", "/v1/sessions/{session_id}/events"): {"events": [{"role": "user", "content": "attacker turn"}]},
     ("GET", "/v1/sessions"): None,
     ("DELETE", "/v1/sessions/{session_id}"): None,

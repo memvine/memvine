@@ -122,6 +122,10 @@ class Settings(BaseSettings):
     # answered a question sat 135th by vector and 41st by keyword; this model put it first.
     recall_rerank_model: str = "jinaai/jina-reranker-v1-turbo-en"
     recall_gate_timeout: float = 3.0
+    # POST /v1/ask (ask.py): how long the main model may take to write the answer. A person is waiting,
+    # not an agent's prompt hook, so the bound is longer than the gate's; past it the recall comes back
+    # without an answer.
+    ask_timeout: float = 30.0
     # A memory this many days old that no briefing served in this many days is listed for review
     # (GET /v1/memories?unused=true, the project's unused_count). Never hidden or deleted for it.
     memory_unused_days: int = 60

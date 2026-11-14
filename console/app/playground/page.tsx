@@ -18,7 +18,7 @@ export default async function PlaygroundPage({ searchParams }: { searchParams: P
         title={add ? "Add to memory" : "Ask memory"}
         description={add
           ? "Paste what was said and see what memory keeps from it, fact by fact, with the edges to what it already knew."
-          : "Ask what an agent would ask, and see exactly what it would receive: current facts first, previous values when the question asks about history, unverified agent claims ranked last, and each fact's edges."}
+          : "Ask a question and read the answer, written only from this project's memory. Underneath is what it was based on: the briefing an agent would receive for the same question, the memories in it and the standing instructions."}
       />
       <nav aria-label="Ask or add" className="mb-6 inline-flex rounded-lg border border-border p-0.5">
         {([["Ask", "/playground", !add, MessageCircleQuestion], ["Add", "/playground?tab=add", add, Plus]] as const).map(([label, href, on, Icon]) => (

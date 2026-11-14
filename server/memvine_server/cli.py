@@ -217,6 +217,37 @@ def backfill_digests(project: str = typer.Argument(..., help="the slug of a conv
 
 
 @app.command()
+def rebuild_memory(project: str = typer.Argument(..., help="a project slug"),
+                   dry_run: bool = typer.Option(False, "--dry-run", help="print what would be queued; change nothing")):
+    """Queue every stored episode of a project for synthesis again, oldest first, so memory made by
+    older extraction rules is replaced by what the current rules keep. The worker does the work: this
+    command calls no model and deletes nothing itself."""
+    from .rebuild import rebuild_memory as rebuild
+
+    async def go(conn):
+        row = await (await conn.execute("SELECT id FROM projects WHERE slug = %s", (project,))).fetchone()
+        if not row:
+            raise typer.BadParameter(f"no project with slug {project!r}")
+        return await rebuild(conn, row["id"], dry_run=dry_run)
+
+    r = _run(_with_pool(go))
+    by_status = ", ".join(f"{status} {n}" for status, n in r.memories.items())
+    typer.echo(f"{project}: {r.episodes} episodes; {sum(r.memories.values())} memory items now" + (f" ({by_status})" if by_status else ""))
+    typer.echo(f"{'would queue' if dry_run else 'queued'} {r.queued} episodes for synthesis again, oldest first")
+    left = [(r.waiting, "already queued or running"),
+            (r.held, "backing a memory a person wrote, kept, forgot or corrected"),
+            (r.expired, "whose text retention has dropped")]
+    for n, why in left:
+        if n:
+            typer.echo(f"left as they are: {n} {why}")
+    if dry_run:
+        typer.echo("dry run: nothing was changed")
+    elif r.queued:
+        typer.echo("The worker does the rest, one episode at a time (`memvine-server worker`, or the worker inside `serve`): "
+                   "each episode's old memories go when it is synthesized again, except one another episode also backs.")
+
+
+@app.command()
 def feedback_export(slug: str, out: str = typer.Option("", "--out", help="a file to write; standard output when empty")):
     """Write a project's feedback cases (memories people forgot or corrected) as JSONL, for the local
     extraction gate: append them to ~/.memvine/eval/drop-cases.jsonl (benchmark/knowledge/cases.py).

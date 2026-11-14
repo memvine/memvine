@@ -56,6 +56,7 @@ curl -s localhost:8400/v1/recall -H "Authorization: Bearer $KEY" -H 'content-typ
 | --- | --- |
 | `POST /v1/ingest` | Batch of episodes (`id`, `content`, `timestamp`, optional `identity`, `label`, `metadata`, `audience`, `code`). Same id + same content: no-op and free. Same id + new content: replaces it and everything derived from it. With `instant: true` (one episode, at most 4,000 characters, else 400): learned from within the request and returned as `instant.memories`, each with its edges; billed the same. |
 | `POST /v1/recall` | `query`, optional `budget` (tokens), `identity`, `as_of`, `exclude`, `include_history`, `session_id`, `branch`. Returns `briefing` plus `standing`, `pages`, `threads`, `items`, `passages`, `pending`, `tokens`, `abstained`, `abstain_reason`, `min_relevance`, `top_relevance` (see Recall below). |
+| `POST /v1/ask` | The same body as `POST /v1/recall`. Runs that recall, then the main model writes an answer to `query` from the returned briefing and nothing else. Returns `answer`, `answered`, `reason` (`nothing_relevant` when recall abstained: the model is not called; `model_unavailable` when the model failed, took longer than `MEMVINE_ASK_TIMEOUT` (30 s) or is not configured: still HTTP 200) and `recall`, the full recall response. Recorded and charged as one recall. |
 | `POST /v1/memories` | Store one fact directly (`statement`, `kind`, `subjects`, `assertion`, `audience`, `standing`, `category`, `why`); reconciled like extracted facts. With `supersedes: <memory id>` the caller says which fact this replaces (a person's correction): no judge is asked, it supersedes that memory (`relation: "update"`, `related: <old id>`) and inherits its kind, subjects, category, thread, scope and audience unless given. The old memory must be the project's, active or stale (else 404 `not-found` / 400 `memory-not-current`), and in the same audience (400 `audience-mismatch`). |
 | `GET /v1/memories`, `GET /v1/memories/{id}` | Browse items with evidence; filters `status`, `kind`, `category`, `scope`, `q`, `unused`, `review`. `status=expired`: items past the end they stated (`valid_to`; `expired: true`), which `status=active` leaves out. `unused=true`: items older than `MEMVINE_MEMORY_UNUSED_DAYS` (60) that no recall served in that time (`last_recalled_at`, `recall_count`), for review; nothing is hidden or deleted for it. Each item has `review` (`new` until a person keeps it; a person's own memories start `kept`) and `origin` (`synthesis`, `person`, `sample`); `review=new` lists current memories awaiting review, and projects carry `review_count`. |
 | `GET /v1/memories/{id}/related` | The memory and every edge, both directions, as `{kind, direction}` plus `item`, `file` or `thread`. |
@@ -287,6 +288,13 @@ before it accepts requests. A migration that fails rolls back and the server doe
 the cause (or return to the old code) and start again. `MEMVINE_AUTO_MIGRATE=false` makes the
 server refuse to start while migrations are pending, so they run only through `memvine-server
 migrate`.
+
+**Rebuilding memory after the extraction rules change.** `memvine-server rebuild-memory <slug>
+[--dry-run]` queues every stored episode of a project for synthesis again, oldest first, so what
+older rules kept is replaced by what the current ones keep. The worker does the work (the model
+calls of a first synthesis, once more per episode); a memory another episode also backs stays.
+Episodes backing a memory a person wrote, kept, forgot or corrected, and episodes whose text
+retention has dropped, are left as they are.
 
 **Writing a migration.** Add the next number, e.g. `0003_project_quotas.sql`. Never edit a file
 that has been applied anywhere: the server compares checksums on every start and refuses to run if

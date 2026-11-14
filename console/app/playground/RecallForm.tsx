@@ -2,11 +2,11 @@
 import Link from "next/link";
 import { useActionState, type ReactNode } from "react";
 import { CircleSlash, Pin, Play } from "lucide-react";
-import { runRecall, type RecallState } from "@/app/actions";
+import { runAsk, type AskState } from "@/app/actions";
 import { CopyButton } from "@/components/client";
 import { AssertionBadge, Badge, button, Card, CardHeader, cx, Eyebrow, FormError, inputClass, Select, StatusBadge } from "@/components/ui";
 import { edgeVerb } from "@/lib/graph";
-import type { RecallResult } from "@/lib/types";
+import type { AskResult, RecallResult } from "@/lib/types";
 
 const EXAMPLES = [
   "What is in release 4.2.0?", "Who merges release work?", "Why did we drop InvoiceFieldAliases?", "When is the launch?", "How do escalations work?",
@@ -30,6 +30,57 @@ function Figure({ label, children, tone }: { label: string; children: ReactNode;
       <Eyebrow>{label}</Eyebrow>
       <div className={cx("mt-1 text-[15px] font-semibold tabular-nums tracking-[-0.01em]", tone === "bad" ? "text-warn" : "text-text")}>{children}</div>
     </div>
+  );
+}
+
+/** The answer as the model wrote it: plain text, a paragraph per line, and lines that start with
+ *  "- " as a list. Bold markers are dropped rather than shown as asterisks. */
+function AnswerText({ text }: { text: string }) {
+  const blocks: ({ list: string[] } | { paragraph: string })[] = [];
+  for (const raw of text.replace(/\*\*(.+?)\*\*/g, "$1").split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const bullet = line.match(/^[-*•]\s+(.*)$/);
+    const last = blocks[blocks.length - 1];
+    if (bullet && last && "list" in last) last.list.push(bullet[1]);
+    else if (bullet) blocks.push({ list: [bullet[1]] });
+    else blocks.push({ paragraph: line });
+  }
+  return (
+    <div className="space-y-2.5 text-[14px] leading-relaxed text-text">
+      {blocks.map((b, i) => "list" in b ? (
+        <ul key={i} className="list-disc space-y-1 pl-5">{b.list.map((item, j) => <li key={j}>{item}</li>)}</ul>
+      ) : (
+        <p key={i} className="break-words">{b.paragraph}</p>
+      ))}
+    </div>
+  );
+}
+
+/** Why there is no answer, in one sentence. */
+const NO_ANSWER: Record<NonNullable<AskResult["reason"]>, string> = {
+  nothing_relevant: "Nothing in this project's memory is relevant to the question, so there is no answer.",
+  model_unavailable: "The model could not be reached, so there is no written answer. What memory returned for the question is below.",
+  ask_unsupported: "This server is older than the console and does not write answers yet. What memory returned for the question is below.",
+};
+
+/** The answer first; when there is none, one sentence saying why. */
+function Answer({ result }: { result: AskResult }) {
+  return (
+    <Card className="min-w-0">
+      <CardHeader
+        title="Answer"
+        description={result.answered ? "Written by the model from this project's memory only." : undefined}
+        action={result.answer ? <CopyButton value={result.answer} label="Copy answer" /> : undefined}
+      />
+      <div className="px-4 py-4 sm:px-5">
+        {result.answer ? <AnswerText text={result.answer} /> : (
+          <p className="text-[13.5px] text-text-2">
+            {NO_ANSWER[result.reason ?? "nothing_relevant"]}
+          </p>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -96,8 +147,9 @@ function Abstained({ result }: { result: RecallResult }) {
 }
 
 export function RecallForm() {
-  const [state, action, pending] = useActionState<RecallState, FormData>(runRecall, {});
-  const result = state.result;
+  const [state, action, pending] = useActionState<AskState, FormData>(runAsk, {});
+  const asked = state.result;
+  const result = asked?.recall;
 
   return (
     <div className="space-y-6">
@@ -112,7 +164,7 @@ export function RecallForm() {
               <option value="2000">2,000</option>
               <option value="8000">8,000</option>
             </Select>
-            <button type="submit" disabled={pending} className={button("primary", "md", "ml-auto")}><Play aria-hidden /> {pending ? "Recalling…" : "Run recall"}</button>
+            <button type="submit" disabled={pending} className={button("primary", "md", "ml-auto")}><Play aria-hidden /> {pending ? "Asking…" : "Ask"}</button>
           </div>
           {state.error && <div className="mt-2"><FormError>{state.error}</FormError></div>}
         </form>
@@ -128,8 +180,10 @@ export function RecallForm() {
         </div>
       </Card>
 
-      {result && (
+      {asked && result && (
         <>
+          <Answer result={asked} />
+          <h2 className="-mb-3 text-[13.5px] font-medium text-text">{asked.answered ? "Based on" : "What memory returned"}</h2>
           <Summary result={result} budget={state.budget} />
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="min-w-0 space-y-6">

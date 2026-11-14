@@ -10,7 +10,7 @@ import { BUILTIN_CATEGORIES, INSTANT_MAX_CHARS, MAX_PROJECT_CATEGORIES } from ".
 
 const CATEGORY_SLUG = /^[a-z0-9-]{2,24}$/;
 import type {
-  ApiKey, Episode, EpisodeSummary, EventPage, GraphQuery, MemoryEventItem, Profile, SynthesisHealth, SynthesisIssue, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project, RecallResult, SampleResult, ThreadDetail, ThreadSummary,
+  ApiKey, AskResult, Episode, EpisodeSummary, EventPage, GraphQuery, MemoryEventItem, Profile, SynthesisHealth, SynthesisIssue, MemoryDetail, MemoryFilter, MemoryItem, MemvineApi, Project, RecallResult, SampleResult, ThreadDetail, ThreadSummary,
 } from "./types";
 
 function threadSummary(data: ProjectData, t: MockThread): ThreadSummary {
@@ -669,6 +669,21 @@ export const mockApi: MemvineApi = {
       briefing: [...standingBlock, header, ...lines].join("\n"), items, pages, standing, tokens, abstained: false,
       abstainReason: null, minRelevance: MIN_RELEVANCE, topRelevance: round(top),
     };
+  },
+
+  /** Mock of POST /v1/ask: the mock recall, then a canned answer in place of the model's: the best
+   *  match as it stands, what it replaced when it replaced something, and when it was recorded. */
+  async ask(project, query, budgetTokens, options = {}): Promise<AskResult> {
+    const recall = await mockApi.recall(project, query, budgetTokens, options);
+    if (recall.abstained) return { answer: null, answered: false, reason: "nothing_relevant", recall };
+    const top = recall.items[0];
+    if (!top) return { answer: recall.pages[0]?.summary ?? null, answered: recall.pages.length > 0, reason: recall.pages.length > 0 ? null : "nothing_relevant", recall };
+    const sentence = (text: string) => text.replace(/\.$/, "");
+    const answer = [
+      `${sentence(top.statement)} (recorded ${day(top.recordedAt)}${top.assertion === "claimed" ? ", an assistant's unverified claim" : ""}).`,
+      ...(top.previous ? [`This changed: before, it was "${sentence(top.previous)}".`] : []),
+    ].join("\n\n");
+    return { answer, answered: true, reason: null, recall };
   },
 
   /** Mock of POST /v1/sample: the same sample the server writes, free and instant; a no-op when present. */

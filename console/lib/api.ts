@@ -142,6 +142,7 @@ export const revokeOrgKey = forward("revokeOrgKey");
 export const listOrgs = forward("listOrgs");
 export const createOrg = forward("createOrg");
 export const recall = forward("recall");
+export const ask = forward("ask");
 export const loadSample = forward("loadSample");
 export const deleteSample = forward("deleteSample");
 export const addNow = forward("addNow");

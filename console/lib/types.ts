@@ -429,6 +429,18 @@ export interface RecallResult {
   pages: RecallPage[];
 }
 
+/** POST /v1/ask: the model's answer to a question, written only from what recall returned for it. */
+export interface AskResult {
+  answer: string | null;
+  answered: boolean;
+  /** Why there is no answer: "nothing_relevant" (recall abstained, the model was not asked),
+   *  "model_unavailable" (the model failed, took too long or is not configured), or, from the console
+   *  itself, "ask_unsupported" (the server predates POST /v1/ask; only its recall is shown). Null when answered. */
+  reason: "nothing_relevant" | "model_unavailable" | "ask_unsupported" | null;
+  /** The recall the answer was written from. */
+  recall: RecallResult;
+}
+
 export interface MemoryFilter {
   q?: string;
   kind?: MemoryKind;
@@ -684,6 +696,8 @@ export interface MemvineApi {
   listOrgs(): Promise<OrgSummary[]>;
   createOrg(name: string): Promise<{ slug: string; secret: string }>;
   recall(project: string, query: string, budget: number, options?: { related?: boolean }): Promise<RecallResult>;
+  /** POST /v1/ask: the same recall, then the model's answer to the question from what it returned. */
+  ask(project: string, query: string, budget: number, options?: { related?: boolean }): Promise<AskResult>;
   /** Fill the project with sample memory (no model call, no credits); a no-op when it is already there. */
   loadSample(project: string): Promise<SampleResult>;
   /** Delete the sample sources and the memories drawn from them. */

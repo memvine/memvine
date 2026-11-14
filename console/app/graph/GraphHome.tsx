@@ -28,7 +28,7 @@ export async function GraphHome({ search, base }: { search: Record<string, strin
     { done: keys.some((k) => !k.revokedAt), label: "Create a project API key", href: "/keys" },
     { done: episodes.length > 0, label: "Send your first conversation", href: "/integrations" },
     { done: facts.length > 0, label: "Wait for memory to be tended", href: "/sources" },
-    { done: requests.some((r) => r.path === "/v1/recall" && r.status < 400), label: "Ask memory for the first time", href: "/playground" },
+    { done: requests.some((r) => (r.path === "/v1/recall" || r.path === "/v1/ask") && r.status < 400), label: "Ask memory for the first time", href: "/playground" },
   ];
   const setUp = steps.every((s) => s.done);
   // The empty project's three connect steps. Sources an agent sent are neither pasted nor sample;

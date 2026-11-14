@@ -360,6 +360,18 @@ class RecallResponse(BaseModel):
     profile_tokens: int = 0
 
 
+class AskResponse(BaseModel):
+    """POST /v1/ask: the model's answer to the question, written only from what recall returned."""
+    answer: str | None = None
+    answered: bool
+    # Why there is no answer: "nothing_relevant" (recall abstained, so there was nothing to answer from
+    # and the model was not called) or "model_unavailable" (the model failed, ran out of time or is not
+    # configured). None when answered.
+    reason: Literal["nothing_relevant", "model_unavailable"] | None = None
+    # The recall the answer was written from, exactly as POST /v1/recall returns it.
+    recall: RecallResponse
+
+
 class SessionEventIn(BaseModel):
     role: Literal["user", "assistant", "system", "tool"]
     content: Redacted = Field(min_length=1, max_length=100_000)

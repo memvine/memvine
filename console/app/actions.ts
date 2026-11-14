@@ -487,22 +487,23 @@ export async function rebuildProfile(formData: FormData) {
   revalidatePath("/");
 }
 
-export interface RecallState {
+export interface AskState {
   query?: string;
-  result?: Awaited<ReturnType<typeof api.recall>>;
+  /** The answer, and the recall it was written from. */
+  result?: Awaited<ReturnType<typeof api.ask>>;
   budget?: number;
   error?: string;
 }
 
-export async function runRecall(_prev: RecallState, formData: FormData): Promise<RecallState> {
+export async function runAsk(_prev: AskState, formData: FormData): Promise<AskState> {
   const query = String(formData.get("query") ?? "").trim();
   const budget = Number(formData.get("budget") ?? 2000);
   if (query.length < 3) return { query, error: "Type a question, the way an agent would ask it." };
   const project = await api.currentProject();
   try {
-    return { query, budget, result: await api.recall(project.slug, query, budget, { related: true }) };
+    return { query, budget, result: await api.ask(project.slug, query, budget, { related: true }) };
   } catch (e) {
-    return { query, error: e instanceof Error ? e.message : "Recall failed." };
+    return { query, error: e instanceof Error ? e.message : "The question could not be asked." };
   }
 }
 
