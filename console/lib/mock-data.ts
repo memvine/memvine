@@ -47,7 +47,7 @@ export const seedProjects: Project[] = [
 ];
 
 export const seedMembers: Member[] = [
-  { id: "u_1", name: "Vishal Gupta", email: "hello@memvine.dev", role: "owner", joinedAt: "2026-09-01T00:00:00Z", lastLoginAt: null },
+  { id: "u_1", name: "Dana Whitfield", email: "dana@example.com", role: "owner", joinedAt: "2026-09-01T00:00:00Z", lastLoginAt: null },
   { id: "u_2", name: "Priya Raman", email: "priya@example.com", role: "admin", joinedAt: "2026-09-10T00:00:00Z", lastLoginAt: null },
   { id: "u_3", name: "Sam Okafor", email: "sam@example.com", role: "member", joinedAt: "2026-10-04T00:00:00Z", lastLoginAt: null },
 ];

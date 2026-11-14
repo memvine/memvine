@@ -30,8 +30,33 @@ else
 fi
 
 cd "$ROOT/server"
-[ -d .venv ] || python3 -m venv .venv
-.venv/bin/pip install -q -e '.[dev]'
+# The server needs Python 3.12 or later, and the python3 a Mac ships with is older: with it the venv
+# is made and the install then fails. Take the newest interpreter that qualifies, else uv's.
+new_enough='import sys; sys.exit(sys.version_info < (3, 12))'
+if [ ! -d .venv ]; then
+  PY=""
+  for candidate in python3.13 python3.12 python3; do
+    # 2>/dev/null: a pyenv shim for a version that is not selected exists and fails loudly.
+    if command -v "$candidate" >/dev/null && "$candidate" -c "$new_enough" 2>/dev/null; then PY="$candidate"; break; fi
+  done
+  if [ -n "$PY" ]; then
+    "$PY" -m venv .venv
+  elif command -v uv >/dev/null; then
+    uv venv -q --python 3.12 .venv
+  else
+    echo "The server needs Python 3.12 or later. Install it (brew install python@3.12, or https://docs.astral.sh/uv/) and run this again." >&2
+    exit 1
+  fi
+fi
+if ! .venv/bin/python -c "$new_enough"; then
+  echo "server/.venv was made with a Python older than 3.12. Remove server/.venv and run this again." >&2
+  exit 1
+fi
+if .venv/bin/python -m pip --version >/dev/null 2>&1; then
+  .venv/bin/python -m pip install -q -e '.[dev]'
+else
+  uv pip install -q --python .venv/bin/python -e '.[dev]'   # a venv made by uv has no pip of its own
+fi
 
 if command -v npm >/dev/null; then
   (cd "$ROOT/console" && npm ci --silent)

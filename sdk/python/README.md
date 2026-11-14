@@ -1,7 +1,7 @@
 # memvine-sdk (Python)
 
 ```sh
-pip install memvine-sdk          # from this folder for now: pip install -e sdk/python
+pip install -e sdk/python        # from a clone of this repository; not on PyPI yet
 ```
 
 Memory for your agent in ten lines. With a project key and the sample data loaded
@@ -63,4 +63,5 @@ not only the open ones).
 Errors raise `MemvineError` with `.status` and `.code` (for example `project-cap-reached`).
 Cost: 1 credit per 1,000 characters sent (identical re-sends are free), 0.1 credit per recall.
 
-Tests: `MEMVINE_TEST_URL=... MEMVINE_TEST_KEY=mv_sk_... pytest sdk/python`.
+Tests: `pip install -e 'sdk/python[dev]'`, then `pytest sdk/python`. One test talks to a real server and is
+skipped unless `MEMVINE_TEST_URL` and `MEMVINE_TEST_KEY` (a project key) are set.

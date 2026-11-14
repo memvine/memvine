@@ -2,18 +2,46 @@
   "name": "@memvine/sdk",
   "version": "0.1.0",
   "description": "TypeScript client for the Memvine memory API: send conversations, recall memory, keep a live session's state.",
+  "keywords": [
+    "memvine",
+    "memory",
+    "ai",
+    "agents",
+    "llm",
+    "recall"
+  ],
+  "homepage": "https://memvine.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/memvine/memvine.git",
+    "directory": "sdk/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/memvine/memvine/issues"
+  },
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.test.*"
   ],
-  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "build": "tsc",
+    "prepare": "npm run build",
     "test": "npm run build && node --test dist/index.test.js"
   },
   "devDependencies": {

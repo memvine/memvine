@@ -19,7 +19,7 @@
     "url": "git+https://github.com/memvine/memvine.git"
   },
   "license": "MIT",
-  "author": "Vishal <hello@memvine.dev>",
+  "author": "Vishal Gupta <hello@memvine.dev>",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

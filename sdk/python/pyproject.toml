@@ -2,8 +2,23 @@
 name = "memvine-sdk"
 version = "0.1.0"
 description = "Python client for the Memvine memory API: send conversations, recall memory, keep a live session's state."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Vishal Gupta" }]
+keywords = ["memvine", "memory", "ai", "agents", "llm", "recall"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Developers",
+]
 requires-python = ">=3.10"
 dependencies = ["httpx>=0.27"]
+
+[project.urls]
+Homepage = "https://memvine.dev"
+Repository = "https://github.com/memvine/memvine"
+Documentation = "https://github.com/memvine/memvine/blob/main/docs/how-memory-works.md"
+Issues = "https://github.com/memvine/memvine/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

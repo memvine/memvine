@@ -31,34 +31,52 @@ The embedding model (BGE-small, ~130 MB) downloads on first use into the `fastem
 
 ## 2. Create an organization and connect an agent
 
-Create the organization with the operator key (keep that key to yourself):
+Create the organization with the operator key (keep that key to yourself). On the host, in `deploy/`:
 
 ```sh
-curl -s -X POST https://api.example.com/v1/orgs \
+set -a; . ./.env; set +a          # reads MEMVINE_OPERATOR_KEY from .env into this shell
+curl -s -X POST localhost:8400/v1/orgs \
   -H "Authorization: Bearer $MEMVINE_OPERATOR_KEY" -H 'content-type: application/json' \
   -d '{"name": "Northwind"}'
 # → {"slug": "northwind", "key": "mv_mk_..."}   the key is shown once
 ```
 
-or, on the host: `docker compose exec api memvine-server create-org "Northwind"`.
+or `docker compose exec api memvine-server create-org "Northwind"`. From another machine, use the
+server's public address (written `https://api.example.com` below) in place of `localhost:8400`.
 
 With the console address and that `mv_mk_` key:
 
 1. Sign in to the console, open **Projects**, create a project per repository or app, and copy the
-   project key and the ready-made connect command it shows.
+   project key and the ready-made connect command it shows. Or without the console:
+   ```sh
+   curl -s -X POST localhost:8400/v1/projects -H "Authorization: Bearer mv_mk_..." \
+     -H 'content-type: application/json' -d '{"name": "Billing"}'             # → {"slug": "billing", ...}
+   curl -s -X POST localhost:8400/v1/projects/billing/keys -H "Authorization: Bearer mv_mk_..." \
+     -H 'content-type: application/json' -d '{"name": "laptop"}'              # → {"key": "mv_sk_..."}
+   ```
+   To try it before sending anything real: `POST /v1/sample` with the project key loads a small
+   sample memory with no model call, and `POST /v1/recall` with `{"query": "When is the launch?"}`
+   answers from it. (Recall asks the fast model which memories the question needs and falls back to
+   similarity when the model cannot be reached, so it answers even with a placeholder API key.)
 2. In Claude Code, in that repository:
    ```
    /plugin marketplace add memvine/memvine
    /plugin install memvine@memvine
    /memvine:connect mv_sk_... you@example.com https://api.example.com --here
    ```
-   (Until the plugin is on the default branch, use a local checkout path for the marketplace.)
 3. Or any MCP client: `claude mcp add --transport http memvine https://api.example.com/mcp --header "Authorization: Bearer mv_sk_..."`.
 
 Organization keys are added and revoked through the API (`/v1/org/keys`).
 
+**Who can create an account.** With this compose file, only someone holding an invite link from an
+organization admin (`MEMVINE_SIGNUP=invite`); the organization key above always signs in. Set
+`MEMVINE_SIGNUP=open` in `.env` to let anyone who can reach the console create an account and an
+organization of their own, or `closed` for neither. Any other server setting from
+`server/README.md` goes in a file `deploy/.env.api`, one `NAME=value` per line, which the API
+container reads when it exists.
+
 A project is in `coding` mode unless you choose otherwise: it keeps few, durable memories. Choose
-`conversation` for a long conversation with an assistant, where every concrete detail is kept
+`conversation` for one person's long conversation with an assistant
 (`memory_mode` on the project; `docs/how-memory-works.md`).
 
 ## 3. Operate

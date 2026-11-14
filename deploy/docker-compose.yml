@@ -30,6 +30,13 @@ services:
       MEMVINE_LLM_MODEL: ${MEMVINE_LLM_MODEL:-claude-sonnet-5-5}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY in .env}
       MEMVINE_EMBEDDINGS_BACKEND: fastembed
+      # Who may create an account in the console: invite (only with an invite link from an
+      # organization admin), open (anyone who can reach the server), closed.
+      MEMVINE_SIGNUP: ${MEMVINE_SIGNUP:-invite}
+    # Any other MEMVINE_* setting from server/README.md: put it in .env.api (see deploy/README.md).
+    env_file:
+      - path: .env.api
+        required: false
     volumes:
       - fastembed:/var/cache/fastembed
     ports:
