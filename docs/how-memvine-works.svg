@@ -8,8 +8,7 @@
     .lit { fill: #e8ede7; font-weight: 500; }
     .who { fill: #8a978e; font-size: 17px; }
     .new { fill: #a8e4bf; font-weight: 500; }
-    .stem { fill: none; stroke: #3e8c5e; stroke-width: 2; stroke-linecap: round; }
-    .leaf { fill: #a8e4bf; }
+    .stem { fill: none; stroke: #3e8c5e; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   </style>
 
   <rect x="0.5" y="0.5" width="1199" height="479" rx="18" fill="#0b1310" stroke="#1f2e26"/>
@@ -25,23 +24,21 @@
 
   <!-- Kept: the two lines that stay true. -->
   <text class="head" x="500" y="84">Kept</text>
-  <path class="stem" d="M444 206 C 462 196, 480 216, 500 206"/>
-  <path class="leaf" d="M500 206 C 508 193, 526 193, 534 206 C 526 219, 508 219, 500 206 Z"/>
-  <text class="lit" x="548" y="212">Retries cap at 3.</text>
-  <text class="who" x="548" y="240">Dana, 4 Feb</text>
+  <path class="stem" d="M404 206 H472 M464 200 L472 206 L464 212"/>
+  <text class="lit" x="500" y="212">Retries cap at 3.</text>
+  <text class="who" x="500" y="240">Dana, 4 Feb</text>
 
-  <path class="stem" d="M444 362 C 462 352, 480 372, 500 362"/>
-  <path class="leaf" d="M500 362 C 508 349, 526 349, 534 362 C 526 375, 508 375, 500 362 Z"/>
-  <text class="lit" x="548" y="368">Launch is 12 March.</text>
-  <text class="who" x="548" y="396">Priya, 4 Feb. Was 5 March.</text>
+  <path class="stem" d="M404 362 H472 M464 356 L472 362 L464 368"/>
+  <text class="lit" x="500" y="368">Launch is 12 March.</text>
+  <text class="who" x="500" y="396">Priya, 4 Feb. Was 5 March.</text>
 
   <!-- Known tomorrow: another session, another person. -->
   <text class="head" x="860" y="84">Known tomorrow</text>
-  <path class="stem" d="M796 206 C 812 196, 828 216, 844 206"/>
+  <path class="stem" d="M764 206 H832 M824 200 L832 206 L824 212"/>
   <text class="dim" x="860" y="198">Sam: Make the sync job retry.</text>
   <text class="new" x="860" y="228">Agent: Done, capped at 3.</text>
 
-  <path class="stem" d="M796 362 C 812 352, 828 372, 844 362"/>
+  <path class="stem" d="M764 362 H832 M824 356 L832 362 L824 368"/>
   <text class="dim" x="860" y="354">Sam: When do we launch?</text>
   <text class="new" x="860" y="384">Agent: 12 March.</text>
 </svg>
