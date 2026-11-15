@@ -8,8 +8,8 @@ GitHub issues in this repo, labelled `now` / `next` / `later` / `parked`, with `
 `area:` label.
 
 ## Now (this week)
-- Public release: the owner's checks, the client libraries on npm and PyPI (#11), then the
-  repository made public (the list is in `CLAUDE.md`, Status)
+- The client libraries on npm and PyPI (#11): the last step of the public release (the repository
+  is public since 15 November)
 - Re-point both laptops' plugins to Railway (#2)
 - Review real capture after a week of use (#6)
 - A BEAM result scored the published way, beside plain search and full context, with cost and
