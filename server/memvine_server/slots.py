@@ -47,6 +47,7 @@ CURRENT = "slot IS NOT NULL AND status IN ('active', 'stale') AND (valid_to IS N
 NET_NEW_MIN_SIMILARITY = 0.6
 NET_NEW_LINES = 5
 MERGED_WORDS = 60
+LIST_WORDS = 110   # a list line names every member
 # A standing instruction is never compared, covered or folded: it is served with every answer from a
 # section of its own, and folded into a line about the person it stops being an instruction. On a
 # first trial "always verify subtitle availability" was folded into a goal about bilingual films and
@@ -78,8 +79,11 @@ async def net_new(llm: LLM, cand: Candidate, near: list) -> tuple[str, dict | No
     old = near[match - 1]
     if kind == "covered":
         return "covered", old, None
-    numbers = set(_NUMBERS.findall(normalize(old["statement"]))) | set(_NUMBERS.findall(normalize(cand.statement)))
-    if not merged or len(merged.split()) > MERGED_WORDS or not numbers <= set(_NUMBERS.findall(normalize(merged))):
+    # A list says how many members it has, and that number changes when one is folded in.
+    numbers = set(_NUMBERS.findall(normalize(cand.statement))) if old["slot"].startswith("list/") else (
+        set(_NUMBERS.findall(normalize(old["statement"]))) | set(_NUMBERS.findall(normalize(cand.statement))))
+    words = LIST_WORDS if old["slot"].startswith("list/") else MERGED_WORDS
+    if not merged or len(merged.split()) > words or not numbers <= set(_NUMBERS.findall(normalize(merged))):
         return "new", None, None
     return "adds", old, merged
 

@@ -135,7 +135,7 @@ async def claim_job(conn, project_id: UUID | None = None):
 async def _dispatch(conn, llm: LLM, embedder: Embedder, job) -> dict:
     if job["kind"] == consolidation.JOB_KIND:
         # Its own transaction, so a failure is recorded on the run as well as on the job.
-        return await consolidation.run_job(conn, llm, job["project_id"])
+        return await consolidation.run_job(conn, llm, job["project_id"], embedder)
     # One transaction per job: a crash mid-episode leaves no half-reconciled state.
     async with conn.transaction():
         if job["kind"] == "extract":

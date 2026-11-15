@@ -74,8 +74,8 @@ Two checks, both in this repository and both runnable:
   the kept details restated the conversation and misled the answers. What it does now, why, and
   what conversation memory should become is in
   [the plan](docs/plans/conversation-memory-plan.md). Since that measurement conversation mode also
-  keeps a small profile of the person; on three of those conversations (60 questions) it scored
-  0.885 against 0.863 for plain search, too few questions to call a difference. Ingesting a conversation into Memvine still
+  keeps a small profile of the person; on three of those conversations (60 questions) two builds scored
+  0.885 and 0.867, against 0.863 for plain search: no difference that can be told from chance. Ingesting a conversation into Memvine still
   costs model calls that plain search does not need.
 
 ## What it does not do

@@ -24,6 +24,10 @@ Steps a and b share one model call per run (at most MAX_JUDGED_PAIRS pairs), ste
 MAX_BAR_ITEMS items). Every verdict is stored in consolidation_judgements, so a second run asks
 nothing about what the first one judged and changes nothing.
 
+A project in conversation mode is consolidated differently (profile_consolidation.py): its profile is
+read whole by the main model, lines about the same thing become one line or a list with its count,
+and a plan whose day has passed stops being current. None of the three steps above runs there.
+
 Undo: forgetting the newer item of a supersede restores the older (store.retire); PATCH status active
 on a merged-away item un-merges it (`unmerge`): it is current again and the evidence the merge copied
 onto the kept item is taken off it again.
@@ -35,6 +39,7 @@ import logging
 from uuid import UUID
 
 from . import events
+from .embeddings import Embedder
 from .extraction.extract import parse_json
 from .extraction.llm import LLM, LLMError, LLMRateLimited, fast
 from .extraction.prompts import (
@@ -115,14 +120,15 @@ async def queue(conn, project_id: UUID) -> tuple[bool, int]:
     return True, row["id"]
 
 
-async def run_job(conn, llm: LLM, project_id: UUID) -> dict:
+async def run_job(conn, llm: LLM, project_id: UUID, embedder: Embedder | None = None) -> dict:
     """The worker's entry point: one recorded run in its own transaction. A failure rolls the run's
-    changes back, is recorded on the run, and is raised for the job to retry."""
+    changes back, is recorded on the run, and is raised for the job to retry. `embedder`: needed to
+    write the merged lines of a conversation project's profile."""
     run = await (await conn.execute(
         "INSERT INTO consolidation_runs (project_id) VALUES (%s) RETURNING id", (project_id,))).fetchone()
     try:
         async with conn.transaction():
-            stats = await consolidate(conn, llm, project_id)
+            stats = await consolidate(conn, llm, project_id, embedder)
             await conn.execute("UPDATE projects SET consolidated_at = now() WHERE id = %s", (project_id,))
             await conn.execute("UPDATE consolidation_runs SET finished_at = now(), stats = %s WHERE id = %s",
                                (_jsonb(stats), run["id"]))
@@ -155,9 +161,20 @@ class _Run:
         self.absorbed: set[UUID] = set()   # kept a merge in this run: never merged away in the same run
 
 
-async def consolidate(conn, llm: LLM, project_id: UUID) -> dict:
+async def consolidate(conn, llm: LLM, project_id: UUID, embedder: Embedder | None = None) -> dict:
     """One run over a project (in the caller's transaction). Returns its stats; `linked` counts
-    supersedes and contradictions, `flagged` every flag set."""
+    supersedes and contradictions, `flagged` every flag set.
+
+    A conversation project gets the profile pass instead (profile_consolidation.py). The steps below
+    judge pairs by similarity and let the fast model retire the older of two: among the lines of one
+    person's profile that is how the wrong value was once replaced, so there only the extractor's
+    word for a slot it was shown retires a value, and consolidation groups and lists."""
+    mode = await (await conn.execute("SELECT memory_mode FROM projects WHERE id = %s", (project_id,))).fetchone()
+    if mode and mode["memory_mode"] == "conversation":
+        if embedder is None:
+            return {"skipped": "no embedder for the profile pass", "merged": 0, "linked": 0, "flagged": 0}
+        from .profile_consolidation import tidy_profile  # imports slots, which this module's users may not need
+        return await tidy_profile(conn, llm, embedder, project_id)
     active = (await (await conn.execute(
         f"SELECT count(*) AS n FROM memory_items m WHERE m.project_id = %s AND {ELIGIBLE}", (project_id,))).fetchone())["n"]
     if active < MIN_ACTIVE:
@@ -417,10 +434,6 @@ def _as_bool(v) -> bool | None:
 
 
 async def _bar(run: _Run) -> None:
-    # The bar is the coding rule (keep little). A conversation's memory keeps every detail on purpose.
-    mode = await (await run.conn.execute("SELECT memory_mode FROM projects WHERE id = %s", (run.project_id,))).fetchone()
-    if mode and mode["memory_mode"] == "conversation":
-        return
     builtins = list(BUILTIN_CATEGORIES)
     rows = await (await run.conn.execute(
         f"""

@@ -340,6 +340,9 @@ SLOT_TYPES = {
     "state": ("fact", "semantic"), "goal": ("plan", "prospective"), "plan": ("plan", "prospective"),
     "preference": ("preference", "preference"), "decision": ("decision", "semantic"),
     "history": ("event", "episodic"), "instruction": ("rule", "procedural"),
+    # A set the person builds up over time, with its count (written at extraction, built from scattered
+    # lines by profile_consolidation.py).
+    "list": ("fact", "semantic"),
 }
 RELATIONS = {"new", "same", "update", "conflict"}
 SLOT_CHARS = 80

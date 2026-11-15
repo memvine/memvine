@@ -33,7 +33,7 @@ from .extraction.llm import LLM, fast
 from .extraction.prompts import RELEVANCE_SYSTEM, relevance_user
 from .models import PendingMessage, RecallDigest, RecallItem, RecallPassage, RecallRequest, RecallResponse, RecallThread
 from .rerank import Reranker, get_reranker
-from .store import MEMORY_COLUMNS, evidence_for, memory_out
+from .store import MEMORY_COLUMNS, evidence_for, memory_out, unused_clause
 from .threads import item_words, relevant_threads, render_page, render_page_brief, same_item
 
 log = logging.getLogger("memvine.recall")
@@ -259,6 +259,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
         # A page found only by similarity must be as relevant as a memory would have to be.
         threads = [t for t in threads if thread_is_hit(t) or thread_similarity(t) >= min_relevance]
     base = f"FROM memory_items WHERE project_id = %s AND status = ANY(%s) {time_clause} AND scope IS DISTINCT FROM 'thread'"
+    # Not served by any briefing for memory_unused_days, and older than that (store.UNUSED).
+    unused = unused_clause(settings.memory_unused_days)
     if detail:
         # A conversation's memory is the profile of the person (slots.py). Details kept before there
         # were slots restate the conversation and are not served; its own words are (relevant_passages).
@@ -267,7 +269,8 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     vector_rows = await (
         await conn.execute(
             f"""
-            SELECT {MEMORY_COLUMNS}, embedding, 1 - (embedding <=> %s::vector) AS similarity, 0::float AS rank
+            SELECT {MEMORY_COLUMNS}, embedding, 1 - (embedding <=> %s::vector) AS similarity, 0::float AS rank,
+                   {unused} AS unused
             {base} AND embedding IS NOT NULL
             ORDER BY embedding <=> %s::vector LIMIT %s
             """,
@@ -282,7 +285,7 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
         await conn.execute(
             f"""
             SELECT {MEMORY_COLUMNS}, embedding, coalesce(1 - (embedding <=> %s::vector), 0)::float AS similarity,
-                   ts_rank(tsv, {or_query}) AS rank
+                   ts_rank(tsv, {or_query}) AS rank, {unused} AS unused
             {base} AND plainto_tsquery('english', %s)::text <> '' AND tsv @@ {or_query}
             ORDER BY rank DESC LIMIT %s
             """,
@@ -359,6 +362,9 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     # A summary wants the breadth of the fused lists, not the few lines that read most like the question.
     if detail and not summary and len(ranked_ids) > 1 and (reranker := get_reranker()) is not None:
         ranked_ids = await reranked(reranker, req.query, ranked_ids, rows, scores)
+    if detail and not req.as_of and settings.recall_unused_weight < 1:
+        # Use it or lose it: a profile line no briefing has served in a long while ranks lower.
+        ranked_ids = [(s * settings.recall_unused_weight if rows[mid]["unused"] else s, mid) for s, mid in ranked_ids]
     ranked_ids.sort(key=lambda t: (-t[0], -rows[t[1]]["recorded_at"].timestamp()))
     ranked_ids = diversify(ranked_ids, rows, MMR_LAMBDA_BROAD if broad else MMR_LAMBDA)
     picked = None

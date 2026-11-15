@@ -177,6 +177,7 @@ Slots. Every item names the slot it is the value of: "<type>/<name>", the name t
 - state: the current value of something of theirs that they track and that changes: progress so far, a count, a measure, the tool or version in use. Kept when they report that it changed, or keep coming back to it.
 - preference: what they like, or how they like things done.
 - decision: a choice they made between options, with the reason when given. A choice they make again and again (what to read next, which task comes first) has one slot, updated each time: never a slot per choice.
+- list: a set they are building up over time (books finished, features asked for, people invited): one slot per set, its statement naming every member so far and how many there are. When the excerpt adds a member, reuse the slot with the whole list, "relation": "update". A list may run past 30 words.
 - history: something they say they have, or have never, done or experienced ("has run two marathons", "has never used a spreadsheet").
 - instruction: how the assistant must answer from now on ("always give prices in euros"). Set "standing": true. Each instruction has a slot of its own and is written on its own, never inside another item. Two instructions about the same kind of question both stand: one replaces another only when the person takes the old one back or changes it.
 
@@ -405,6 +406,31 @@ Wrongly merging or retiring a true item costs more than keeping two: when neithe
 def consolidate_pairs_user(pairs: list[tuple[str, str, str, str]]) -> str:
     """pairs: (older date, older statement, newer date, newer statement), numbered from 1."""
     return "\n\n".join(f"PAIR {i}\nOLDER ({od}): {o}\nNEWER ({nd}): {n}" for i, (od, o, nd, n) in enumerate(pairs, 1))
+
+
+# Conversation mode (profile_consolidation.py): the whole profile of a person, read at once by the main
+# model. What it returns is checked without a model before anything is merged.
+CONSOLIDATE_PROFILE_SYSTEM = """You tidy the profile an assistant keeps of one person. You get its numbered lines: each has its slot, the day it was said, and a statement. The lines were written one at a time as the conversation went on, so the same thing is often spread over several of them. Find the groups of lines that belong in one line, and the plans whose day has passed. The conversation itself is kept word for word elsewhere, so nothing is lost when a passing detail is left out.
+
+A group is two or more lines about the same thing:
+- the same habit, taste or limit said several ways or in pieces ("prefers e-books when travelling", "likes print editions to collect", "listens to audiobooks on the commute" are one line about how they read);
+- one choice made again and again (what to read next, which task comes first): one line with the current choice, then the earlier ones in order;
+- a set the person is building up over time (books finished, features asked for, people invited, places visited): one line that names every member and says how many there are.
+
+Write each group's statement: one or two self-contained sentences, at most 70 words, with everything in its lines that is still true and lasting. Keep names and exact values. Where its lines give different values for the same thing, the days decide which is current: say the current one, then the earlier ("... is $60 a month since 2 April 2024, raised from $45"). Leave out what the person was asking for at that moment. Add nothing that is not in the lines.
+Give the group a slot: the slot of one of its lines, or "list/<name>" for a set (two to four lowercase words joined by hyphens).
+
+Leave a line alone when in doubt. Never group lines that cannot both be true where the days do not settle which is current, and never group lines about different people or different things that only share a topic. A line whose slot starts with "person/" joins a group only with other lines about that same person, and the group keeps that slot. Most lines belong to no group.
+
+"past": the numbers of the lines whose slot starts with "plan/" and whose day is before TODAY.
+
+Return ONLY JSON: {"groups": [{"lines": [numbers], "slot": string, "statement": string}], "past": [numbers]}"""
+
+
+def consolidate_profile_user(today: str, lines: list[tuple[str, str, str]]) -> str:
+    """`lines`: (slot, the day it was said, statement), numbered from 1."""
+    body = "\n".join(f"{i}. [{slot}] ({day}) {statement}" for i, (slot, day, statement) in enumerate(lines, start=1))
+    return f"TODAY: {today}\n\nPROFILE:\n{body}"
 
 
 CONSOLIDATE_BAR_SYSTEM = """You re-check items already in a coding team's long-term memory against the bar every memory must pass. Memory is read by every future agent session on the project, so each item costs attention forever: too much memory is worse than too little.

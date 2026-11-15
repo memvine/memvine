@@ -110,6 +110,11 @@ class Settings(BaseSettings):
     # whole conversation in the prompt at 0.903. Those details are no longer served at any share.
     recall_detail_fact_share: float = 0.12
     recall_profile_lines: int = 10
+    # Use it or lose it, conversation mode: a profile line old enough (memory_unused_days) that no
+    # briefing has served in that long counts for this much of its rank, so lines that are never the
+    # answer drift out of the few a question gets. 1 turns it off. A question about a past moment
+    # (as_of) is ranked without it: what was used since is not what was true then.
+    recall_unused_weight: float = 0.7
     # ...and when the question asks for a summary: nearly all of it, because a summary needs many
     # separate points from across the conversation. Digests of the conversation (digests.py) come
     # first, up to their share of the budget, then details up to this one; excerpts get the rest.

@@ -31,6 +31,7 @@ Configuration is `MEMVINE_*` environment variables or `server/.env`; see
 | `MEMVINE_LLM_BACKEND` | `anthropic` (needs `ANTHROPIC_API_KEY`), `claude-cli` (local `claude -p` on a Claude subscription; development only), `fake` | `anthropic` |
 | `MEMVINE_EMBEDDINGS_BACKEND` | `fastembed` (local BGE-small, downloaded once), `fake` | `fastembed` |
 | `MEMVINE_RECALL_RERANK_MODEL` | Conversation mode: the local model that orders candidate details against the question (about 150 MB, downloaded once); empty turns it off | `jinaai/jina-reranker-v1-turbo-en` |
+| `MEMVINE_RECALL_UNUSED_WEIGHT` | Conversation mode: how much of its rank a profile line keeps when it is older than `MEMVINE_MEMORY_UNUSED_DAYS` and no briefing has served it in that long; `1` turns this off | `0.7` |
 | `MEMVINE_RECALL_PROFILE_LINES` | Conversation mode: how many lines of the person's profile a question gets at most | `10` |
 | `MEMVINE_RECALL_DETAIL_FACT_SHARE` | Conversation mode: the share of a recall's budget the profile lines may take; the source excerpts (one passage per turn) fill the rest. After upgrading, `memvine-server reindex-passages <slug>` re-cuts an older conversation project's passages Memory rebuilt with `memvine-server rebuild-memory <slug>` gets the profile; details kept before are not served | `0.12` |
 | `MEMVINE_RECALL_DETAIL_SUMMARY_DIGEST_SHARE` | Conversation mode: the share of a summary question's budget given to digests of the conversation (`memvine-server backfill-digests <slug>` writes them for an older store) | `0.85` |

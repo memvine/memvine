@@ -270,8 +270,33 @@ small profile of the person beside it:
 | Progress and states of the moment | Refused | Left to the conversation's own words, except a value the person says has changed, which is always kept. A plan is current until the day it is for |
 | Updates and contradictions | Reconciled | By slot, with no similarity search: the extractor reads the whole profile and names the slot of what it keeps. A new value replaces the slot's and the old one stays as history, in the order said; a statement that cannot be true together with the slot's, with no change said, is kept beside it and recall shows both. Only the extractor's "update" for a slot it was shown retires a value. An item about to get a slot of its own is first compared with the lines it most resembles (the fast model): already covered, it only adds evidence to that line; adding something lasting, it is folded into it; otherwise it is new. That check can drop or fold, never replace (`slots.py`) |
 | Recall | What the task needs: the fast model picks, and abstains when nothing applies | The standing instructions; then the few profile lines closest to the question (at most `MEMVINE_RECALL_PROFILE_LINES`, within `MEMVINE_RECALL_DETAIL_FACT_SHARE` of the budget), each with its date and the value it replaced, conflicts first as pairs; then the original words: source excerpts found by keyword and by meaning, one passage per turn, so the person's own short turns are not buried in the assistant's long ones. A question asking for a summary is answered from digests instead (below) |
-| Recency | Facts and gotchas fade | Nothing fades |
-| Consolidation's bar check | Flags what fails the three tests | Skipped |
+| Recency | Facts and gotchas fade | Nothing fades with age. A profile line old enough that no briefing has served in `MEMVINE_MEMORY_UNUSED_DAYS` ranks lower (`MEMVINE_RECALL_UNUSED_WEIGHT`), so lines that are never the answer drift out of the few a question gets |
+| Background consolidation | Merges restatements, links missed updates and contradictions, and flags what fails the three tests | A different pass (below): the whole profile is read at once, and lines about the same thing become one line or a list with its count |
+
+**Consolidation of the profile.** Written an excerpt at a time, a profile ends up with the same thing
+spread over several lines: a habit said five ways, each choice of what to read next in a line of its
+own. And nothing in a conversation can be counted by searching it: no passage holds "thirteen films
+planned so far". So the tidy-up of a conversation project (the same job and schedule as step 5 above,
+`profile_consolidation.py`) gives the main model the whole profile and asks for groups:
+
+- a habit, taste or limit said in pieces becomes one line;
+- a choice made again and again becomes one line with the current choice first and the earlier ones
+  after it;
+- the members of a set the person is building up (books finished, features asked for, people
+  invited) become a list with its count, under a `list/` slot, which later excerpts add to;
+- a plan whose day has passed stops being current.
+
+The lines of a group are retired as merged into the new line, which takes all their evidence, and a
+person can un-merge any of them. What the model writes is checked without a model: a group needs two
+lines of the profile, a known slot type, a statement of bounded length and, unless it is a list, no
+number that none of its lines has. "Today" is the day of the last thing said, so a conversation
+imported later is tidied as of its own end. Standing instructions, lines in a recorded conflict and
+anything a person kept or wrote are never offered to the model. The pair-by-pair steps of coding-mode
+consolidation do not run here: among one person's lines they retired the wrong ones.
+
+Measured on three BEAM conversations (60 questions): the profiles came out a tenth smaller and the
+score did not move, 0.863 after against 0.867 before. The questions that need a count across
+sessions were not helped. Details in [the plan](plans/conversation-memory-plan.md).
 
 **Digests, for summaries.** A question such as "summarize how the project went" resembles no single
 detail, so the points a good answer needs rank hundreds deep in any search. In conversation mode the

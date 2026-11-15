@@ -1,6 +1,6 @@
 # Plan: conversation memory that keeps little and knows the person
 
-Status: 14 Nov 2026. Step 1 done; steps 2 and 3 built and tried on three conversations (both below); steps 4 to 6 not started. Coding mode is not touched by anything here.
+Status: 14 Nov 2026. Step 1 done; steps 2, 3 and 4 built and tried on three conversations (below); steps 5 and 6 not started. Coding mode is not touched by anything here.
 
 ## Why
 
@@ -219,15 +219,72 @@ The same three conversations rebuilt from an empty profile:
 
 About a fifth fewer, where the read suggested two fifths: 52 of conversation 13's 83 items still
 have a near-twin. This run was not scored, because it exposed a fault: the check folded a standing
-instruction ("always verify subtitle availability") into a goal, so it left the always-on section,
-and the extractor replaced one instruction with another about the same kind of question.
+instruction ("always verify subtitle availability") into a goal, so it left the always-on section.
 Conversations 14 and 15 ended with four standing instructions where the first trial had five.
-Fixed since: instructions take no part in the check on either side, and the keep rule says two
-instructions about the same kind of question both stand.
+Fixed since: instructions take no part in the check on either side.
+
+The other lost instruction had a different cause, found afterwards: coding-mode consolidation still
+ran on conversation projects, and its pair-by-pair judgement by the fast model retired one
+instruction as "replaced" by another about the same kind of question, and retired a "never" claim
+that belonged in a conflict. It had touched the first trial's stores too, before they were scored,
+though only slightly (one merge, two flags). It no longer runs there (step 4, below).
 
 Next: rebuild the three once more with that fix and score them; then all fifteen tuning
 conversations, before touching the five held out. Open: the check is too cautious on clusters
 (running choices, format habits), which is the consolidation step's work.
+
+## Step 4: consolidation (14 Nov 2026)
+
+Built (`profile_consolidation.py`, replacing coding-mode consolidation for conversation projects):
+the whole profile is read at once by the main model, which returns groups of lines about the same
+thing and the plans whose day has passed. A group becomes one line, or a list with its count under
+a `list/` slot; its lines are retired as merged into it, with their evidence, and can be un-merged.
+The extractor can also write and extend a list as the conversation goes. A profile line no briefing
+has served in a long while ranks lower (use it or lose it; off for questions about a past moment,
+so a benchmark run is not affected by the order of its questions).
+
+Why it should help: the questions every system does worst on ask for something combined across
+sessions ("how many films have I planned across the marathons"), and no passage of the conversation
+holds the count.
+
+Third trial, the same three conversations rebuilt from an empty profile on the final extraction
+code, then consolidated:
+
+| Conversation | Profile before | Groups | Lines merged | Lists made | Plans ended | Profile after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 13 | 79 | 7 | 18 | 0 | 1 | 68 |
+| 14 | 60 | 2 | 4 | 1 | 1 | 58 |
+| 15 | 51 | 4 | 9 | 0 | 0 | 46 |
+
+No group was refused by the checks, and each rebuilt conversation kept its five standing
+instructions. The merged lines read well ("Since 15 March 2024, Crystal Wilson and Douglas hold
+their book discussions between 7 and 9 PM, after Douglas asked for fewer during work hours. Earlier,
+on 20 January 2024, they had agreed to weekends only"). The model is cautious: the profiles shrank
+by about a tenth, and it made one list where the extractor had already written two.
+
+Scores, published grader, 60 questions:
+
+| | Overall | Contradictions | Multi-session |
+| --- | ---: | ---: | ---: |
+| Before consolidation (this rebuild) | 0.867 | 0.750 | 0.333 |
+| After consolidation | 0.863 | 0.750 | 0.333 |
+| First trial (the same design, an earlier build) | 0.885 | 0.854 | 0.500 |
+| Excerpts only | 0.860 | 0.771 | 0.333 |
+| Plain search | 0.863 | 0.729 | 0.375 |
+
+Two things follow. The profile's gain over plain search is not established: two builds of nearly the
+same design scored 0.885 and 0.867, so a difference of two hundredths on 60 questions is the noise
+between runs. And consolidation did not change the answers: 0.863 after against 0.867 before, a
+difference of -0.004 (paired bootstrap, 95%: -0.025 to +0.013). Four of the sixty questions scored
+differently, two up and two down, all on details and contradictions; every multi-session and
+knowledge-update question scored exactly as before. So the profiles are a tenth smaller at no cost
+to answers, and the counting questions consolidation was meant to help are not helped: 0.333 before
+and after, on six questions. Three conversations made one list between them, so the test barely
+exercised lists; whether a profile with more of them answers those questions is still open.
+
+(A first scoring run after consolidation stopped when the grading credit ran out, 41 of 60
+questions failed, and its figures are discarded. The figures above are from a second run of all 60
+questions, sent one request at a time in two parts, with no failed question or verdict.)
 
 ## Order
 
@@ -243,4 +300,4 @@ conversations, before touching the five held out. Open: the check is too cautiou
 - Whether the slots are a fixed list or named by the model as it goes.
 - Whether BM25 should replace Postgres `ts_rank` for keyword ranking (measure first).
 - Whether a small profile needs searching at all, or is always given whole.
-- How multi-session counting questions can be helped; consolidation is a guess.
+- How multi-session counting questions can be helped. Consolidation as built did not move them (above).

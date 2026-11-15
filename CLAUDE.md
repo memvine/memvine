@@ -47,7 +47,8 @@ Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local
   the next decisions say. `conversation` is for one person's long conversation with an assistant: the
   conversation is stored whole and searched word for word, and memory holds only a small profile of
   the person, each item the value of a named slot (`CONVERSATION_SYSTEM`, `extract_profile`,
-  `slots.py`, the `detail` path in `recall.py`). It has no thread pages, recalls the few profile
+  `slots.py`, the `detail` path in `recall.py`), tidied in the background into merged lines and
+  lists with counts (`profile_consolidation.py`; coding-mode consolidation does not run there). It has no thread pages, recalls the few profile
   lines a question needs and then source excerpts, and answers a summary question from digests of
   the conversation (`digests.py`). Its first version kept every detail and scored below plain search
   (`docs/plans/conversation-memory-plan.md`). BEAM measures

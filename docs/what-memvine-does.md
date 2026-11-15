@@ -61,6 +61,9 @@ person and an assistant, where today it is as good as plain search and no better
   limits, preferences and decisions, each the value of a named slot. Only what the person said
   counts, a changed value replaces the old one and keeps it as history, and two statements that
   cannot both be true are kept together. A new item is written only for what it adds.
+- Tidies that profile in the background: lines about the same thing become one line, the members of
+  a set the person builds up become a list with its count, a plan whose day has passed stops being
+  current, and a line no briefing serves for a long while ranks lower. Any merge can be undone.
 - Applies the person's standing instructions ("always name the narrator") to every answer.
 - Answers "summarize how this went" from digests of the conversation, in order.
 
@@ -93,8 +96,9 @@ person and an assistant, where today it is as good as plain search and no better
   that still fits.
 - **It costs model calls to take a conversation in.** Plain search needs only embeddings.
 - **The profile in conversation mode is new and barely measured.** On three BEAM conversations (60
-  questions) it scored 0.885 against 0.863 for plain search, a gap that could be chance. A profile
-  holds 50 to 100 items for a long conversation, and many still overlap. An earlier version kept
+  questions) two builds scored 0.885 and 0.867, against 0.863 for plain search: no difference that
+  can be told from chance. A profile holds 45 to 80 items for a long conversation, and many still
+  overlap. Consolidating the profiles made them a tenth smaller and left the score where it was (0.863). An earlier version kept
   about 800 sentence-level details per conversation; those are no longer served.
 - **A changed value is tracked only when the model sees the change.** On the benchmark's questions
   about updated values the profile is level with plain search, not ahead.
