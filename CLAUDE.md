@@ -93,8 +93,10 @@ Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next
   lawyer has not reviewed.
 - Pending, the operator's: a Slack webhook for alerts, an outside uptime check, a monthly limit on
   the Anthropic key, re-pointing each laptop's plugin (#2).
-- The repository is public since 15 Nov 2026, with private vulnerability reporting on
-  (`SECURITY.md`). Everything pushed is public at once: no keys, no real names or addresses, no
-  company details, in code, commits or issues. Still to do, the owner's: publish `@memvine/sdk`
-  (npm) and `memvine-sdk` (PyPI) (#11; both build and pass their checks, neither name is taken).
+- The repository is private. Making it public is the owner's to do, by hand, after their own
+  check: an agent never changes the repository's visibility or publishes a package. What is ready
+  for that day: a secrets scan of the whole history and a read of every issue found nothing that
+  must not be public (15 Nov); `@memvine/sdk` (npm) and `memvine-sdk` (PyPI) build and pass their
+  checks and neither name is taken (#11). After it is public: switch on private vulnerability
+  reporting (`SECURITY.md` points to it; GitHub offers it on public repositories only).
 - Later: password reset by email, SSO. No billing or paid plans: Memvine is an open-source project.
