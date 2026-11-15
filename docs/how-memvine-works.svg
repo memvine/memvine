@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="480" viewBox="0 0 1200 480" role="img" aria-labelledby="t d">
+  <title id="t">What Memvine does</title>
+  <desc id="d">Three columns. Said today: six lines of a session, of which two matter later (Dana says the broker blocks a fourth retry; Priya says the launch moves to 12 March). Kept: Memvine keeps only those two as memories, each with who said it and when, and the launch date it replaces. Known tomorrow: in a later session with another person, the agent caps a new retry at 3 and answers that the launch is on 12 March.</desc>
+  <style>
+    text { font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 20px; }
+    .head { font-size: 30px; font-weight: 600; fill: #e8ede7; }
+    .dim { fill: #8a978e; }
+    .lit { fill: #e8ede7; font-weight: 500; }
+    .who { fill: #8a978e; font-size: 17px; }
+    .new { fill: #a8e4bf; font-weight: 500; }
+    .stem { fill: none; stroke: #3e8c5e; stroke-width: 2; stroke-linecap: round; }
+    .leaf { fill: #a8e4bf; }
+  </style>
+
+  <rect x="0.5" y="0.5" width="1199" height="479" rx="18" fill="#0b1310" stroke="#1f2e26"/>
+
+  <!-- Said today: a session. Most of it is not worth keeping. -->
+  <text class="head" x="56" y="84">Said today</text>
+  <text class="dim" x="56" y="160">Agent: The export failed again.</text>
+  <text class="lit" x="56" y="212">Dana: The broker blocks a 4th retry.</text>
+  <text class="dim" x="56" y="264">Agent: Fixed. Tests pass now.</text>
+  <text class="dim" x="56" y="316">Agent: Opening the pull request.</text>
+  <text class="lit" x="56" y="368">Priya: Launch moves to 12 March.</text>
+  <text class="dim" x="56" y="420">Agent: Noted. Anything else?</text>
+
+  <!-- Kept: the two lines that stay true. -->
+  <text class="head" x="500" y="84">Kept</text>
+  <path class="stem" d="M444 206 C 462 196, 480 216, 500 206"/>
+  <path class="leaf" d="M500 206 C 508 193, 526 193, 534 206 C 526 219, 508 219, 500 206 Z"/>
+  <text class="lit" x="548" y="212">Retries cap at 3.</text>
+  <text class="who" x="548" y="240">Dana, 4 Feb</text>
+
+  <path class="stem" d="M444 362 C 462 352, 480 372, 500 362"/>
+  <path class="leaf" d="M500 362 C 508 349, 526 349, 534 362 C 526 375, 508 375, 500 362 Z"/>
+  <text class="lit" x="548" y="368">Launch is 12 March.</text>
+  <text class="who" x="548" y="396">Priya, 4 Feb. Was 5 March.</text>
+
+  <!-- Known tomorrow: another session, another person. -->
+  <text class="head" x="860" y="84">Known tomorrow</text>
+  <path class="stem" d="M796 206 C 812 196, 828 216, 844 206"/>
+  <text class="dim" x="860" y="198">Sam: Make the sync job retry.</text>
+  <text class="new" x="860" y="228">Agent: Done, capped at 3.</text>
+
+  <path class="stem" d="M796 362 C 812 352, 828 372, 844 362"/>
+  <text class="dim" x="860" y="354">Sam: When do we launch?</text>
+  <text class="new" x="860" y="384">Agent: 12 March.</text>
+</svg>

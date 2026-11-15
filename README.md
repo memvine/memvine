@@ -6,7 +6,7 @@ An AI agent forgets everything when its session ends. Memvine remembers for it. 
 said in a session, keeps the few things that stay true (a decision, a rule, a gotcha), and gives
 them to the next session before it starts.
 
-![A sample project's memory: threads of work in the middle, the facts learned in them around each one, and the files those facts depend on at the edge.](docs/memory-graph.svg)
+![Said today: six lines of a session, two of which matter later. Kept: Memvine keeps those two, with who said each and when. Known tomorrow: in a later session with someone else, the agent already knows them.](docs/how-memvine-works.svg)
 
 ## How it works
 
