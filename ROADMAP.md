@@ -8,6 +8,8 @@ GitHub issues in this repo, labelled `now` / `next` / `later` / `parked`, with `
 `area:` label.
 
 ## Now (this week)
+- Public release: the owner's checks, the client libraries on npm and PyPI (#11), then the
+  repository made public (the list is in `CLAUDE.md`, Status)
 - Re-point both laptops' plugins to Railway (#2)
 - Review real capture after a week of use (#6)
 - A BEAM result scored the published way, beside plain search and full context, with cost and
@@ -40,6 +42,7 @@ plugin 0.7.2 and Codex plugin 0.6.1; the local memory check (agent test: 9/9 rig
 Addresses `api.`, `app.` and `www.memvine.dev`; nightly backups, each one restore-tested; recall
 that lets the fast model pick what the task needs; production readiness for invited teams: health
 checks on `api` and `console`, pinned server dependencies, HSTS on the API, terms and privacy drafts,
-and a runbook (`deploy/railway/README.md` section 9). Conversation mode (a project keeps every
-concrete detail and recalls wide), with reranked recall and digests of the conversation for summary
-questions; the BEAM runner with a plain-search baseline.
+and a runbook (`deploy/railway/README.md` section 9). Conversation mode (the conversation
+stored whole and searched, a small profile of the person tidied in the background, and digests for
+summary questions); the BEAM runner with plain-search and full-context baselines, scored the
+published way on 15 conversations.

@@ -71,7 +71,7 @@ Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local
 - Examples in code, tests and docs use the invented "Northwind" billing world. Never put real
   company, customer or employer details in the repo.
 
-## Status (14 Nov 2026)
+## Status (15 Nov 2026)
 
 Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next/later.
 
@@ -82,7 +82,8 @@ Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next
   service. The laptop server is retired.
   After each deploy: `MEMVINE_SMOKE_KEY=mv_mk_... python3 benchmark/smoke/hosted.py --api <url> --console <url>`
   (throwaway project, deleted at the end; `--no-synthesis` skips the real model; `--conversation`
-  adds conversation mode). Last run 14 Nov: 18/18.
+  adds conversation mode). Last run 15 Nov, with `--conversation`, on the profile and consolidation
+  code (migration 0013): 18/18.
 - The server image installs `server/requirements.lock`; rebuild it after changing `pyproject.toml`
   (`server/README.md`, Docker).
 - Backups: the `backup` cron service dumps the database nightly to the bucket `the backup bucket`
@@ -92,4 +93,9 @@ Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next
   lawyer has not reviewed.
 - Pending, the operator's: a Slack webhook for alerts, an outside uptime check, a monthly limit on
   the Anthropic key, re-pointing each laptop's plugin (#2).
+- The repository is private. Before it is made public, the owner's: confirm no employer has a
+  claim on the work, publish `@memvine/sdk` (npm) and `memvine-sdk` (PyPI) (#11; both build and
+  pass their checks, neither name is taken), then make the repository public and switch on private
+  vulnerability reporting. A secrets scan of the whole history and a read of every issue found
+  nothing that must not be public (15 Nov).
 - Later: password reset by email, SSO. No billing or paid plans: Memvine is an open-source project.

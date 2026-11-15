@@ -143,8 +143,9 @@ def main() -> int:
     ap.add_argument("--no-synthesis", action="store_true",
                     help="the server has no model key yet: check that ingest queues instead of learning from it")
     ap.add_argument("--conversation", action="store_true",
-                    help="also check conversation mode in a second throwaway project: a small detail is kept and recalled, "
-                         "and a summary question is answered from digests (needs the model key)")
+                    help="also check conversation mode in a second throwaway project: a small profile of the person is "
+                         "kept, a detail is answered from the conversation's own words, and a summary question is "
+                         "answered from digests (needs the model key)")
     ap.add_argument("--timeout", type=float, default=30.0, help="seconds per ordinary call (default 30)")
     ap.add_argument("--synthesis-timeout", type=float, default=180.0, help="seconds for the instant ingest (default 180)")
     args = ap.parse_args()
@@ -371,9 +372,10 @@ SUMMARY_QUESTION = "Can you give me a summary of what we discussed about the inv
 
 
 def conversation_flow(api: str, http: Http, run: Run, mkey: str, args) -> None:
-    """Conversation mode in its own throwaway project: every concrete detail is kept (the coding-mode
-    flow above proves the opposite, that progress is dropped), a detail question is answered with the
-    number, and a summary question gets digests of the conversation."""
+    """Conversation mode in its own throwaway project: memory keeps a small profile of the person
+    (what they prefer and plan, each item under a named slot), not every detail; a detail question is
+    answered with the number from the conversation's own words; and a summary question gets digests
+    of the conversation."""
     slug = f"smoke-conv-{secrets.token_hex(4)}"
     s: dict = {}
 
@@ -397,10 +399,13 @@ def conversation_flow(api: str, http: Http, run: Run, mkey: str, args) -> None:
         need(status in (200, 202) and isinstance(body, dict), f"HTTP {status}: {short(body)}")
         instant = body.get("instant") or {}
         need(instant.get("status") == "done", f"not learned within the request: {instant.get('reason') or short(body)}")
-        statements = [m["memory"]["statement"] for m in instant.get("memories", [])]
-        need(len(statements) >= 3, f"conversation mode kept only {len(statements)} detail(s): {statements}")
-        need(any("47" in t for t in statements), f"the 47 minutes is not among the kept details: {statements}")
-        return f"{len(statements)} details kept, the 47 minutes among them"
+        kept = [m["memory"] for m in instant.get("memories", [])]
+        statements = [m["statement"] for m in kept]
+        need(statements, "conversation mode kept nothing about the person")
+        need(len(statements) <= 6, f"a profile is small, and this kept {len(statements)} items from three turns: {statements}")
+        need(all(m.get("slot") for m in kept), f"an item has no slot: {statements}")
+        need(any("csv" in t.lower() for t in statements), f"the preference for CSV is not in the profile: {statements}")
+        return f"{len(statements)} profile item(s), the preference for CSV among them"
 
     def recall(query: str) -> dict:
         status, body, _ = http.call("POST", f"{api}/v1/recall", token=s["key"], label="POST /v1/recall", body={"query": query})
@@ -411,7 +416,7 @@ def conversation_flow(api: str, http: Http, run: Run, mkey: str, args) -> None:
     def recall_detail():
         body = recall(DETAIL_QUESTION)
         need("47" in body.get("briefing", ""), f"the 47 minutes is not in the briefing: {short(body.get('briefing'))}")
-        need(body.get("passages"), "no source excerpts beside the details")
+        need(body.get("passages"), "no source excerpts in the recall")
         return f"47 minutes in the briefing, with {len(body['passages'])} source excerpt(s)"
 
     def recall_summary():
@@ -422,7 +427,7 @@ def conversation_flow(api: str, http: Http, run: Run, mkey: str, args) -> None:
 
     try:
         if run.step(f"conversation mode: create project {slug}", create_project):
-            if run.step("conversation mode: every detail of a short conversation is kept", ingest):
+            if run.step("conversation mode: a small profile of the person is kept", ingest):
                 run.step("conversation mode: a detail question is answered with the number", recall_detail)
                 run.step("conversation mode: a summary question gets digests", recall_summary)
     finally:
