@@ -93,8 +93,10 @@ Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next
   After each deploy: `MEMVINE_SMOKE_KEY=mv_mk_... python3 benchmark/smoke/hosted.py --api <url> --console <url>`
   (throwaway project, deleted at the end; `--no-synthesis` skips the real model; `--conversation`
   adds conversation mode). Last run 16 Nov, with `--conversation`, on the personal-project and team-space
-  code (migration 0014, plugin 0.8.0): 18/18; a throwaway team space on the hosted server refused a
-  session and took a shared memory with its author (the smoke test covers that from the next run).
+  code (migration 0014, plugin 0.8.1): 23/23, the team-space steps among them. Sharing from the
+  console was checked by hand on the hosted server with two throwaway projects (share, refuse a
+  second share, a changed memory replacing the team's copy, take back); the smoke test does not
+  cover that.
 - The server image installs `server/requirements.lock`; rebuild it after changing `pyproject.toml`
   (`server/README.md`, Docker).
 - Backups: the `backup` cron service dumps the database nightly to the bucket `the backup bucket`

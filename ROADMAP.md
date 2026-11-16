@@ -9,7 +9,7 @@ GitHub issues in this repo, labelled `now` / `next` / `later` / `parked`, with `
 
 ## Now (this week)
 - Personal projects and team spaces (a person's sessions stay theirs; the team gets what they
-  share): deployed to the hosted service on 16 Nov (migration 0014), with plugin 0.8.0 on main (an
+  share): deployed to the hosted service on 16 Nov (migration 0014), with the console's Share button and plugin 0.8.1 on main (an
   installed plugin gets it by updating). To learn from the first real teams: do people share what
   is suggested?
 - Public release, the owner's to do by hand after their own check: make the repository public,
