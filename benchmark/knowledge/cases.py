@@ -6,6 +6,9 @@ Uses the configured LLM backend (MEMVINE_LLM_BACKEND; claude-cli or anthropic). 
 print OK: "keep" cases must yield an item, "drop" cases none. prompt_file tries a draft of
 KNOWLEDGE_SYSTEM without changing the server. benchmark/memory/check.py runs these too.
 Measured 2026-10-27: 8/8 with the current rules; 2026-10-28: 10/10 with the two instructed cases (claude-cli, sonnet).
+2026-11-16: 13/13 with the three team-date cases (a moved launch date is kept, also when said in passing; what a
+release contains is not). Before that rule, one moved launch date ended up in memory, on a work page or nowhere,
+depending on the wording and the run (kept in 3 of 8 trial sessions; 12 of 12 after).
 
 A case is (name, excerpt) or (name, excerpt, project instructions): the third element is a
 project's memory instructions (projects.memory_instructions, prompts.instructions_block), so a case
@@ -38,6 +41,10 @@ CASES = [
     ("drop: code description", "Assistant: I read src/export/worker.py. The export worker retries 3 times with exponential backoff starting at 2s, then writes the failure to the dead_letter table. [tools] Read ok: src/export/worker.py"),
     ("drop: bug trace", "Assistant: Root cause found: OrderService.total() rounds before applying the discount (order_service.py:212), so totals are off by a cent on discounted orders. I'll fix it by rounding after. [tools] Bash `pytest tests/test_orders.py` failed (exit 1) ... then passed (exit 0): 12 passed"),
     ("keep: env gotcha", "[tools] Bash `make test` failed (exit 1): E could not connect to server: port 5432 ... Assistant: Port 5432 on the dev box is the legacy billing DB, not ours; our test DB is on 5433. Setting TEST_DB_PORT=5433 fixed it. [tools] Bash `TEST_DB_PORT=5433 make test` ok (exit 0): 230 passed"),
+    # A date the whole team works to, moved: every other task plans around it, and no file says it.
+    ("keep: launch date moved", "User: Legal pushed back on the refund copy, so we're moving the muse public launch from 30 Nov to 14 Dec. Assistant: Understood. I'll update the release checklist to 14 Dec."),
+    ("keep: launch date said in passing", "Assistant: The export failed again. User: The broker blocks a 4th retry. Assistant: Fixed. Tests pass now. Assistant: Opening the pull request. User: By the way, the muse launch moves to 12 December. Assistant: Noted. Anything else?"),
+    ("drop: release contents", "User: For muse 4.2.0 we ship the export fix and the retry cap; the CSV change waits for 4.3. Assistant: OK, I'll move the CSV pull request to the 4.3 milestone."),
     # Project instructions: a durable rule that would be kept, but it is about a named customer.
     ("drop: instructed no customer names",
      "User: For muse billing: Brightwater Dental's contract gives them 60-day payment terms instead of our usual 30, so never send them a dunning email before day 60. Assistant: Got it, no dunning emails to Brightwater Dental before day 60.",

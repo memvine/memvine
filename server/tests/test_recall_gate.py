@@ -227,3 +227,69 @@ async def test_off_switch(client, monkeypatch):
     monkeypatch.setattr(settings, "recall_gate", False)
     r = await recall(client)
     assert r["picked_by_model"] is False and r["items"]
+
+
+async def seed_page_only(client):
+    """A project whose only knowledge of a piece of work is its page: nothing of it is in memory."""
+    from test_threads import Router
+
+    app.state.llm.default = "[]"
+    router = Router()
+    router.threads.responses = {"Next is the queue change": PAGE}
+    r = await client.post("/v1/ingest", json={"items": [{"id": "n-3", "content": PAGE_SOURCE, "timestamp": "2026-10-21T09:00:00Z"}]})
+    assert r.status_code == 202, r.text
+    async with app.state.pool.connection() as conn:
+        pid = (await (await conn.execute("SELECT id FROM projects WHERE slug = %s", (client.project_slug,))).fetchone())["id"]
+    await drain(app.state.pool, router, app.state.embedder, pid)
+    assert (await client.get("/v1/memories")).json() == [] and len((await client.get("/v1/threads")).json()) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_page_answers_when_memory_holds_nothing_relevant(client):
+    """The date of a launch, or where a rework stands, is often on the work's page and in no memory.
+    A question about it used to be turned away before the model saw the page."""
+    await seed_page_only(client)
+    gate_answers(json.dumps({"use": [1]}))
+    r = await recall(client, WORK_QUESTION)
+    assert order() == ["Work page: Invoice retry rework. The Northwind invoice retry rework is half done; the queue change is next"], order()
+    assert r["picked_by_model"] is True and not r["abstained"] and r["items"] == []
+    assert [t["key"] for t in r["threads"]] == ["topic:retry-rework"] and "Make the queue change" in r["briefing"]
+
+    # The model reads the page and says the question does not need it: nothing is served.
+    gate_answers('{"use": []}')
+    r = await recall(client, WORK_QUESTION)
+    assert r["abstained"] and r["abstain_reason"] == "not_needed" and r["threads"] == [] and r["briefing"] == ""
+
+
+@pytest.mark.asyncio
+async def test_a_page_alone_is_not_served_without_the_models_pick(client, monkeypatch):
+    await seed_page_only(client)
+    gate_answers("no idea")  # the model gave no usable answer
+    r = await recall(client, WORK_QUESTION)
+    assert r["abstained"] and r["abstain_reason"] == "empty_store" and r["threads"] == []
+    monkeypatch.setattr(settings, "recall_gate", False)
+    r = await recall(client, WORK_QUESTION)
+    assert r["abstained"] and r["abstain_reason"] == "empty_store"
+
+
+@pytest.mark.asyncio
+async def test_an_unrelated_question_never_reaches_the_model_because_of_a_page(client):
+    await seed_page_only(client)
+    gate_answers(json.dumps({"use": [1]}))
+    asked = len(app.state.llm.calls)
+    r = await recall(client, "Which font does the marketing site use for headings?")
+    assert r["abstained"] and r["abstain_reason"] == "empty_store"
+    assert len(app.state.llm.calls) == asked, "the model was not asked"
+
+
+@pytest.mark.asyncio
+async def test_a_page_does_not_bring_back_a_memory_that_was_not_relevant_enough(client):
+    """With memories in the store but none relevant enough, the model is shown the page only."""
+    await seed_page(client)
+    monkeypatch_threshold = 0.99  # no memory can pass; the page is measured against the same bar
+    await client.patch(f"/v1/projects/{client.project_slug}", json={"recall_min_relevance": monkeypatch_threshold},
+                       headers={"Authorization": "Bearer mv_mk_test"})
+    gate_answers(json.dumps({"use": [1]}))
+    asked = len(app.state.llm.calls)
+    r = await recall(client, WORK_QUESTION)
+    assert r["abstained"] and r["abstain_reason"] == "below_threshold" and len(app.state.llm.calls) == asked

@@ -353,11 +353,24 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
                               abstain_reason=reason, min_relevance=min_relevance, top_relevance=top_relevance)
 
     page_or_message = any(thread_is_hit(t) for t in threads) or any(shared_terms(terms, m.content) for m in pending)
-    # Conversation mode decides at the end: it abstains only when there is nothing to return at all.
-    if not detail and not page_or_message and not any(relevance(mid) >= min_relevance for _, mid in ranked_ids):
+    relevant_memory = any(relevance(mid) >= min_relevance for _, mid in ranked_ids)
+    # A page that is only similar to the question is not a hit, but the model below may pick it. When
+    # no memory is relevant enough, that pick is the only way a question about a piece of work is
+    # answered ("when is the launch?" with the date on the launch's page and nowhere in memory), so a
+    # page as relevant as a memory would have to be takes the question to the model. Without the
+    # model's pick nothing changes: a page alone, on similarity alone, is not served.
+    gated = llm is not None and settings.recall_gate and not broad and not detail and not req.profiles
+    page_alone = (gated and not relevant_memory and not page_or_message
+                  and any(thread_similarity(t) >= min_relevance for t in threads if not thread_is_hit(t)))
+
+    async def nothing_relevant() -> RecallResponse:
         if candidates:
             return await abstain("below_threshold")
         return await abstain("no_candidates" if await has_memory(conn, project_id, audiences) else "empty_store")
+
+    # Conversation mode decides at the end: it abstains only when there is nothing to return at all.
+    if not detail and not page_or_message and not relevant_memory and not page_alone:
+        return await nothing_relevant()
 
     # A summary wants the breadth of the fused lists, not the few lines that read most like the question.
     if detail and not summary and len(ranked_ids) > 1 and (reranker := get_reranker()) is not None:
@@ -371,10 +384,16 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     # A page found only by similarity is a candidate beside the memories: the model reads its title and
     # summary, so a question about a piece of work gets its page even when no memory is needed.
     similar_pages = [t for t in threads if not thread_is_hit(t)]
-    if llm is not None and settings.recall_gate and (ranked_ids or similar_pages) and not broad and not detail and not req.profiles:
-        ids = [mid for _, mid in ranked_ids[:GATE_CANDIDATES]]
+    if gated and (ranked_ids or similar_pages):
+        # Asked only because of a page: the memories were already found not relevant enough, so the
+        # model is shown the pages and cannot bring one of those memories back.
+        ids = [] if page_alone else [mid for _, mid in ranked_ids[:GATE_CANDIDATES]]
         picked = await gate(llm, req.query, [*ids, *(t["id"] for t in similar_pages)],
                             [*(rows[mid]["statement"] for mid in ids), *(page_line(t) for t in similar_pages)])
+    if page_alone:
+        if picked is None:  # the model gave no answer: as before, similarity alone serves no page
+            return await nothing_relevant()
+        ranked_ids = []
 
     # Standing rules are said in their own section, never again as an item.
     standing_ids = {r["id"] for r in standing_rows}

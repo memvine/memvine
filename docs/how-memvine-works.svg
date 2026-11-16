@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="480" viewBox="0 0 1200 480" role="img" aria-labelledby="t d">
   <title id="t">What Memvine does</title>
-  <desc id="d">Three columns. Said today: six lines of a session, of which two matter later (Dana says the broker blocks a fourth retry; Priya says the launch moves to 12 March). Kept: Memvine keeps only those two as memories, each with who said it and when, and the launch date it replaces. Known tomorrow: in a later session with another person, the agent caps a new retry at 3 and answers that the launch is on 12 March.</desc>
+  <desc id="d">Three columns. Said today: six lines of a session, of which two matter later (Dana says never to go above 3 retries; Priya says the launch moves to 12 March). Kept: Memvine keeps only those two as memories, each with who said it and when, and the launch date it replaces. Known tomorrow: in a later session with another person, the agent caps a new retry at 3 and answers that the launch is on 12 March.</desc>
   <style>
     text { font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 20px; }
     .head { font-size: 30px; font-weight: 600; fill: #e8ede7; }
@@ -16,7 +16,7 @@
   <!-- Said today: a session. Most of it is not worth keeping. -->
   <text class="head" x="56" y="84">Said today</text>
   <text class="dim" x="56" y="160">Agent: The export failed again.</text>
-  <text class="lit" x="56" y="212">Dana: The broker blocks a 4th retry.</text>
+  <text class="lit" x="56" y="212">Dana: Never go above 3 retries.</text>
   <text class="dim" x="56" y="264">Agent: Fixed. Tests pass now.</text>
   <text class="dim" x="56" y="316">Agent: Opening the pull request.</text>
   <text class="lit" x="56" y="368">Priya: Launch moves to 12 March.</text>
