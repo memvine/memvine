@@ -12,17 +12,15 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    # Every page and file is checked with the server before it is reused (a 304 when unchanged).
+    # A week-long cache on the stylesheet once left returning visitors with a new page in old
+    # styles; the pages ask for styles.css?v=2 and vine.js?v=2 to step past those cached copies.
+    # No location sets a header of its own: one that did would lose all of these.
+    add_header Cache-Control "no-cache" always;
 
     location = / { try_files /index.html =404; }
     location = /how-it-works { try_files /how-it-works.html =404; }
     location = /terms { try_files /terms.html =404; }
     location = /privacy { try_files /privacy.html =404; }
-    location ~* \.(css|js|svg|png)$ {
-        # add_header in a location replaces the server's set, so the security headers come again.
-        add_header Cache-Control "public, max-age=604800" always;
-        add_header X-Content-Type-Options nosniff always;
-        add_header Referrer-Policy strict-origin-when-cross-origin always;
-        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    }
     location / { try_files $uri =404; }
 }
