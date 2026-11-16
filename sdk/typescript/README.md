@@ -13,7 +13,7 @@ Memory for your agent in ten lines. With a project key and the sample data loade
 import { Memvine } from "@memvine/sdk";
 const mv = new Memvine({ apiKey: process.env.MEMVINE_KEY!, baseUrl: process.env.MEMVINE_URL });
 
-const s = mv.session("demo-1", { agent: "my-agent", identity: "priya@example.com" });
+const s = mv.session("demo-1", { agent: "my-agent", identity: "you@example.com" });
 await s.send("user", "Retries cap at 3: the broker rate-limits us above that.");
 await s.send("assistant", "Set MAX_RETRIES = 3 in src/queue.py.");
 await s.close();                                   // tending turns the session into memory

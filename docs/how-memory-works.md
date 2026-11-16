@@ -2,11 +2,7 @@
 
 **Memories grow on the trellis of the code. When the trellis moves, the vine notices.**
 
-![The sample project's memory graph: threads as hubs, facts around them, files at the rim. The launch date supersedes an older one, two weekend rules contradict each other, and a gotcha anchored to src/queue.py is drawn with a broken edge because the file changed.](memory-graph.svg)
-
-*The sample project's graph, drawn by hand in the console's style. The sample itself has no code
-anchors; the retries gotcha on `src/queue.py` (and the fact that extends it) is added to show what
-a stale anchor looks like.*
+![Said today: six lines of a session, two of which matter later. Kept: Memvine keeps those two, with who said each and when. Known tomorrow: in a teammate's session, their agent already knows them.](../site/how-memvine-works.svg)
 
 Your agents talk. Memvine reads what they say, keeps the parts that stay true, ties each one to
 where it came from, and hands the relevant ones back at the start of the next task. A memory is a
@@ -29,7 +25,7 @@ It loads instantly, with no model call and no credits. Then, in TypeScript (`@me
 import { Memvine } from "@memvine/sdk";
 const mv = new Memvine({ apiKey: process.env.MEMVINE_KEY!, baseUrl: process.env.MEMVINE_URL });
 
-const s = mv.session("demo-1", { agent: "my-agent", identity: "priya@example.com" });
+const s = mv.session("demo-1", { agent: "my-agent", identity: "you@example.com" });
 await s.send("user", "Retries cap at 3: the broker rate-limits us above that.");
 await s.send("assistant", "Set MAX_RETRIES = 3 in src/queue.py.");
 await s.close();                                   // tending turns the session into memory
@@ -46,7 +42,7 @@ import os
 from memvine_sdk import Memvine
 mv = Memvine(os.environ["MEMVINE_KEY"], base_url=os.environ.get("MEMVINE_URL", "https://api.memvine.dev"))
 
-s = mv.session("demo-1", agent="my-agent", identity="priya@example.com")
+s = mv.session("demo-1", agent="my-agent", identity="you@example.com")
 s.send("user", "Retries cap at 3: the broker rate-limits us above that.")
 s.send("assistant", "Set MAX_RETRIES = 3 in src/queue.py.")
 s.close()                                    # tending turns the session into memory
@@ -97,6 +93,10 @@ Agents in Claude Code and Codex need no code at all: the plugins in `plugins/cla
 Memories are connected, and the connections have names, spelled the same way in the API,
 the console and these docs.
 
+![One row for each of the six links, with a small example: a launch date replaced by a newer one, two retry caps that disagree, a memory tied to the file src/queue.py, a decision that came out of a release, a reason added to a rule, and a fact inferred from three memories.](memory-edges.svg)
+
+*A leaf is a memory: grey once it has been replaced, dashed when it was inferred.*
+
 | Edge | Meaning |
 | --- | --- |
 | `supersedes` | A newer fact replaces an older one; the old one keeps its end date. |
@@ -106,12 +106,12 @@ the console and these docs.
 | `extends` | A newer fact adds detail to an older one; both stay active. |
 | `derived` | A fact the model inferred from two or more memories, never stated in one place. |
 
-**`supersedes`.** On 9 Oct Priya says "launch is 29 Oct"; on 21 Oct she says "we're moving the
-launch to 12 Nov". "Launch is 12 Nov" supersedes "Launch is 29 Oct", and recall answers with the
+**`supersedes`.** On 9 Oct the team lead says "launch is 29 Oct"; on 21 Oct they say "we're moving
+the launch to 12 Nov". "Launch is 12 Nov" supersedes "Launch is 29 Oct", and recall answers with the
 new date and shows the old one as `(was: ...)`.
 
-**`contradicts`.** In two sessions on the same day, Sam says "retries cap at 3" and Dana says
-"retries cap at 5". Neither is newer by evidence. Both stay active and recall shows them together, so the agent asks
+**`contradicts`.** In two sessions on the same day, one engineer says "retries cap at 3" and
+another says "retries cap at 5". Neither is newer by evidence. Both stay active and recall shows them together, so the agent asks
 instead of picking one.
 
 **`anchored`.** "Retries cap at 3" was learned in a session that edited `src/queue.py` at
@@ -126,11 +126,11 @@ decision together.
 **`extends`.** "The cap exists because the broker rate-limits" extends "Retries cap at 3". The
 second adds the reason without replacing the rule, so both stay active.
 
-**`derived`.** Three sessions show Priya approving partner contracts, answering partner questions
-and owning the partner checklist. "Priya owns partner onboarding" is derived from them: stored as
+**`derived`.** Three sessions show the same person approving partner contracts, answering partner
+questions and owning the partner checklist. "Partner onboarding has one owner" is derived from them: stored as
 inferred, at low confidence, with links to the memories it came from.
 
-Two more things read like edges in the picture but are fields on the memory: **said by** (who said
+Two more things read like edges but are fields on the memory: **said by** (who said
 it, and whether it was seen, stated, claimed or inferred) and **why** (the reason given for a
 decision or rule).
 
@@ -148,7 +148,7 @@ with the date of the memory at the other end, and quotes that memory where the l
     [decision 21 Oct, supersedes 9 Oct] Launch is 12 Nov (was: Launch is 29 Oct)
     [rule 21 Oct, contradicts 21 Oct] Retries cap at 5
     [fact 22 Oct, extends 21 Oct] The cap exists because the broker rate-limits (adds to: Retries cap at 3)
-    [fact 23 Oct, inferred, derived from 3 memories] Priya owns partner onboarding
+    [fact 23 Oct, inferred, derived from 3 memories] Partner onboarding has one owner
     [gotcha 3 Oct, anchored src/queue.py, MAY BE OUTDATED] Retries cap at 3 (src/queue.py changed since 20 Oct 2026; check the code)
 
 A contradiction is quoted once, in a pair at the top of the briefing that asks the agent to say
@@ -162,7 +162,7 @@ Wherever a memory is shown to a person, its `assertion` reads as words, not a ba
 | `assertion` | Reads as |
 | --- | --- |
 | `observed` | seen in a run |
-| `stated` | the speaker's name: "Priya said" |
+| `stated` | the speaker's name, then "said" |
 | `claimed` | assistant said, unverified |
 | `inferred` | inferred |
 
@@ -171,10 +171,10 @@ in recall.
 
 ## One transcript becomes many facts
 
-This is the first source in the sample project, a six-line kickoff:
+The sample project starts with a six-line kickoff like this one:
 
 ```
-## Priya · 5 Oct 10:00
+## Lead · 5 Oct 10:00
 Target public launch is 29 Oct.
 Refunds over $500 always need a human approver; the support bot may only draft them.
 And never deploy on Fridays. I prefer async review over meetings.
@@ -189,9 +189,9 @@ It yields four memories, each with the quote that proves it:
 | decision | The public launch is planned for 29 Oct. | "Target public launch is 29 Oct." |
 | rule | Refunds over $500 always need a human approver; the support bot may only draft them. | "Refunds over $500 always need a human approver" |
 | rule, standing | Never deploy on Fridays. | "never deploy on Fridays" |
-| preference (low confidence: said once) | Priya prefers async review over meetings. | "I prefer async review over meetings." |
+| preference (low confidence: said once) | The lead prefers async review over meetings. | "I prefer async review over meetings." |
 
-The agent's line adds nothing: it restates what Priya said. A quote that cannot be found in the
+The agent's line adds nothing: it restates what the lead said. A quote that cannot be found in the
 source word for word is dropped, so a memory cannot cite something nobody said. A week later,
 "Legal pushed back on the refund copy, so we're moving the launch from 29 Oct to 12 Nov" becomes a
 new decision that supersedes the first, with its reason as its `why`.

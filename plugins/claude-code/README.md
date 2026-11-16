@@ -37,8 +37,8 @@ console draws:
 
     [decision 15 Oct, supersedes 6 Oct] The public launch moved to 14 Nov because legal pushed back on the refund copy (was: The public launch is planned for 31 Oct)
     [rule 26 Oct, contradicts 24 Oct] Weekend escalations page the on-call engineer right away
-    [rule 21 Oct, extends 21 Oct] Only Priya merges release work (adds to: Release 4.2.0 ships ...)
-    [fact 20 Oct, inferred, derived from 3 memories] Priya owns partner onboarding
+    [rule 21 Oct, extends 21 Oct] Only the release lead merges release work (adds to: Release 4.2.0 ships ...)
+    [fact 20 Oct, inferred, derived from 3 memories] Partner onboarding has one owner
     [gotcha 3 Oct, anchored src/queue.py, MAY BE OUTDATED] Retries cap at 3 (src/queue.py changed since 3 Oct 2026; check the code)
 
 Memories about code go stale when the code changes: a fact that names a file the session touched

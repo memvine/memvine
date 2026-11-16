@@ -46,7 +46,7 @@ is believed (`MEMVINE_TRUSTED_PROXIES`, default `private`).
 ```sh
 KEY=mv_sk_...
 curl -s localhost:8400/v1/ingest -H "Authorization: Bearer $KEY" -H 'content-type: application/json' -d '{
-  "items": [{"id": "chat-1", "timestamp": "2026-10-03T14:02:00Z", "identity": "priya@example.com",
+  "items": [{"id": "chat-1", "timestamp": "2026-10-03T14:02:00Z", "identity": "you@example.com",
              "content": "## Developer\nLegal pushed back on the refund copy, so launch moves from 29 Oct to 12 Nov."}]}'
 
 curl -s localhost:8400/v1/jobs -H "Authorization: Bearer $KEY"        # wait until pending is 0
@@ -232,7 +232,7 @@ Four edges are fields on every memory today: `supersedes` (`supersedes`, `supers
 `valid_to`), `contradicts` (`conflicts_with`), `anchored` (the anchors behind `/v1/code/anchors`,
 and `stale_reason` when the file changed) and `decided_in` (`thread_id`). Who said it and why
 are fields too: `assertion` with the `identity` of the source each `evidence` quote comes from (shown to people as "seen in a run",
-"Priya said", "assistant said, unverified", "inferred") and `why` on knowledge.
+the speaker's name then "said", "assistant said, unverified", "inferred") and `why` on knowledge.
 
 `extends` and `derived` are stored in `memory_links`. `GET /v1/memories/{id}/related` returns a
 memory and every edge in both directions as `{kind, direction, item}`; `anchored` edges carry the

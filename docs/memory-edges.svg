@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="548" viewBox="0 0 1200 548" role="img" aria-labelledby="t d">
+  <title id="t">The six links between memories</title>
+  <desc id="d">One row for each link, with a small example. supersedes: "Launch is 29 Oct" is replaced by "Launch is 12 Nov". contradicts: "Retries cap at 3" and "Retries cap at 5" both stand. anchored: "Retries cap at 3" is tied to the file src/queue.py. decided_in: "Billing is manual for the beta" came out of the work on Release 0.4. extends: "The broker rate-limits above 3" adds detail to "Retries cap at 3". derived: "Partner onboarding has one owner" is inferred from three memories about partners.</desc>
+  <!-- A leaf is a memory, as in site/how-memvine-works.svg: grey once replaced, dashed when inferred. -->
+  <style>
+    text { font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 19px; }
+    .name { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 19px; font-weight: 600; fill: #e8ede7; }
+    .mean { font-size: 16.5px; fill: #8a978e; }
+    .say { fill: #e8ede7; font-weight: 500; }
+    .old { fill: #8a978e; text-decoration: line-through; }
+    .file { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 17px; fill: #e8ede7; }
+    .link { fill: none; stroke: #3e8c5e; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .dash { stroke-dasharray: 6 6; }
+    .clash { fill: none; stroke: #e8ede7; stroke-width: 2; stroke-linecap: round; }
+    .box { fill: none; stroke: #3a4a40; stroke-width: 1.5; }
+    .rule { stroke: #18241d; stroke-width: 1; }
+  </style>
+  <defs>
+    <linearGradient id="leaf" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#5a9a78"/><stop offset="1" stop-color="#a6d8bb"/></linearGradient>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="1199" height="547" rx="18" fill="#0b1310" stroke="#1f2e26"/>
+
+  <text class="name" x="56" y="61">supersedes</text><text class="mean" x="56" y="86">The newer one replaces the older.</text>
+  <path transform="translate(376 64) rotate(-6) scale(0.5)" d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="#5d6257" fill-opacity="0.7" stroke="#8a978e" stroke-opacity="0.4" stroke-width="1.6"/><text class="old" x="414" y="71">Launch is 29 Oct</text><path class="link" d="M730 64 H792"/><path class="link" d="M784 58 L792 64 L784 70"/><path transform="translate(804 64) rotate(-6) scale(0.5)" d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="1.6"/><text class="say" x="842" y="71">Launch is 12 Nov</text>
+  <path class="rule" d="M56 106 H1144"/>
+  <text class="name" x="56" y="145">contradicts</text><text class="mean" x="56" y="170">Both stand, so the agent asks.</text>
+  <path transform="translate(376 148) rotate(-6) scale(0.5)" d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="1.6"/><text class="say" x="414" y="155">Retries cap at 3</text><path class="clash" d="M738 143 H784 M738 153 H784 M770 135 L752 161"/><path transform="translate(804 148) rotate(-6) scale(0.5)" d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="1.6"/><text class="say" x="842" y="155">Retries cap at 5</text>
+  <path class="rule" d="M56 190 H1144"/>
+  <text class="name" x="56" y="229">anchored</text><text class="mean" x="56" y="254">Goes stale when the file changes.</text>
+  <path transform="translate(376 232) rotate(-6) scale(0.5)" d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="1.6"/><text class="say" x="414" y="239">Retries cap at 3</text><path class="link" d="M730 232 H792"/><rect class="box" x="804" y="212" width="178" height="40" rx="8"/><text class="file" x="820" y="238">src/queue.py</text>
+  <path class="rule" d="M56 274 H1144"/>
+  <text class="name" x="56" y="313">decided_in</text><text class="mean" x="56" y="338">Came out of a piece of work.</text>
+  <path transform="translate(376 316) rotate(-6) scale(0.5)" d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="1.6"/><text class="say" x="414" y="323">Billing is manual for the beta</text><path class="link" d="M730 316 H792"/><rect class="box" x="804" y="296" width="150" height="40" rx="20"/><text class="say" x="824" y="323">Release 0.4</text>
+  <path class="rule" d="M56 358 H1144"/>
+  <text class="name" x="56" y="397">extends</text><text class="mean" x="56" y="422">Adds detail. Both stay.</text>
+  <path transform="translate(376 400) rotate(-6) scale(0.5)" d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="1.6"/><text class="say" x="414" y="407">Retries cap at 3</text><path class="link" d="M792 400 H730"/><path class="link" d="M738 394 L730 400 L738 406"/><path transform="translate(804 400) rotate(-6) scale(0.5)" d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="1.6"/><text class="say" x="842" y="407">The broker rate-limits above 3</text>
+  <path class="rule" d="M56 442 H1144"/>
+  <text class="name" x="56" y="481">derived</text><text class="mean" x="56" y="506">Inferred from several memories.</text>
+  <path transform="translate(376 484) rotate(-34) scale(0.5)" d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="1.6"/><path transform="translate(376 484) rotate(-6) scale(0.5)" d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="1.6"/><path transform="translate(376 484) rotate(22) scale(0.5)" d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="1.6"/><text class="say" x="414" y="491">3 memories about partners</text><path class="link dash" d="M730 484 H792"/><path class="link" d="M784 478 L792 484 L784 490"/><path transform="translate(804 484) rotate(-6) scale(0.5)" d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="none" stroke="#a8e4bf" stroke-width="2.4" stroke-dasharray="6 5"/><text class="say" x="842" y="491">Partner onboarding has one owner</text>
+</svg>

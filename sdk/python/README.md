@@ -12,7 +12,7 @@ import os
 from memvine_sdk import Memvine
 mv = Memvine(os.environ["MEMVINE_KEY"], base_url=os.environ.get("MEMVINE_URL", "https://api.memvine.dev"))
 
-s = mv.session("demo-1", agent="my-agent", identity="priya@example.com")
+s = mv.session("demo-1", agent="my-agent", identity="you@example.com")
 s.send("user", "Retries cap at 3: the broker rate-limits us above that.")
 s.send("assistant", "Set MAX_RETRIES = 3 in src/queue.py.")
 s.close()                                    # tending turns the session into memory
