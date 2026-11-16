@@ -7,7 +7,7 @@
       "name": "memvine",
       "source": "./plugins/claude-code",
       "description": "Every session starts briefed from your team's memory, and what is said in it becomes memory.",
-      "version": "0.7.3",
+      "version": "0.8.0",
       "author": { "name": "Memvine", "url": "https://memvine.dev" },
       "keywords": ["memory", "recall", "context", "memvine"]
     }

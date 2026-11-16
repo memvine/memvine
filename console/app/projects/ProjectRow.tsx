@@ -42,6 +42,8 @@ export function ProjectRow({ project, current, lastActivity, created, canManage 
             {/* /projects/<slug> selects the project and opens its Overview; a link anyone can share. */}
             <a href={`/projects/${encodeURIComponent(project.slug)}`} className="truncate hover:underline">{project.name}</a>
             {current && <Badge tone="good" dot>current</Badge>}
+            {project.personal && <Badge title="Only you can open this project, whatever role anyone else in the organization holds">only you</Badge>}
+            {project.teamSpace && <Badge title="Holds only memories people shared from projects of their own; refuses sessions">team space</Badge>}
           </p>
           <p className="font-mono text-[11.5px] text-text-3">{project.slug}</p>
         </div>

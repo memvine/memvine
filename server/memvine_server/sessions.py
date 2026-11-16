@@ -316,7 +316,10 @@ async def kept(conn, project_id: UUID, session_id: str) -> SessionKept | None:
         """, (project_id, prefix, session_id))).fetchone())
     rows = await (await conn.execute(
         """
-        SELECT m.id, m.kind, m.category, m.statement, m.supersedes, m.conflicts_with, old.statement AS previous
+        SELECT m.id, m.kind, m.category, m.statement, m.supersedes, m.conflicts_with, old.statement AS previous,
+               m.shared_at,
+               (SELECT e.quote FROM evidence e WHERE e.memory_id = m.id AND starts_with(e.episode_id, %s)
+                ORDER BY e.episode_id LIMIT 1) AS quote
         FROM memory_items m LEFT JOIN memory_items old ON old.id = m.supersedes
         WHERE m.project_id = %s AND m.status IN ('active', 'stale')
           AND m.id IN (SELECT memory_id FROM evidence WHERE project_id = %s AND starts_with(episode_id, %s))
@@ -326,9 +329,15 @@ async def kept(conn, project_id: UUID, session_id: str) -> SessionKept | None:
         -- events log records, then by id so the order is always the same.
         ORDER BY m.recorded_at, m.created_at,
                  (SELECT min(ev.id) FROM memory_events ev WHERE ev.memory_id = m.id AND ev.kind = 'created'), m.id
-        """, (project_id, project_id, prefix, prefix))).fetchall()
-    items = [KeptMemory(id=r["id"], category=r["category"] or KIND_WORD.get(r["kind"], "fact"), statement=r["statement"],
-                        supersedes=r["supersedes"], previous=r["previous"]) for r in rows]
+        """, (prefix, project_id, project_id, prefix, prefix))).fetchall()
+    items = []
+    for r in rows:
+        category = r["category"] or KIND_WORD.get(r["kind"], "fact")
+        shared = r["shared_at"] is not None
+        # What a team wants is what holds for everyone on the project; a preference is one person's.
+        items.append(KeptMemory(id=r["id"], category=category, statement=r["statement"], supersedes=r["supersedes"],
+                                previous=r["previous"], quote=r["quote"], shared=shared,
+                                suggest_share=not shared and category != "preference"))
     superseded = len({r["supersedes"] for r in rows if r["supersedes"]})
     contradictions = sum(1 for r in rows if r["conflicts_with"])
     return SessionKept(session_id=session_id, tending=tending, kept=items, superseded=superseded,

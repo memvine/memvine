@@ -58,12 +58,15 @@ def _plural(n: int, one: str, many: str | None = None) -> str:
     return f"{n} {one if n == 1 else (many or one + 's')}"
 
 
-async def synthesis_health(conn, org_id: UUID | None = None, project_id: UUID | None = None) -> dict:
+async def synthesis_health(conn, org_id: UUID | None = None, project_id: UUID | None = None,
+                           viewer: UUID | None = None) -> dict:
     """The synthesis conditions for one project, one organization's projects, or (both None) the
     whole server. The worker condition is always server-wide: every project shares the workers."""
     scope = "project" if project_id else "organization" if org_id else "server"
-    where = "(%(org)s::uuid IS NULL OR p.org_id = %(org)s) AND (%(project)s::uuid IS NULL OR p.id = %(project)s)"
-    params = {"org": org_id, "project": project_id, "hours": settings.alert_failed_hours}
+    # An organization's view (org_id set) leaves out personal projects that are not the viewer's.
+    where = ("(%(org)s::uuid IS NULL OR (p.org_id = %(org)s AND (p.owner_user_id IS NULL OR p.owner_user_id = %(viewer)s::uuid))) "
+             "AND (%(project)s::uuid IS NULL OR p.id = %(project)s)")
+    params = {"org": org_id, "project": project_id, "viewer": viewer, "hours": settings.alert_failed_hours}
     failed = await (await conn.execute(
         f"""SELECT p.slug, p.name, count(DISTINCT j.episode_id) AS count, max(j.finished_at) AS last_at
             FROM jobs j JOIN projects p ON p.id = j.project_id

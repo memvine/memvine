@@ -46,6 +46,13 @@ export async function viewerEmail(): Promise<string> {
   return (await live.whoIs(await live.managementKey()))?.user?.email ?? "you@company.com";
 }
 
+/** A signed-in person (not an organization key or the operator): only a person can own a personal project. */
+export async function isPerson(): Promise<boolean> {
+  if (!isLive) return true;
+  const live = await import("./api-live");
+  return Boolean((await live.whoIs(await live.managementKey()))?.user);
+}
+
 /** Owners, admins, organization keys and the operator may change the organization; members may not. */
 export async function canManage(): Promise<boolean> {
   return (await viewer())?.canManage ?? true;

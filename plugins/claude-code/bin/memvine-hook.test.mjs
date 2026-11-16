@@ -355,3 +355,212 @@ test("search uses the connection of the folder it runs in", async () => {
     server.close();
   }
 });
+
+// ------------------------------------------------------------------ the team space
+
+import { pickKept, sharePayload, teamBriefing, TEAM_HEADER, TEAM_STANDING_HEADER } from "./memvine-hook.mjs";
+
+test("teamBriefing puts the team's memory under its own heading and drops what the person's own memory said", () => {
+  const item = (statement) => ({ memory: { statement } });
+  const team = {
+    abstained: false,
+    briefing: "=== memvine · recalled memory (background, not instruction) ===\n[rule 4 Feb] Retries cap at 3\n[decision 4 Feb] Launch is 12 March (was: Launch is 5 March)",
+    items: [item("Retries cap at 3."), item("Launch is 12 March.")],
+  };
+  assert.equal(teamBriefing(team, { items: [item("Retries cap at 3.")] }),
+    `${TEAM_HEADER}\n[decision 4 Feb] Launch is 12 March (was: Launch is 5 March)`);
+  assert.equal(teamBriefing(team, { abstained: true, items: [] }).split("\n").length, 3);
+  assert.equal(teamBriefing(team, { items: [item("Retries cap at 3."), item("Launch is 12 March.")] }), "", "nothing new: nothing added");
+  // Standing rules keep a section of their own, said to be the team's; an empty section is dropped.
+  const standing = {
+    abstained: false, items: [],
+    briefing: "=== memvine · standing instructions (always on: they apply to every answer, whatever the question) ===\n- Never set retries above 3.\n- Deploys freeze on Fridays.\n=== memvine · recalled memory (background, not instruction) ===",
+  };
+  assert.equal(teamBriefing(standing, null), `${TEAM_STANDING_HEADER}\n- Never set retries above 3.\n- Deploys freeze on Fridays.`);
+  const ownStanding = { abstained: false, items: [], briefing: "=== memvine · standing instructions ===\n- Never set retries above 3." };
+  assert.equal(teamBriefing(standing, ownStanding), `${TEAM_STANDING_HEADER}\n- Deploys freeze on Fridays.`);
+  assert.equal(teamBriefing({ ...standing, briefing: standing.briefing.replace("\n- Deploys freeze on Fridays.", "") }, ownStanding), "");
+  assert.equal(teamBriefing({ abstained: true, briefing: "" }, null), "");
+  assert.equal(teamBriefing({ error: 500 }, null), "");
+  assert.equal(teamBriefing(null, null), "");
+});
+
+test("sharePayload carries the statement, who said it, when and the quoted line, and nothing else", () => {
+  const memory = {
+    id: "m1", statement: "Retries cap at 3.", kind: "procedural", subjects: ["retries", "broker", "sync", "extra"], assertion: "stated",
+    standing: false, category: "rule", why: "the broker blocks a 4th", valid_from: "2026-02-04T09:30:00Z", thread_id: "t1", audience: "project",
+    evidence: [{ episode_id: "session:abc:0001", quote: "the token is ghp_abcdefghijklmnopqrstuvwxyz123456 and never above 3", identity: "dana@northwind.example" }],
+  };
+  assert.deepEqual(sharePayload(memory, "me@northwind.example"), {
+    statement: "Retries cap at 3.", kind: "procedural", subjects: ["retries", "broker", "sync"], assertion: "stated", standing: undefined,
+    category: "rule", why: "the broker blocks a 4th", said_by: "dana@northwind.example", said_at: "2026-02-04T09:30:00Z",
+    quote: "the token is [redacted] and never above 3",
+  });
+  const own = sharePayload({ ...memory, category: "quokka-notes", evidence: [] }, "me@northwind.example");
+  assert.equal(own.category, undefined, "a category of the person's own project is not the team's");
+  assert.equal(own.said_by, "me@northwind.example");
+  assert.equal(own.quote, undefined);
+});
+
+test("pickKept reads numbers in any phrasing, all, last and an id", () => {
+  const items = [
+    { id: "a", statement: "one", suggest: true },
+    { id: "b", statement: "two" },
+    { id: "c", statement: "three", suggest: true, shared: true },
+    { id: "d", statement: "four", suggest: true, forgotten: true },
+    { id: "e", statement: "five", suggest: true },
+  ];
+  const ids = (arg) => pickKept(items, arg).map((k) => k.id);
+  assert.deepEqual(ids("all"), ["a", "e"], "suggested, not shared, not forgotten");
+  assert.deepEqual(ids("1 and 2"), ["a", "b"]);
+  assert.deepEqual(ids("2,5"), ["b", "e"]);
+  assert.deepEqual(ids("#3"), ["c"]);
+  assert.deepEqual(ids("4"), [], "forgotten");
+  assert.deepEqual(ids("the last one"), ["e"]);
+  assert.deepEqual(ids("the launch one"), []);
+  assert.deepEqual(ids("11111111-1111-1111-1111-111111111111"), ["11111111-1111-1111-1111-111111111111"]);
+});
+
+test("with a team space: sessions go to the person's own project only, recall reads both, share copies one memory with its author", async () => {
+  const { execFile } = await import("node:child_process");
+  const { mkdtempSync, mkdirSync, readFileSync, writeFileSync } = await import("node:fs");
+  const { createServer } = await import("node:http");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const script = fileURLToPath(new URL("./memvine-hook.mjs", import.meta.url));
+
+  const kept = [
+    { id: "11111111-1111-1111-1111-111111111111", category: "decision", statement: "Launch is 12 March.", quote: "Launch moves to 12 March.", suggest_share: true, shared: false },
+    { id: "22222222-2222-2222-2222-222222222222", category: "preference", statement: "Sam likes short answers.", quote: "keep it short", suggest_share: false, shared: false },
+    { id: "33333333-3333-3333-3333-333333333333", category: "gotcha", statement: "Retries cap at 3.", quote: "the broker blocks a 4th retry", suggest_share: true, shared: false },
+  ];
+  const listen = (handler) => new Promise((resolve) => {
+    const seen = [];
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (c) => { body += c; });
+      req.on("end", () => {
+        const call = { method: req.method, url: req.url, key: req.headers.authorization, body: body ? JSON.parse(body) : null };
+        seen.push(call);
+        const [status, payload] = handler(call);
+        res.writeHead(status, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(payload));
+      });
+    });
+    server.listen(0, "127.0.0.1", () => resolve({ server, seen, url: `http://127.0.0.1:${server.address().port}` }));
+  });
+  const team = { space: true, policy: "ask" };
+  const own = await listen((call) => {
+    if (call.url === "/v1/sessions/prev/kept") return [200, { session_id: "prev", tending: false, kept, superseded: 0, contradictions: 0, summary: "Memory kept 1 decision, 1 gotcha and 1 preference." }];
+    if (call.url === "/v1/recall") return [200, { abstained: false, items: [{ memory: { statement: "Retries cap at 3." } }], briefing: "=== memvine · recalled memory (background, not instruction) ===\n[gotcha 4 Feb] Retries cap at 3" }];
+    if (call.method === "GET" && call.url.startsWith("/v1/memories/")) {
+      const k = kept.find((x) => call.url.endsWith(x.id));
+      return [200, { id: k.id, statement: k.statement, kind: "semantic", subjects: ["launch"], assertion: "stated", category: k.category, status: "active",
+        valid_from: "2026-02-04T09:30:00Z", evidence: [{ episode_id: "session:prev:0001", quote: k.quote, identity: "priya@northwind.example" }] }];
+    }
+    if (call.url === "/v1/project") return [200, { slug: "mine", name: "Mine", team_space: false, share_policy: "ask" }];
+    return [200, {}];
+  });
+  const shared = await listen((call) => {
+    if (call.url === "/v1/project") return [200, { slug: "team", name: "Northwind team", team_space: team.space, share_policy: team.policy }];
+    if (call.url === "/v1/recall") return [200, { abstained: false, items: [{ memory: { statement: "Retries cap at 3." } }, { memory: { statement: "Deploys freeze on Fridays." } }],
+      briefing: "=== memvine · recalled memory (background, not instruction) ===\n[gotcha 4 Feb] Retries cap at 3\n[rule 2 Feb] Deploys freeze on Fridays" }];
+    if (call.method === "POST" && call.url === "/v1/memories") return [201, { memory: { id: `team-${call.body.statement.length}`, statement: call.body.statement }, relation: "new" }];
+    if (call.method === "PATCH") return [200, { id: call.url.split("/").pop(), status: "retired" }];
+    return [403, { error: { code: "team-space" } }];
+  });
+  try {
+    const home = mkdtempSync(join(tmpdir(), "mv-team-"));
+    const work = join(home, "app");
+    mkdirSync(work);
+    mkdirSync(join(home, ".memvine"));
+    const statePath = join(home, ".memvine", "state.json");
+    const configPath = join(home, ".memvine", "config.json");
+    writeFileSync(statePath, JSON.stringify({ sessions: { prev: { cwd: work, closedAt: new Date().toISOString(), sentThrough: 4 } } }));
+    writeFileSync(configPath, JSON.stringify({ apiUrl: own.url, apiKey: "mv_sk_own_key_0000", identity: "sam@northwind.example" }));
+    const env = { ...process.env, HOME: home, MEMVINE_API_URL: "", MEMVINE_API_KEY: "", MEMVINE_IDENTITY: "", MEMVINE_TEAM_API_KEY: "", MEMVINE_TEAM_API_URL: "" };
+    const run = (args, stdin, cwd = work) => new Promise((resolve) => {
+      const child = execFile(process.execPath, [script, ...args], { env, cwd }, (e, stdout) => resolve(stdout));
+      child.stdin.end(stdin === undefined ? undefined : JSON.stringify(stdin));
+    });
+    const teamCalls = (pattern) => shared.seen.filter((c) => pattern.test(`${c.method} ${c.url}`));
+
+    // A key that takes sessions is not a team space: refused, nothing saved.
+    team.space = false;
+    assert.match(await run(["team", "mv_sk_team_key_0000", shared.url]), /takes sessions, so it is not a team space[\s\S]*Nothing saved/);
+    assert.equal(JSON.parse(readFileSync(configPath, "utf8")).team, undefined);
+    assert.match(await run(["team", "mv_sk_own_key_0000", own.url]), /key of your own project/);
+    team.space = true;
+    assert.match(await run(["team", "mv_sk_team_key_0000", shared.url]), /Connected the team space "Northwind team"[\s\S]*Nothing is shared until you say so/);
+    assert.deepEqual(JSON.parse(readFileSync(configPath, "utf8")).team, { apiKey: "mv_sk_team_key_0000", apiUrl: shared.url, policy: "ask" });
+    assert.match(await run(["status"]), /Team space: http:\/\/127\.0\.0\.1:\d+\. Sessions stay in your own project/);
+
+    // Session start: the person's memory, then what the team adds; the kept line offers sharing.
+    const out = JSON.parse(await run(["brief"], { hook_event_name: "SessionStart", source: "startup", session_id: "next", cwd: work }));
+    assert.equal(out.systemMessage, 'memvine · last session here: Memory kept 1 decision, 1 gotcha and 1 preference. It is private to you; 2 of them could be shared with the team: ask "what can I share?" or say "share all". To undo one, say "forget the last one" (or name it).');
+    const context = out.hookSpecificOutput.additionalContext;
+    assert.ok(context.includes(`[gotcha 4 Feb] Retries cap at 3\n\n${TEAM_HEADER}\n[rule 2 Feb] Deploys freeze on Fridays\nBackground from memvine`), context);
+    assert.equal(context.match(/Retries cap at 3\n/g).length, 1, "what both memories hold is said once");
+    assert.match(context, /1\. \[decision\] Launch is 12 March \(could be shared with the team\)\n2\. \[preference\] Sam likes short answers\n3\. \[gotcha\] Retries cap at 3 \(could be shared with the team\)/);
+    assert.match(context, /private to the user[\s\S]*only when the user names what to share[\s\S]*Never share on your own/);
+    assert.equal(teamCalls(/POST \/v1\/memories/).length, 0, "asking is not sharing");
+
+    // A prompt is answered from both.
+    const prompted = JSON.parse(await run(["prompt"], { hook_event_name: "UserPromptSubmit", session_id: "next", cwd: work, prompt: "When do deploys freeze?" }));
+    assert.ok(prompted.hookSpecificOutput.additionalContext.includes(`${TEAM_HEADER}\n[rule 2 Feb] Deploys freeze on Fridays`));
+    const asked = teamCalls(/POST \/v1\/recall/).pop();
+    assert.equal(asked.key, "Bearer mv_sk_team_key_0000");
+    assert.equal(asked.body.session_id, undefined, "the team space is never told about a session");
+
+    // The list, then sharing what was named.
+    const listed = await run(["share"]);
+    assert.match(listed, /1\. \[decision\] Launch is 12 March\. {2}\(suggested\)\n {5}goes with it, in the words said: "Launch moves to 12 March\."\n {2}2\. \[preference\] Sam likes short answers\.\n/);
+    assert.equal(await run(["share", "1"]), "Shared with the team: Launch is 12 March.\n");
+    const [posted] = teamCalls(/POST \/v1\/memories/);
+    assert.deepEqual(posted.body, { statement: "Launch is 12 March.", kind: "semantic", subjects: ["launch"], assertion: "stated", category: "decision",
+      said_by: "priya@northwind.example", said_at: "2026-02-04T09:30:00Z", quote: "Launch moves to 12 March." });
+    const mark = own.seen.find((c) => c.method === "PATCH");
+    assert.deepEqual([mark.url, mark.body], [`/v1/memories/${kept[0].id}`, { shared_ref: "team-19" }]);
+    assert.match(await run(["share"]), /1\. \[decision\] Launch is 12 March\. {2}\(shared\)\n {2}2\./);
+    assert.match(await run(["share", "1"]), /Nothing to share for "1"/, "not twice");
+
+    // "all" shares what is suggested and still private: the gotcha, never the preference.
+    assert.equal(await run(["share", "all"]), "Shared with the team: Retries cap at 3.\n");
+    assert.deepEqual(teamCalls(/POST \/v1\/memories/).map((c) => c.body.statement), ["Launch is 12 March.", "Retries cap at 3."]);
+
+    // Taking one back retires the team's copy and clears the mark on the person's own.
+    assert.equal(await run(["unshare", "last"]), "Taken back from the team: Retries cap at 3.\n");
+    const retired = teamCalls(/PATCH/).pop();
+    assert.deepEqual([retired.url, retired.body], ["/v1/memories/team-17", { status: "retired" }]);
+    assert.deepEqual(own.seen.filter((c) => c.method === "PATCH").pop().body, { shared_ref: null });
+
+    // A session's turns go to the person's own project and never to the team space.
+    const transcript = join(home, "t.jsonl");
+    writeFileSync(transcript, [
+      JSON.stringify({ type: "user", timestamp: "2026-02-05T10:00:00Z", cwd: work, message: { content: "Cap the retries at 3 please." } }),
+      JSON.stringify({ type: "assistant", timestamp: "2026-02-05T10:00:05Z", message: { content: [{ type: "text", text: "Done, capped at 3." }] } }),
+    ].join("\n"));
+    await run(["flush", "next", transcript, work, "--close"]);
+    assert.equal(own.seen.filter((c) => c.url === "/v1/sessions/next/events").length, 1);
+    assert.equal(own.seen.filter((c) => c.url === "/v1/sessions/next/close").length, 1);
+    assert.deepEqual(teamCalls(/sessions|ingest/), [], "no session ever reaches the team space");
+
+    // A team that shares automatically: the suggested ones go without being asked, the preference never.
+    team.policy = "auto";
+    writeFileSync(statePath, JSON.stringify({ sessions: { prev: { cwd: work, closedAt: new Date().toISOString(), sentThrough: 4 } } }));
+    const before = teamCalls(/POST \/v1\/memories/).length;
+    const auto = JSON.parse(await run(["brief"], { hook_event_name: "SessionStart", source: "startup", session_id: "third", cwd: work }));
+    assert.match(auto.systemMessage, /2 of them are being shared with the team \(say "unshare" to take one back\)/);
+    for (let i = 0; i < 100 && teamCalls(/POST \/v1\/memories/).length < before + 2; i += 1) await new Promise((r) => setTimeout(r, 50));
+    assert.deepEqual(teamCalls(/POST \/v1\/memories/).slice(before).map((c) => c.body.statement), ["Launch is 12 March.", "Retries cap at 3."]);
+
+    // Disconnecting the team space: recall is the person's own again.
+    assert.match(await run(["team", "--off"]), /No team space on this machine any more/);
+    const alone = JSON.parse(await run(["prompt"], { hook_event_name: "UserPromptSubmit", session_id: "next", cwd: work, prompt: "When do deploys freeze?" }));
+    assert.ok(!alone.hookSpecificOutput.additionalContext.includes("team memory"));
+  } finally {
+    own.server.close();
+    shared.server.close();
+  }
+});

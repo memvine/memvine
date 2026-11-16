@@ -6,7 +6,7 @@ import {
   Badge, button, Card, CardBody, formatDate, Mono, PageHeader, Select, Table, TableEmpty, TBody, Td, Th, THead, timeAgo, Tr,
 } from "@/components/ui";
 import { currentProject, listAudit, listInvites, listMembers, listOrgKeys, listOrgs, listProjects, orgInfo } from "@/lib/api";
-import { CategoriesEditor, InstructionsForm, ModeForm } from "./MemoryRules";
+import { CategoriesEditor, InstructionsForm, ModeForm, SharePolicyForm } from "./MemoryRules";
 import { InviteForm, PasswordForm } from "./PeopleForms";
 import { SecretForm } from "./SecretForm";
 
@@ -85,8 +85,15 @@ export default async function SettingsPage() {
             <Card>
               <CardBody className="space-y-6">
                 {/* key: another project resets the field */}
-                <ModeForm key={`mode-${project.slug}-${project.memoryMode ?? "coding"}`} value={project.memoryMode ?? "coding"} canEdit={manager} />
-                <InstructionsForm key={project.slug} value={project.memoryInstructions ?? ""} canEdit={manager} />
+                {project.teamSpace ? (
+                  /* A team space makes no memory from conversation: only how memories reach it is set here. */
+                  <SharePolicyForm key={`share-${project.slug}-${project.sharePolicy ?? "ask"}`} value={project.sharePolicy ?? "ask"} canEdit={manager} />
+                ) : (
+                  <>
+                    <ModeForm key={`mode-${project.slug}-${project.memoryMode ?? "coding"}`} value={project.memoryMode ?? "coding"} canEdit={manager} />
+                    <InstructionsForm key={project.slug} value={project.memoryInstructions ?? ""} canEdit={manager} />
+                  </>
+                )}
                 <CategoriesEditor categories={project.categories ?? []} canEdit={manager} />
               </CardBody>
             </Card>

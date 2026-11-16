@@ -180,7 +180,7 @@ interface ServerProject {
   key_count: number; last_activity_at: string | null; monthly_credit_cap: string | null; retention_days: number | null;
   month_credits: string; recall_min_relevance?: number | null; recall_half_life_days?: number | null; sample_source_count?: number;
   description?: string | null; unused_count?: number; unused_days?: number; review_count?: number;
-  memory_instructions?: string | null; memory_mode?: MemoryMode; categories?: ServerCategory[];
+  memory_instructions?: string | null; memory_mode?: MemoryMode; team_space?: boolean; share_policy?: "ask" | "auto"; personal?: boolean; categories?: ServerCategory[];
   flagged_count?: number; consolidated_at?: string | null; last_consolidation?: ConsolidationStats | null;
 }
 
@@ -201,6 +201,9 @@ const toProject = (p: ServerProject): Project => ({
   reviewCount: Number(p.review_count ?? 0),
   memoryInstructions: p.memory_instructions ?? null,
   memoryMode: p.memory_mode ?? "coding",
+  teamSpace: Boolean(p.team_space),
+  personal: Boolean(p.personal),
+  sharePolicy: p.share_policy ?? "ask",
   categories: (p.categories ?? []).map(toCategory),
   flaggedCount: Number(p.flagged_count ?? 0),
   consolidatedAt: p.consolidated_at ?? null,
@@ -269,6 +272,8 @@ export const liveApi: MemvineApi = {
     const body: Record<string, unknown> = { name, tags };
     if (options.description) body.description = options.description;
     if (options.sample) body.sample = true;
+    if (options.teamSpace) body.team_space = true;
+    if (options.personal) body.personal = true;
     const p = toProject(await call<ServerProject>("/v1/projects", { method: "POST", body }));
     const key = await call<ServerKey>(`/v1/projects/${p.slug}/keys`, { method: "POST", body: { name: "default" } });
     return { project: { ...p, keyCount: 1 }, secret: key.key! };
@@ -283,6 +288,7 @@ export const liveApi: MemvineApi = {
     if (patch.recallHalfLifeDays !== undefined) body.recall_half_life_days = patch.recallHalfLifeDays;
     if (patch.memoryInstructions !== undefined) body.memory_instructions = patch.memoryInstructions;
     if (patch.memoryMode !== undefined) body.memory_mode = patch.memoryMode;
+    if (patch.sharePolicy !== undefined) body.share_policy = patch.sharePolicy;
     await call(`/v1/projects/${slug}`, { method: "PATCH", body });
   },
   async createCategory(project, category) {

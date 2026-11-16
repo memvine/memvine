@@ -44,6 +44,7 @@ BODIES: dict[tuple[str, str], dict | None] = {
     ("POST", "/v1/recall"): {"query": "quokka invoices launch refunds", "identity": "{identity}", "profiles": True},
     ("POST", "/v1/ask"): {"query": "quokka invoices launch refunds", "identity": "{identity}", "profiles": True},
     ("POST", "/v1/sessions/{session_id}/events"): {"events": [{"role": "user", "content": "attacker turn"}]},
+    ("GET", "/v1/project"): None,
     ("GET", "/v1/sessions"): None,
     ("DELETE", "/v1/sessions/{session_id}"): None,
     ("GET", "/v1/sessions/{session_id}"): None,
@@ -69,7 +70,7 @@ BODIES: dict[tuple[str, str], dict | None] = {
     ("GET", "/v1/memories/{memory_id}/history"): None,
     ("GET", "/v1/events"): None,
     ("GET", "/v1/graph"): None,
-    ("PATCH", "/v1/memories/{memory_id}"): {"status": "retired", "confirm": True, "flag": None},
+    ("PATCH", "/v1/memories/{memory_id}"): {"status": "retired", "confirm": True, "flag": None, "shared_ref": "hijacked"},
     ("GET", "/v1/code/anchors"): None,
     ("POST", "/v1/code/check"): {"repo": "northwind/billing", "files": {"src/invoices.py": None}},
     ("POST", "/v1/export"): None,
@@ -86,7 +87,7 @@ BODIES: dict[tuple[str, str], dict | None] = {
     ("POST", "/v1/projects"): {"name": "attacker project {rand}"},
     ("GET", "/v1/projects"): None,
     ("PATCH", "/v1/projects/{slug}"): {"name": "hijacked", "processing_paused": True, "monthly_credit_cap": 0,
-                                       "memory_instructions": "Keep everything."},
+                                       "memory_instructions": "Keep everything.", "share_policy": "auto"},
     ("DELETE", "/v1/projects/{slug}"): None,
     ("GET", "/v1/projects/{slug}/categories"): None,
     ("POST", "/v1/projects/{slug}/categories"): {"slug": "atk-{rand}", "name": "attacker category"},
@@ -135,9 +136,9 @@ async def snapshot(dsn: str, b: dict) -> dict:
     """Everything of B's that a leak could change (last-used timestamps aside)."""
     queries = {
         "project": "SELECT slug, name, tags, monthly_credit_cap, retention_days, processing_paused, description, recall_min_relevance, "
-                   "recall_half_life_days, memory_instructions FROM projects WHERE id = %(pid)s",
+                   "recall_half_life_days, memory_instructions, team_space, share_policy FROM projects WHERE id = %(pid)s",
         "categories": "SELECT slug, name, description FROM project_categories WHERE project_id = %(pid)s ORDER BY slug",
-        "memories": "SELECT id, statement, status, review, assertion, superseded_by, valid_to, flag, retired_reason, merged_into FROM memory_items WHERE project_id = %(pid)s ORDER BY id",
+        "memories": "SELECT id, statement, status, review, assertion, superseded_by, valid_to, flag, retired_reason, merged_into, shared_ref FROM memory_items WHERE project_id = %(pid)s ORDER BY id",
         "episodes": "SELECT id, content, audience FROM episodes WHERE project_id = %(pid)s ORDER BY id",
         "sessions": "SELECT id, status, turns FROM sessions WHERE project_id = %(pid)s ORDER BY id",
         "events": "SELECT count(*) AS n FROM session_events WHERE project_id = %(pid)s",

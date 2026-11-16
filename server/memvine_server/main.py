@@ -34,6 +34,7 @@ from . import sample as sample_ops
 from . import sessions as session_ops
 from . import threads as thread_ops
 from .auth import (
+    VISIBLE_TO,
     Admin,
     Principal,
     ensure_manager,
@@ -41,6 +42,7 @@ from .auth import (
     hash_key,
     new_org_key,
     new_project_key,
+    owns,
     require_management,
     require_manager,
     require_operator,
@@ -75,6 +77,7 @@ from .models import (
     ProjectCategoryOut,
     ProjectCategoryPatch,
     ProjectCreate,
+    ProjectInfo,
     ProjectOut,
     ProjectPatch,
     RecallRequest,
@@ -194,21 +197,35 @@ async def health(request: Request):
 
 
 @app.get("/v1/health/synthesis")
-async def synthesis_health(request: Request, admin: Admin = Depends(require_manager), project: str | None = Query(None)):
+async def synthesis_health(request: Request, admin: Admin = Depends(require_management), project: str | None = Query(None)):
     """Whether synthesis is keeping up: jobs failed recently, a live job waiting too long in a project
     that is not paused, a worker that stopped polling. The operator sees every project; an
-    organization's owners and admins see its own; `project` narrows to one."""
+    organization's owners and admins see its own; `project` narrows to one. A member sees this for
+    their own personal project only."""
     async with request.app.state.pool.connection() as conn:
         project_id = None
+        found = await find_project(conn, admin, project) if project else None
+        if not admin.can_manage and not owns(admin, found):
+            raise HTTPException(403, {"code": "admin-role-required", "message": "Ask an owner or admin of this organization"})
         if project:
-            found = await find_project(conn, admin, project)
             if not found:
                 raise HTTPException(404, {"code": "not-found", "message": f"No project {project!r}"})
             project_id = found["id"]
-        return await health_ops.synthesis_health(conn, org_id=None if admin.is_operator else admin.org_id, project_id=project_id)
+        return await health_ops.synthesis_health(conn, org_id=None if admin.is_operator else admin.org_id, project_id=project_id,
+                                                 viewer=admin.user_id)
 
 
 # ------------------------------------------------------------------ memory
+
+
+async def refuse_conversation(conn, project_id) -> None:
+    """A team space holds what people chose to share and never a session: conversation sent to it
+    is refused, whoever sends it."""
+    row = await (await conn.execute("SELECT team_space FROM projects WHERE id = %s", (project_id,))).fetchone()
+    if row and row["team_space"]:
+        raise HTTPException(403, {"code": "team-space", "message": (
+            "This project is a team space: it takes memories people share, not conversation. "
+            "Send sessions to a project of your own and share from there.")})
 
 
 @app.post("/v1/ingest", response_model=IngestResponse, status_code=202)
@@ -219,6 +236,7 @@ async def ingest(body: IngestRequest, request: Request, response: Response, prin
             "send larger text or batches without instant and it is queued")})
     results = []
     async with request.app.state.pool.connection() as conn, conn.transaction():
+        await refuse_conversation(conn, principal.project_id)
         for slug in {ep.audience for ep in body.items}:
             if not await access.audience_exists(conn, principal.project_id, slug):
                 raise HTTPException(400, {"code": "audience-unknown", "message": f"No audience {slug!r} in this project; create it with PUT /v1/audiences/{slug}"})
@@ -299,8 +317,19 @@ def recall_log_detail(result: RecallResponse) -> str:
 async def session_events(session_id: str, body: SessionEventsRequest, request: Request, principal: Principal = Depends(require_project)):
     """Stream a live session's turns. The working state refreshes in the background every few turns."""
     async with request.app.state.pool.connection() as conn, conn.transaction():
+        await refuse_conversation(conn, principal.project_id)
         await charge(conn, principal.project_id, "session", sum(len(e.content) for e in body.events))
         return await session_ops.append_events(conn, principal.project_id, session_id, body)
+
+
+@app.get("/v1/project", response_model=ProjectInfo)
+async def project_info(request: Request, principal: Principal = Depends(require_project)):
+    """What the caller's project is: its mode, whether it is a team space and how that space wants
+    memories shared. A plugin reads this for the project its key belongs to."""
+    async with request.app.state.pool.connection() as conn:
+        row = await (await conn.execute(
+            "SELECT slug, name, memory_mode, team_space, share_policy FROM projects WHERE id = %s", (principal.project_id,))).fetchone()
+    return ProjectInfo(**row)
 
 
 @app.get("/v1/sessions", response_model=list[SessionOut])
@@ -546,7 +575,8 @@ async def create_memory(body: MemoryCreate, request: Request, principal: Princip
                                       kind=body.kind, subjects=body.subjects, assertion=body.assertion,
                                       audience=body.audience, standing=body.standing, category=body.category, why=body.why,
                                       supersedes=body.supersedes, given=set(body.model_fields_set),
-                                      actor=event_ops.actor_of(request))
+                                      actor=event_ops.actor_of(request),
+                                      said_by=body.said_by, said_at=body.said_at, quote=body.quote)
         except billing.CapReached as exc:
             raise HTTPException(429, {"code": "project-cap-reached", "message": str(exc)}) from exc
         except SupersedeError as exc:
@@ -629,6 +659,11 @@ async def patch_memory(memory_id: UUID, body: MemoryPatch, request: Request, pri
         if "flag" in body.model_fields_set:
             # {"flag": null}: a person dismissed what consolidation flagged; the memory stays as it is.
             await consolidation_ops.clear_flag(conn, principal.project_id, memory_id, actor=actor, reason="dismissed")
+        if "shared_ref" in body.model_fields_set:
+            # The person shared it with a team space (or took that back): it is not suggested again.
+            await conn.execute(
+                "UPDATE memory_items SET shared_ref = %s, shared_at = CASE WHEN %s::text IS NULL THEN NULL ELSE now() END WHERE id = %s",
+                (body.shared_ref, body.shared_ref, memory_id))
         return await get_memory(conn, principal.project_id, memory_id)
 
 
@@ -917,6 +952,7 @@ async def charge(conn, project_id, kind: str, chars: int) -> None:
 PROJECT_SELECT = """
     SELECT p.id, p.slug, p.name, p.created_at, p.tags, p.monthly_credit_cap, p.retention_days, p.processing_paused,
            p.description, p.recall_min_relevance, p.recall_half_life_days, p.memory_instructions, p.memory_mode,
+           p.team_space, p.share_policy, (p.owner_user_id IS NOT NULL) AS personal,
            (SELECT coalesce(jsonb_agg(jsonb_build_object('slug', c.slug, 'name', c.name, 'description', c.description,
                                                          'created_at', c.created_at) ORDER BY c.created_at, c.slug), '[]'::jsonb)
               FROM project_categories c WHERE c.project_id = p.id) AS categories,
@@ -953,8 +989,19 @@ async def _owned(conn, admin: Admin, slug: str):
 
 
 @app.post("/v1/projects", response_model=ProjectOut, status_code=201)
-async def create_project(body: ProjectCreate, request: Request, admin: Admin = Depends(require_manager)):
-    """Create a project in the caller's organization (the operator may name one with `org`)."""
+async def create_project(body: ProjectCreate, request: Request, admin: Admin = Depends(require_management)):
+    """Create a project in the caller's organization (the operator may name one with `org`). An
+    owner or admin creates the organization's projects; any member may create a personal one
+    (`personal`), which only they open."""
+    if body.personal and not admin.user_id:
+        raise HTTPException(400, {"code": "personal-needs-person", "message": (
+            "A personal project belongs to a signed-in person; a key cannot own one")})
+    if body.personal and body.team_space:
+        raise HTTPException(400, {"code": "personal-team-space", "message": "A team space is the team's; it cannot be personal"})
+    if not body.personal and not admin.can_manage:
+        raise HTTPException(403, {"code": "admin-role-required", "message": (
+            "Ask an owner or admin of this organization, or create a personal project")})
+    owner = admin.user_id if body.personal else None
     slug = body.slug or slug_from(body.name)
     async with request.app.state.pool.connection() as conn:
         org_slug = body.org if admin.is_operator and body.org else None
@@ -968,17 +1015,21 @@ async def create_project(body: ProjectCreate, request: Request, admin: Admin = D
         # Names are unique within an organization. Slugs are unique on the server (they name the
         # project in X-Memvine-Project), so a name another organization also uses gets a suffixed
         # slug, and nothing reveals that the other project exists.
-        if await (await conn.execute("SELECT 1 FROM projects WHERE org_id = %s AND (slug = %s OR lower(name) = lower(%s))",
-                                     (org_id, slug, body.name))).fetchone():
+        # ...among the projects the caller can see: a name someone else's personal project uses is
+        # free, and taking it reveals nothing (the slug gets a suffix, as across organizations).
+        if await (await conn.execute(
+                f"SELECT 1 FROM projects p WHERE p.org_id = %s AND {VISIBLE_TO} AND (p.slug = %s OR lower(p.name) = lower(%s))",
+                (org_id, admin.user_id, slug, body.name))).fetchone():
             raise HTTPException(409, {"code": "slug-taken", "message": "This organization already has a project with that name"})
         row = None
         for attempt in range(5):
             candidate = slug if attempt == 0 else f"{slug}-{secrets.token_hex(2)}"
             row = await (
                 await conn.execute(
-                    "INSERT INTO projects (slug, name, tags, org_id, description, memory_mode) VALUES (%s, %s, %s, %s, %s, %s) "
-                    "ON CONFLICT (slug) DO NOTHING RETURNING id",
-                    (candidate, body.name, sorted(set(body.tags)), org_id, body.description, body.memory_mode),
+                    "INSERT INTO projects (slug, name, tags, org_id, description, memory_mode, team_space, share_policy, owner_user_id) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (slug) DO NOTHING RETURNING id",
+                    (candidate, body.name, sorted(set(body.tags)), org_id, body.description, body.memory_mode,
+                     body.team_space, body.share_policy, owner),
                 )
             ).fetchone()
             if row or body.slug:
@@ -998,7 +1049,8 @@ async def projects(request: Request, admin: Admin = Depends(require_management))
         if admin.is_operator:
             rows = await (await conn.execute(PROJECT_SELECT + " ORDER BY p.created_at")).fetchall()
         else:
-            rows = await (await conn.execute(PROJECT_SELECT + " WHERE p.org_id = %s ORDER BY p.created_at", (admin.org_id,))).fetchall()
+            rows = await (await conn.execute(PROJECT_SELECT + f" WHERE p.org_id = %s AND {VISIBLE_TO} ORDER BY p.created_at",
+                                             (admin.org_id, admin.user_id))).fetchall()
     return [ProjectOut(**r) for r in rows]
 
 
@@ -1011,6 +1063,14 @@ async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: 
         before = await (await conn.execute("SELECT memory_instructions FROM projects WHERE id = %s FOR UPDATE",
                                            (project["id"],))).fetchone()
         instructions = (body.memory_instructions or "").strip() or None
+        if body.team_space and await (await conn.execute(
+                "SELECT 1 FROM projects p WHERE p.id = %s AND NOT p.team_space AND ("
+                "EXISTS (SELECT 1 FROM sessions s WHERE s.project_id = p.id) OR "
+                "EXISTS (SELECT 1 FROM episodes e WHERE e.project_id = p.id))", (project["id"],))).fetchone():
+            # A team space is one that never held conversation; this one already does.
+            raise HTTPException(409, {"code": "has-conversation", "message": (
+                "This project already holds sessions or sources, so it cannot become a team space. "
+                "Create a new project as the team space.")})
         await conn.execute(
             """
             UPDATE projects SET name = COALESCE(%s, name), tags = COALESCE(%s, tags),
@@ -1021,7 +1081,9 @@ async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: 
                 recall_min_relevance = CASE WHEN %s THEN %s ELSE recall_min_relevance END,
                 recall_half_life_days = CASE WHEN %s THEN %s ELSE recall_half_life_days END,
                 memory_instructions = CASE WHEN %s THEN %s ELSE memory_instructions END,
-                memory_mode = COALESCE(%s, memory_mode)
+                memory_mode = COALESCE(%s, memory_mode),
+                team_space = COALESCE(%s, team_space),
+                share_policy = COALESCE(%s, share_policy)
             WHERE id = %s
             """,
             (body.name, sorted(set(body.tags)) if body.tags is not None else None,
@@ -1030,7 +1092,8 @@ async def patch_project(slug: str, body: ProjectPatch, request: Request, admin: 
              "description" in body.model_fields_set, (body.description or "").strip() or None,
              "recall_min_relevance" in body.model_fields_set, body.recall_min_relevance,
              "recall_half_life_days" in body.model_fields_set, body.recall_half_life_days,
-             "memory_instructions" in body.model_fields_set, instructions, body.memory_mode, project["id"]),
+             "memory_instructions" in body.model_fields_set, instructions, body.memory_mode,
+             body.team_space, body.share_policy, project["id"]),
         )
         if "memory_instructions" in body.model_fields_set and instructions != before["memory_instructions"]:
             # The activity feed says the rules changed and by whom; the text itself stays out of events.
@@ -1050,6 +1113,7 @@ async def delete_project(slug: str, request: Request, admin: Admin = Depends(req
         raise HTTPException(400, {"code": "confirm-required", "message": "Repeat the project slug in ?confirm= to delete it"})
     async with request.app.state.pool.connection() as conn:
         project = await _owned(conn, admin, slug)
+        request.state.audit_owner = project["owner_user_id"]  # the audit line of a personal project stays its owner's
         await conn.execute("DELETE FROM projects WHERE id = %s", (project["id"],))
         # Tables without a foreign key to projects.
         for table in ("passages", "session_events", "request_log", "evidence"):
@@ -1278,6 +1342,9 @@ async def audit_log(request: Request, admin: Admin = Depends(require_manager),
     if not admin.is_operator:
         where.append("a.org_id = %s")
         args.append(admin.org_id)
+        # What someone did in their own personal project is theirs to see, not the organization's.
+        where.append("(a.owner_user_id IS NULL OR a.owner_user_id = %s)")
+        args.append(admin.user_id)
     if project:
         where.append("p.slug = %s")
         args.append(project)

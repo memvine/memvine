@@ -1,12 +1,12 @@
 import { FolderKanban } from "lucide-react";
 import { Callout, Empty, FilterBar, formatDate, PageHeader, SearchField, Select, timeAgo } from "@/components/ui";
-import { canManage, currentProject, listProjects, publicApiUrl, viewerEmail } from "@/lib/api";
+import { canManage, currentProject, isPerson, listProjects, publicApiUrl, viewerEmail } from "@/lib/api";
 import { NewProject } from "./NewProject";
 import { ProjectRow } from "./ProjectRow";
 
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const { q = "", tag = "", missing = "" } = await searchParams;
-  const [projects, current, manage, email] = await Promise.all([listProjects(), currentProject(), canManage(), viewerEmail()]);
+  const [projects, current, manage, email, person] = await Promise.all([listProjects(), currentProject(), canManage(), viewerEmail(), isPerson()]);
   const needle = q.trim().toLowerCase();
   const shown = projects.filter(
     (p) => (!needle || p.name.toLowerCase().includes(needle) || p.slug.includes(needle) || p.tags.some((t) => t.includes(needle)))
@@ -21,7 +21,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         title="Projects"
         count={projects.length}
         description="Every project of this organization. A project is an isolation boundary: its memory, sources, sessions and keys never cross into another."
-        actions={manage ? <NewProject apiUrl={publicApiUrl()} email={email} /> : undefined}
+        actions={manage || person ? <NewProject apiUrl={publicApiUrl()} email={email} canManage={manage} person={person} /> : undefined}
       />
 
       {missing && (
@@ -66,7 +66,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                 current={p.slug === current.slug}
                 lastActivity={p.lastActivityAt ? timeAgo(p.lastActivityAt) : "no calls yet"}
                 created={formatDate(p.createdAt)}
-                canManage={manage}
+                canManage={manage || Boolean(p.personal)}
               />
             ))}
           </ul>

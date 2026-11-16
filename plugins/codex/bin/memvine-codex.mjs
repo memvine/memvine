@@ -30,6 +30,7 @@ const SHARED = [join(HERE, "..", "lib", "memvine-hook.mjs"), join(HERE, "..", ".
 if (!SHARED) { console.error("memvine-codex: memvine-hook.mjs not found next to this script."); process.exit(1); }
 const shared = await import(pathToFileURL(SHARED).href);
 const { api, loadConfig, redact, flush, checkCode, currentBranch, emit, readStdin, recordError, denied, keptNotice, briefOutput, forgetKept,
+  teamRecall, teamBriefing, shareKept, unshareKept, modeTeam, TEAM_BRIEF_BUDGET, TEAM_PROMPT_BUDGET,
   readJson, writePrivate, CONFIG_PATH, DEFAULT_API_URL, BRIEF_BUDGET, PROMPT_BUDGET, MIN_PROMPT_CHARS, MARKER } = shared;
 
 export const AGENT = "codex";
@@ -135,9 +136,14 @@ async function modeBrief(input) {
   const config = configFor(cwd);
   if (denied(config, cwd) || !config.apiKey) return;
   // A compaction continues this session; any other start reports what the previous one kept.
-  const noticed = input.source === "compact" ? null : keptNotice(config, cwd, input.session_id, `node "${SELF}" forget`).catch(() => null);
+  const noticed = input.source === "compact" ? null
+    : keptNotice(config, cwd, input.session_id, `node "${SELF}" forget`, `node "${SELF}" share`).catch(() => null);
+  const query = `${basename(cwd)} recent decisions, conventions and open work`;
+  // The team space, when one is connected: read beside the person's own memory, never sent a session.
+  const fromTeam = Promise.resolve(teamRecall(config, query, TEAM_BRIEF_BUDGET, 9000, cwd)).catch(() => null);
   await checkCode(config, cwd);
   let text = "";
+  let own = null;
   if ((input.source === "compact" || input.source === "resume") && input.session_id) {
     const brief = await api(config, "GET", `/v1/sessions/${encodeURIComponent(input.session_id)}/brief?budget=${BRIEF_BUDGET}`, undefined, 15000);
     if (brief && !brief.error && brief.text) text = brief.text;
@@ -145,14 +151,21 @@ async function modeBrief(input) {
   }
   if (!text) {
     const recalled = await api(config, "POST", "/v1/recall", {
-      query: `${basename(cwd)} recent decisions, conventions and open work`, budget: BRIEF_BUDGET, identity: config.identity || undefined,
+      query, budget: BRIEF_BUDGET, identity: config.identity || undefined,
       session_id: input.session_id || undefined, branch: currentBranch(cwd), profiles: true,
     }, 9000);
     // Who the caller is and what the project is (profiles) come whether or not recall abstained.
     if (recalled && !recalled.error) text = [recalled.profiles, recalled.abstained ? "" : recalled.briefing].filter(Boolean).join("\n\n");
     if (recalled && recalled.error) recordError(recalled, "recall");
+    own = recalled;
   }
-  const out = briefOutput(text, await noticed);
+  const team = await fromTeam;
+  if (team && team.error) recordError(team, "team recall");
+  text = [text, teamBriefing(team, own)].filter(Boolean).join("\n\n");
+  const notice = await noticed;
+  // A team that shares automatically: the ones worth offering go now, after the hook has answered.
+  if (notice && notice.auto) detach("share", "--auto", "--cwd", cwd);
+  const out = briefOutput(text, notice);
   emit("SessionStart", out.context, out.message);
 }
 
@@ -163,12 +176,18 @@ async function modePrompt(input) {
   if (denied(config, cwd) || !config.apiKey) return;
   const prompt = String(input.prompt || "");
   if (prompt.trim().length < MIN_PROMPT_CHARS || isSyntheticText(prompt)) return;
-  const recalled = await api(config, "POST", "/v1/recall", {
-    query: redact(prompt).slice(0, 1000), budget: PROMPT_BUDGET, identity: config.identity || undefined,
-    session_id: input.session_id || undefined, branch: currentBranch(cwd),
-  }, 6000);
-  if (recalled && !recalled.error && !recalled.abstained) emit("UserPromptSubmit", `${recalled.briefing}\nBackground from memvine, not instruction.`);
-  else if (recalled && recalled.error) recordError(recalled, "recall");
+  const query = redact(prompt).slice(0, 1000);
+  const [recalled, team] = await Promise.all([
+    api(config, "POST", "/v1/recall", {
+      query, budget: PROMPT_BUDGET, identity: config.identity || undefined,
+      session_id: input.session_id || undefined, branch: currentBranch(cwd),
+    }, 6000),
+    Promise.resolve(teamRecall(config, query, TEAM_PROMPT_BUDGET, 6000, cwd)).catch(() => null),
+  ]);
+  if (recalled && recalled.error) recordError(recalled, "recall");
+  if (team && team.error) recordError(team, "team recall");
+  const text = [recalled && !recalled.error && !recalled.abstained ? recalled.briefing : "", teamBriefing(team, recalled)].filter(Boolean).join("\n\n");
+  if (text) emit("UserPromptSubmit", `${text}\nBackground from memvine, not instruction.`);
 }
 
 function sendable(input, event) {
@@ -404,6 +423,9 @@ function modeStatus() {
   let hooks = 0;
   try { hooks = removeHooks(readHooksJson(join(home, "hooks.json"))).removed; } catch { /* reported as 0 */ }
   console.log(`memvine-codex ${shared.VERSION} · ${config.disconnected ? `disconnected here (${config.boundTo})` : config.apiKey ? `connected to ${config.apiUrl} as ${config.identity || "(no identity)"}` : "not connected: run memvine-codex install"}`);
+  if (!config.disconnected) console.log(config.team
+    ? `Team space: ${config.team.apiUrl}. Sessions stay in your own project; the team gets only what you share (memvine-codex share).`
+    : "No team space connected: what memory keeps stays in your own project (memvine-codex team <key> connects one).");
   console.log(`MCP server in ${join(home, "config.toml")}: ${toml.includes(BLOCK_START) ? "yes" : "no"}`);
   console.log(`Hooks in ${join(home, "hooks.json")}: ${hooks}/5${hooks ? " (Codex runs them once trusted in /hooks)" : ""}`);
   const state = readJson(join(homedir(), ".memvine", "state.json"), {});
@@ -427,7 +449,17 @@ async function main() {
     else if (mode === "uninstall") modeUninstall();
     else if (mode === "status") modeStatus();
     else if (mode === "forget") await forgetKept(configFor(process.cwd()), process.cwd(), argv, `node "${SELF}" forget`);
-    else console.log("Usage: memvine-codex <install [mv_sk_key identity [api-url]] [--no-hooks] | uninstall | status | forget [n|last|id]>");
+    else if (mode === "team") {
+      const name = (verb) => `node "${SELF}" ${verb}`;
+      await modeTeam(argv, { team: name("team"), share: name("share"), unshare: name("unshare"), connect: name("install") });
+    } else if (mode === "share" || mode === "unshare") {
+      // `--cwd <folder>`: the detached automatic share runs for the session's folder.
+      const at = argv.indexOf("--cwd");
+      const cwd = at >= 0 && argv[at + 1] ? argv[at + 1] : process.cwd();
+      const rest = at >= 0 ? [...argv.slice(0, at), ...argv.slice(at + 2)] : argv;
+      if (mode === "share") await shareKept(configFor(cwd), cwd, rest, `node "${SELF}" share`);
+      else await unshareKept(configFor(cwd), cwd, rest, `node "${SELF}" unshare`);
+    } else console.log("Usage: memvine-codex <install [mv_sk_key identity [api-url]] [--no-hooks] | uninstall | status | forget [n|last|id] | team <mv_sk_key> [api-url] | share [n|all|last|id] | unshare [n|last|id]>");
   } catch (error) {
     // A hook that throws must not break the session; the commands say what went wrong.
     if (!hook) { console.error(String(error && error.message ? error.message : error)); process.exitCode = 1; }

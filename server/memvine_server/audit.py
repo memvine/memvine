@@ -69,13 +69,22 @@ async def record(pool, request, status: int) -> None:
         elif admin is not None:
             org_id = admin.org_id
             actor = _admin_actor(admin)
-            if org_id is None and action.startswith(("project.", "key.")):
+            if action.startswith(("project.", "key.", "category.")):
+                # The target starts with the project's slug: the line belongs to that project (the
+                # operator's to its organization too).
                 slug = target.split("/")[0]
-                row = await (await conn.execute("SELECT id, org_id FROM projects WHERE slug = %s", (slug,))).fetchone()
+                row = await (await conn.execute("SELECT id, org_id FROM projects WHERE slug = %s AND (%s::uuid IS NULL OR org_id = %s)",
+                                                (slug, org_id, org_id))).fetchone()
                 if row:
                     project_id, org_id = row["id"], row["org_id"]
         else:
             return
+        # What happens in a personal project is its owner's to read, not the organization's
+        # (GET /v1/audit). A route that deletes the project says whose it was before it goes.
+        owner = getattr(request.state, "audit_owner", None)
+        if owner is None and project_id is not None:
+            row = await (await conn.execute("SELECT owner_user_id FROM projects WHERE id = %s", (project_id,))).fetchone()
+            owner = row["owner_user_id"] if row else None
         await conn.execute(
-            "INSERT INTO audit_events (org_id, project_id, actor, action, target, status) VALUES (%s, %s, %s, %s, %s, %s)",
-            (org_id, project_id, actor, action, target[:300], status))
+            "INSERT INTO audit_events (org_id, project_id, actor, action, target, status, owner_user_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (org_id, project_id, actor, action, target[:300], status, owner))

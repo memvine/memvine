@@ -6,7 +6,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request
@@ -128,10 +128,19 @@ async def require_management(request: Request) -> Admin:
 
 
 async def require_manager(request: Request) -> Admin:
-    """An owner or admin (or a key): members may read and use memory but not change the organization."""
+    """An owner or admin (or a key): members may read and use memory but not change the organization.
+    A member is the manager of their own personal project (a route that names it by {slug})."""
     admin = await require_management(request)
     if not admin.can_manage:
-        raise HTTPException(403, {"code": "admin-role-required", "message": "Ask an owner or admin of this organization"})
+        slug = request.path_params.get("slug")
+        mine = False
+        if slug and admin.user_id:
+            async with request.app.state.pool.connection() as conn:
+                mine = owns(admin, await find_project(conn, admin, slug))
+        if not mine:
+            raise HTTPException(403, {"code": "admin-role-required", "message": "Ask an owner or admin of this organization"})
+        admin = replace(admin, role="owner")
+        request.state.admin = admin
     return admin
 
 
@@ -150,12 +159,25 @@ async def require_operator(request: Request) -> Admin:
     return admin
 
 
+# A personal project (projects.owner_user_id) is its owner's alone: nobody else in the organization
+# opens it, whatever their role, and an organization key (no person behind it) does not either.
+# Takes the viewer's user id once; NULL (a key) matches no personal project.
+VISIBLE_TO = "(p.owner_user_id IS NULL OR p.owner_user_id = %s)"
+
+
 async def find_project(conn, admin: Admin, slug: str):
-    """A project the admin may administer, or None (another org's project reads as missing)."""
+    """A project the admin may open, or None: another organization's project reads as missing, and
+    so does another person's personal project in the same organization."""
     if admin.is_operator:
-        return await (await conn.execute("SELECT id, slug, org_id FROM projects WHERE slug = %s", (slug,))).fetchone()
+        return await (await conn.execute("SELECT id, slug, org_id, owner_user_id FROM projects WHERE slug = %s", (slug,))).fetchone()
     return await (await conn.execute(
-        "SELECT id, slug, org_id FROM projects WHERE slug = %s AND org_id = %s", (slug, admin.org_id))).fetchone()
+        f"SELECT p.id, p.slug, p.org_id, p.owner_user_id FROM projects p WHERE p.slug = %s AND p.org_id = %s AND {VISIBLE_TO}",
+        (slug, admin.org_id, admin.user_id))).fetchone()
+
+
+def owns(admin: Admin, project) -> bool:
+    """True when the project is this person's own: they manage it whatever their role in the organization."""
+    return bool(admin.user_id and project and project["owner_user_id"] == admin.user_id)
 
 
 async def require_project(request: Request) -> Principal:
@@ -176,7 +198,8 @@ async def require_project(request: Request) -> Principal:
             raise HTTPException(404, {"code": "not-found", "message": "No such project"})
         principal = Principal(project_id=row["id"], project_slug=row["slug"], key_id=None)
         request.state.principal = principal
-        request.state.admin = admin
+        # In their own personal project a member has an owner's rights (ensure_manager).
+        request.state.admin = replace(admin, role="owner") if owns(admin, row) else admin
         request_project.set(str(principal.project_id))
         return principal
 

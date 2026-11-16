@@ -20,6 +20,7 @@ Category = Literal["decision", "rule", "gotcha", "fact", "preference"]  # the bu
 BUILTIN_CATEGORIES = ("decision", "rule", "gotcha", "fact", "preference")
 # What a project's memory is for (migration 0011): "coding" keeps little, "conversation" keeps every detail.
 MemoryMode = Literal["coding", "conversation"]
+SharePolicy = Literal["ask", "auto"]
 # A project's own category (project_categories, migration 0008); a memory's category is a built-in or one of these.
 CATEGORY_SLUG = r"^[a-z0-9-]{2,24}$"
 CategorySlug = Annotated[str, Field(pattern=CATEGORY_SLUG)]
@@ -121,6 +122,9 @@ class MemoryOut(BaseModel):
     # Review loop (review.py): 'new' until a person keeps it; synthesis writes 'new', a person's own 'kept'.
     review: Literal["new", "kept"] = "kept"
     origin: Literal["synthesis", "person", "sample"] | None = None
+    # In a person's own project: when it was shared with a team space, and the memory it became there.
+    shared_at: datetime | None = None
+    shared_ref: str | None = None
     # Background consolidation (consolidation.py): a doubtful case flagged for a person, with the reason
     # and the other memory it concerns; dismissed with PATCH {"flag": null}.
     flag: Flag | None = None
@@ -430,6 +434,11 @@ class KeptMemory(BaseModel):
     statement: str
     supersedes: UUID | None = None
     previous: str | None = None  # the statement it superseded
+    # Sharing with a team space: the words it rests on (what would leave with it), whether it has
+    # been shared, and whether it is the kind a team wants (anything but a personal preference).
+    quote: str | None = None
+    shared: bool = False
+    suggest_share: bool = False
 
 
 class SessionKept(BaseModel):
@@ -454,6 +463,11 @@ class MemoryCreate(BaseModel):
     standing: bool | None = None
     category: CategorySlug | None = Field(default=None, description="a built-in category or one of the project's own")
     why: Redacted | None = Field(default=None, max_length=500)
+    # A memory shared from a person's own project: who said it, when, and the words it rests on.
+    # Without them the statement is its own evidence, said now by no one in particular.
+    said_by: str | None = Field(default=None, max_length=200)
+    said_at: datetime | None = None
+    quote: Redacted | None = Field(default=None, max_length=1000)
     supersedes: UUID | None = Field(
         default=None,
         description="The id of a current memory this statement replaces, as a person said: no judge is asked, the new "
@@ -471,6 +485,8 @@ class MemoryPatch(BaseModel):
     confirm: bool | None = None
     # null dismisses consolidation's flag (the only value accepted); keeping (confirm) clears it too.
     flag: None = None
+    # Marks the memory as shared with a team space (the id it has there); null takes the mark off.
+    shared_ref: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 TAG = r"^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$|^[a-z0-9]$"
@@ -483,6 +499,12 @@ class ProjectCreate(BaseModel):
     org: str | None = Field(default=None, description="operator only: the organization slug")
     description: str | None = Field(default=None, max_length=2000)
     memory_mode: MemoryMode = "coding"
+    # A team space takes memories people share from their own projects and refuses conversation.
+    team_space: bool = False
+    share_policy: SharePolicy = "ask"
+    # A personal project: only the person creating it opens it in the console, whatever role anyone
+    # else in the organization holds. Any member may create one; it takes a signed-in person.
+    personal: bool = False
     # Start with the sample memory (POST /v1/sample) so recall can be tried before any agent is connected.
     sample: bool = False
 
@@ -513,6 +535,8 @@ class ProjectPatch(BaseModel):
     memory_instructions: Redacted | None = Field(default=None, max_length=MAX_MEMORY_INSTRUCTIONS)
     # "coding" or "conversation". It applies to what is sent from now on; memory already made stays as it is.
     memory_mode: MemoryMode | None = None
+    team_space: bool | None = None
+    share_policy: SharePolicy | None = None
 
 
 class ProjectCategoryOut(BaseModel):
@@ -561,6 +585,9 @@ class ProjectOut(BaseModel):
     flagged_count: int = 0
     memory_instructions: str | None = None
     memory_mode: MemoryMode = "coding"
+    personal: bool = False  # only the caller opens it
+    team_space: bool = False
+    share_policy: SharePolicy = "ask"
     categories: list[ProjectCategoryOut] = []  # the project's own categories, besides the built-ins
 
 
@@ -658,3 +685,12 @@ class ProfileOut(BaseModel):
 class ProfileRebuild(BaseModel):
     subject_kind: Literal["person", "project"] | None = None  # None: every profile of the project
     subject: str | None = Field(default=None, max_length=200)
+
+
+class ProjectInfo(BaseModel):
+    """GET /v1/project: what a project key's own project is, for a plugin to read."""
+    slug: str
+    name: str
+    memory_mode: MemoryMode = "coding"
+    team_space: bool = False
+    share_policy: SharePolicy = "ask"

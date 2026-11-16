@@ -1,9 +1,9 @@
 "use client";
 import { useActionState, useState } from "react";
 import { Plus, X } from "lucide-react";
-import { addCategory, removeCategory, saveMemoryInstructions, saveMemoryMode, type MemoryRulesState } from "@/app/actions";
+import { addCategory, removeCategory, saveMemoryInstructions, saveMemoryMode, saveSharePolicy, type MemoryRulesState } from "@/app/actions";
 import { Badge, button, cx, FormError, inputClass } from "@/components/ui";
-import { MAX_MEMORY_INSTRUCTIONS, MAX_PROJECT_CATEGORIES, type MemoryMode, type ProjectCategory } from "@/lib/types";
+import { MAX_MEMORY_INSTRUCTIONS, MAX_PROJECT_CATEGORIES, type MemoryMode, type ProjectCategory, type SharePolicy } from "@/lib/types";
 
 const PLACEHOLDER = "Also keep: on-call runbook steps.\nNever keep: customer names or ticket text from Zendesk.";
 
@@ -40,6 +40,43 @@ export function ModeForm({ value, canEdit }: { value: MemoryMode; canEdit: boole
       </div>
       {state.error && <FormError>{state.error}</FormError>}
       {state.saved && !pending && mode === value && <p className="text-[12.5px] text-good">Saved.</p>}
+    </form>
+  );
+}
+
+const POLICIES: { value: SharePolicy; title: string; text: string }[] = [
+  { value: "ask", title: "When the person says so", text: "After a session each person sees what their memory kept and names what to share. Nothing reaches this space otherwise." },
+  { value: "auto", title: "Automatically", text: "What a person's memory keeps and is worth the team's while is copied here by itself; they can take one back. Personal preferences are never copied." },
+];
+
+/** A team space: how memories reach it from each person's own project. Sessions never do. */
+export function SharePolicyForm({ value, canEdit }: { value: SharePolicy; canEdit: boolean }) {
+  const [policy, setPolicy] = useState<SharePolicy>(value);
+  const [state, run, pending] = useActionState<MemoryRulesState, FormData>(saveSharePolicy, {});
+  return (
+    <form action={run} className="space-y-2">
+      <fieldset disabled={!canEdit} className="space-y-2">
+        <legend className="mb-2 block text-[12.5px] font-medium text-text-2">How memories are shared here</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {POLICIES.map((p) => (
+            <label key={p.value} className={cx("flex cursor-pointer gap-2.5 rounded-lg border px-3 py-2.5", policy === p.value ? "border-text-2" : "border-border")}>
+              <input type="radio" name="policy" value={p.value} checked={policy === p.value} onChange={() => setPolicy(p.value)} className="mt-1" />
+              <span>
+                <span className="block text-[13px] font-medium text-text">{p.title}</span>
+                <span className="mt-0.5 block text-[12.5px] text-text-2">{p.text}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="flex-1 text-[12px] text-text-3">This is a team space: it refuses sessions, so no conversation is stored here. Each plugin reads this setting at its next session.</p>
+        {canEdit && (
+          <button type="submit" disabled={pending || policy === value} className={button("primary")}>{pending ? "Saving…" : "Save"}</button>
+        )}
+      </div>
+      {state.error && <FormError>{state.error}</FormError>}
+      {state.saved && !pending && policy === value && <p className="text-[12.5px] text-good">Saved.</p>}
     </form>
   );
 }

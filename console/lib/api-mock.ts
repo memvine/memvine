@@ -197,7 +197,7 @@ export const mockApi: MemvineApi = {
   async createProject(name, tags, options = {}) {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "project";
     if (store().data[slug]) throw new Error(`409 slug-taken: a project with slug '${slug}' exists`);
-    store().projects.push({ slug, name, createdAt: new Date().toISOString(), memoryCount: 0, tags: [...new Set(tags)].sort(), sourceCount: 0, keyCount: 0, lastActivityAt: null, monthlyCreditCap: null, retentionDays: null, monthCredits: 0 });
+    store().projects.push({ slug, name, createdAt: new Date().toISOString(), memoryCount: 0, tags: [...new Set(tags)].sort(), sourceCount: 0, keyCount: 0, lastActivityAt: null, monthlyCreditCap: null, retentionDays: null, monthCredits: 0, teamSpace: Boolean(options.teamSpace), sharePolicy: "ask", personal: Boolean(options.personal) });
     store().data[slug] = { keys: [], memories: [], episodes: [], threads: [], sessions: [], audiences: [], identities: [], failedEpisodes: new Set(), requests: [], usage: [] };
     const { secret } = await mockApi.createKey(slug, "default");
     if (options.sample) await mockApi.loadSample(slug);
@@ -214,6 +214,7 @@ export const mockApi: MemvineApi = {
     if (patch.recallMinRelevance !== undefined) p.recallMinRelevance = patch.recallMinRelevance;
     if (patch.recallHalfLifeDays !== undefined) p.recallHalfLifeDays = patch.recallHalfLifeDays;
     if (patch.memoryMode !== undefined) p.memoryMode = patch.memoryMode;
+    if (patch.sharePolicy !== undefined) p.sharePolicy = patch.sharePolicy;
     if (patch.memoryInstructions !== undefined) {
       const next = patch.memoryInstructions?.trim() || null;
       if (next !== (p.memoryInstructions ?? null)) {

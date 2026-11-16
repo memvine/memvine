@@ -15,7 +15,7 @@ MEMORY_COLUMNS = """
     supersedes, superseded_by, assertion, confidence, audience, conflicts_with, standing, stale_reason,
     category, why, thread_id, scope, slot,
     last_recalled_at, recall_count, review, origin,
-    flag, flag_reason, flag_related, retired_reason, merged_into
+    flag, flag_reason, flag_related, retired_reason, merged_into, shared_at, shared_ref
 """
 # Expired: still active or stale, past the end it stated (valid_to). Unused: old enough and not
 # served by a recall within memory_unused_days. Both take the day count, then nothing else.
@@ -104,6 +104,8 @@ def memory_out(row, evidence: list[Evidence] | None = None) -> MemoryOut:
         flag_related=row.get("flag_related"),
         retired_reason=row.get("retired_reason"),
         merged_into=row.get("merged_into"),
+        shared_at=row.get("shared_at"),
+        shared_ref=row.get("shared_ref"),
     )
 
 

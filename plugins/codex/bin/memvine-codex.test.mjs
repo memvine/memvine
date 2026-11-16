@@ -265,3 +265,15 @@ test("an unparseable hooks.json stops the install before anything is written", a
   assert.match(r.stderr, /not valid JSON/);
   assert.equal(readFileSync(join(home, ".codex", "config.toml"), "utf8"), USER_TOML);
 });
+
+test("share and team say what to do when no team space is connected", async () => {
+  const home = mkdtempSync(join(tmpdir(), "mv-codex-team-"));
+  mkdirSync(join(home, ".memvine"));
+  writeFileSync(join(home, ".memvine", "config.json"), JSON.stringify({ apiUrl: "http://127.0.0.1:9", apiKey: "mv_sk_own_key_0000", identity: "sam@northwind.example" }));
+  const script = fileURLToPath(new URL("./memvine-codex.mjs", import.meta.url));
+  const env = { ...process.env, HOME: home, MEMVINE_API_URL: "", MEMVINE_API_KEY: "", MEMVINE_TEAM_API_KEY: "", MEMVINE_TEAM_API_URL: "" };
+  const run = (...args) => new Promise((resolve) => execFile(process.execPath, [script, ...args], { env, cwd: home }, (e, stdout) => resolve(stdout)));
+  assert.match(await run("share"), /^No team space is connected\. Connect one first \(node ".*memvine-codex\.mjs" team <team-space-key>\)\.\n$/);
+  assert.match(await run("team"), /^No team space connected\. Usage: node ".*memvine-codex\.mjs" team <team-space-key starting with mv_sk_>/);
+  assert.match(await run("status"), /No team space connected: what memory keeps stays in your own project/);
+});

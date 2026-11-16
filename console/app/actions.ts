@@ -321,7 +321,7 @@ const TAG_RE = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/;
 
 export interface ProjectFormState {
   error?: string;
-  created?: { slug: string; name: string; secret: string };
+  created?: { slug: string; name: string; secret: string; teamSpace?: boolean };
   saved?: boolean;
   deleted?: string;
 }
@@ -335,10 +335,14 @@ export async function createProject(_prev: ProjectFormState, formData: FormData)
   if (tags.some((t) => !TAG_RE.test(t))) return { error: "Tags are lowercase letters, digits and dashes." };
   if (description.length > 2000) return { error: "Keep the description under 2,000 characters." };
   try {
+    // A team space holds what people share; sample sources would be conversation in it.
+    const kind = String(formData.get("kind") ?? "shared");
+    const teamSpace = kind === "team";
     const { project, secret } = await api.createProject(name, tags, { description: description || null,
-                                                                     sample: formData.get("sample") === "on" });
+                                                                     sample: !teamSpace && formData.get("sample") === "on", teamSpace,
+                                                                     personal: kind === "personal" });
     revalidatePath("/", "layout");
-    return { created: { slug: project.slug, name: project.name, secret } };
+    return { created: { slug: project.slug, name: project.name, secret, teamSpace } };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not create the project.";
     return { error: message.includes("slug-taken") ? "A project with that name already exists." : message };
@@ -585,6 +589,19 @@ export async function saveMemoryMode(_prev: MemoryRulesState, formData: FormData
   if (mode !== "coding" && mode !== "conversation") return { error: "Choose one of the two." };
   try {
     await api.updateProject(slug, { memoryMode: mode });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not save." };
+  }
+  revalidatePath("/settings");
+  return { saved: true };
+}
+
+export async function saveSharePolicy(_prev: MemoryRulesState, formData: FormData): Promise<MemoryRulesState> {
+  const { slug } = await api.currentProject();
+  const policy = String(formData.get("policy") ?? "");
+  if (policy !== "ask" && policy !== "auto") return { error: "Choose one of the two." };
+  try {
+    await api.updateProject(slug, { sharePolicy: policy });
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not save." };
   }

@@ -4,7 +4,15 @@ can be deleted like any source) and reconciled against what is already known.
 
 With `supersedes`, a person has said this replaces a specific fact ("Wrong: what is true
 instead?"): no judge is asked, the new item supersedes that one and takes over its kind,
-subjects, category, thread, scope, audience and standing unless they are given."""
+subjects, category, thread, scope, audience and standing unless they are given.
+
+A memory shared from a person's own project (a team space, migration 0014) arrives the same way
+with `said_by`, `said_at` and `quote`: who said it, when, and the words it rests on. The source
+episode is then those words under that person's name and date, and nothing else from the session
+they came from.
+
+When the project is itself a team space the judge reads only the memory, so `quote` must stand
+on its own."""
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -47,7 +55,8 @@ async def superseded_target(conn, project_id: UUID, memory_id: UUID, readable: l
 async def remember(conn, llm: LLM, embedder: Embedder, project_id: UUID, *, statement: str, kind: str, subjects: list[str],
                    assertion: str, audience: str = "project", source: str = "api", standing: bool | None = None,
                    category: str | None = None, why: str | None = None, supersedes: UUID | None = None,
-                   readable: list[str] | None = None, given: set[str] | None = None, actor: str = events.SYSTEM) -> Decision:
+                   readable: list[str] | None = None, given: set[str] | None = None, actor: str = events.SYSTEM,
+                   said_by: str | None = None, said_at: datetime | None = None, quote: str | None = None) -> Decision:
     """`actor`: who said it, for the memory's history (events.actor_of). `given`: the fields the
     caller set explicitly (None: all of them); with `supersedes`, the
     others come from the replaced fact. `readable`: the audiences the caller may read, for
@@ -67,16 +76,22 @@ async def remember(conn, llm: LLM, embedder: Embedder, project_id: UUID, *, stat
             standing = bool(old["standing"])
 
     now = datetime.now(UTC)
+    quote = (quote or "").strip() or None
+    shared = bool(said_by or said_at or quote)
+    if shared:
+        source = "shared"
+    said_at = min(said_at, now) if said_at else None  # a date in the future is a clock that is wrong
     episode_id = f"{source}:{uuid4().hex[:12]}"
-    await charge_ingest(conn, project_id, "ingest", len(statement))
+    await charge_ingest(conn, project_id, "ingest", len(statement) + len(quote or ""))
     cand = Candidate(
         statement=statement, kind=kind, subjects=[normalize_subject(s) for s in subjects if s.strip()][:3],
-        assertion=assertion, confidence="medium", valid_from=None, quote=statement[:200],
+        assertion=assertion, confidence="medium", valid_from=said_at, quote=quote or statement[:200],
         standing=is_standing(standing, kind, statement), category=category, why=why,
     )
     await ingest_episode(conn, project_id, EpisodeIn(
-        id=episode_id, content=statement, timestamp=now, label=f"remembered via {source}", metadata={"source": source},
-        audience=audience,
+        id=episode_id, content=quote or statement, timestamp=said_at or now, identity=said_by,
+        label=f"shared by {said_by}" if shared and said_by else "shared" if shared else f"remembered via {source}",
+        metadata={"source": source}, audience=audience,
     ))
     # The statement is its own source; the item is written directly, so no extraction job runs.
     await conn.execute("DELETE FROM jobs WHERE project_id = %s AND episode_id = %s AND status = 'queued'", (project_id, episode_id))
