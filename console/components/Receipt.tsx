@@ -5,10 +5,11 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Check, CircleAlert, EyeOff, RotateCcw, X } from "lucide-react";
-import { correctMemory, dismissFlag, forgetMemory, stillTrue, type ReceiptState } from "@/app/actions";
+import { Archive, Check, CircleAlert, EyeOff, RotateCcw, Share2, Undo2, X } from "lucide-react";
+import { correctMemory, dismissFlag, forgetMemory, shareMemory, stillTrue, unshareMemory, type ReceiptState } from "@/app/actions";
 import type { MemoryItem } from "@/lib/types";
 import { trustWords } from "@/lib/trust";
+import { useTeamSpaces } from "./TeamSpaces";
 import { button, categoryLabel, cx, FormError, inputClass, shortDate } from "./ui";
 
 export interface ReceiptProps {
@@ -57,6 +58,9 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
   const [forgetState, forgetAction, forgetting] = useActionState<ReceiptState, FormData>(forgetMemory, {});
   const [wrongState, wrongAction, correcting] = useActionState<ReceiptState, FormData>(correctMemory, {});
   const [dismissState, dismissAction, dismissing] = useActionState<ReceiptState, FormData>(dismissFlag, {});
+  const [shareState, shareAction, sharing] = useActionState<ReceiptState, FormData>(shareMemory, {});
+  const [unshareState, unshareAction, unsharing] = useActionState<ReceiptState, FormData>(unshareMemory, {});
+  const teamSpaces = useTeamSpaces();
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -80,7 +84,9 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
   const live = m.status === "active" || m.status === "stale";
   const quote = m.evidence[0]?.quote;
   const source = sourceOf(m);
-  const error = confirmState.error ?? forgetState.error ?? wrongState.error ?? dismissState.error;
+  const error = confirmState.error ?? forgetState.error ?? wrongState.error ?? dismissState.error ?? shareState.error ?? unshareState.error;
+  // What the last Share or Take back did, while the memory is still in the state it left it in.
+  const note = m.sharedRef ? shareState.note : unshareState.note;
   const merged = m.status === "retired" && m.retiredReason === "merged";
   const flag = live && m.flag ? FLAG_TITLE[m.flag] : null;
   const statementCls = cx(
@@ -139,6 +145,7 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
           {m.status === "superseded" && <span className="block">superseded {m.validTo ? shortDate(m.validTo) : ""}</span>}
           {m.status === "retired" && <span className="block">{merged ? "merged into another memory" : "forgotten"}</span>}
           {expired && <span className="block">Expired {m.validTo ? shortDate(m.validTo) : ""}</span>}
+          {m.sharedRef && live && <span className="block">shared with the team</span>}
         </p>
       </div>
 
@@ -173,6 +180,29 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
                         <Archive aria-hidden /> {forgetting ? "Forgetting…" : "Forget"}
                       </button>
                     </form>
+                    {teamSpaces.length > 0 && !m.sharedRef && (
+                      <form action={shareAction} className="flex items-center gap-1.5">
+                        <input type="hidden" name="id" value={m.id} />
+                        {teamSpaces.length === 1 ? <input type="hidden" name="team" value={teamSpaces[0].slug} /> : (
+                          <select name="team" aria-label="Team space" className={cx(inputClass, "h-7 w-auto py-0 text-[12px]")}>
+                            {teamSpaces.map((t) => <option key={t.slug} value={t.slug}>{t.name}</option>)}
+                          </select>
+                        )}
+                        <button type="submit" disabled={sharing} className={button("secondary", "sm")}
+                                title={`Copy it to ${teamSpaces.length === 1 ? teamSpaces[0].name : "the team space"}: the statement, who said it, when and the quoted line. Nothing else of the session goes.`}>
+                          <Share2 aria-hidden /> {sharing ? "Sharing…" : "Share with team"}
+                        </button>
+                      </form>
+                    )}
+                    {m.sharedRef && (
+                      <form action={unshareAction}>
+                        <input type="hidden" name="id" value={m.id} />
+                        <button type="submit" disabled={unsharing} className={button("ghost", "sm")}
+                                title="Take it back from the team space. It stays there when a teammate shared it too.">
+                          <Undo2 aria-hidden /> {unsharing ? "Taking back…" : "Shared · take back"}
+                        </button>
+                      </form>
+                    )}
                     {flag && (
                       <form action={dismissAction}>
                         <input type="hidden" name="id" value={m.id} />
@@ -210,6 +240,7 @@ export function Receipt({ m, href, showCategory = false, readOnly = false, follo
             </form>
           )}
           {error && <div className="mt-2"><FormError>{error}</FormError></div>}
+          {note && !error && <p className="mt-2 text-[12.5px] text-good">{note}</p>}
         </div>
       </div>
     </div>

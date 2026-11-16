@@ -22,6 +22,8 @@ AUDITED: list[tuple[str, re.Pattern, str]] = [
     ("POST", re.compile(r"^/v1/memories$"), "memory.create"),
     ("POST", re.compile(r"^/v1/export$"), "project.export"),
     ("PATCH", re.compile(r"^/v1/memories/([^/]+)$"), "memory.update"),
+    ("POST", re.compile(r"^/v1/memories/([^/]+)/share$"), "memory.share"),
+    ("DELETE", re.compile(r"^/v1/memories/([^/]+)/share$"), "memory.unshare"),
     ("DELETE", re.compile(r"^/v1/episodes/(.+)$"), "source.delete"),
     ("DELETE", re.compile(r"^/v1/sessions/([^/]+)$"), "session.delete"),
     ("POST", re.compile(r"^/v1/jobs/([^/]+)/retry$"), "job.retry"),

@@ -120,7 +120,7 @@ interface ServerMemory {
   category?: MemoryItem["category"]; why?: string | null; thread_id?: string | null; review?: "new" | "kept";
   expired?: boolean; last_recalled_at?: string | null; recall_count?: number;
   flag?: MemoryItem["flag"]; flag_reason?: string | null; flag_related?: string | null;
-  retired_reason?: MemoryItem["retiredReason"]; merged_into?: string | null;
+  retired_reason?: MemoryItem["retiredReason"]; merged_into?: string | null; shared_at?: string | null; shared_ref?: string | null;
 }
 
 const toMemory = (m: ServerMemory): MemoryItem => ({
@@ -143,6 +143,8 @@ const toMemory = (m: ServerMemory): MemoryItem => ({
   flagReason: m.flag_reason ?? null,
   flagRelated: m.flag_related ?? null,
   retiredReason: m.retired_reason ?? null,
+  sharedAt: m.shared_at ?? null,
+  sharedRef: m.shared_ref ?? null,
   mergedInto: m.merged_into ?? null,
 });
 
@@ -503,6 +505,14 @@ export const liveApi: MemvineApi = {
   },
   async confirmMemory(project, id) {
     await call(`/v1/memories/${id}`, { method: "PATCH", body: { confirm: true }, project });
+  },
+  async shareMemory(project, id, team) {
+    const out = await call<{ relation?: string }>(`/v1/memories/${id}/share`, { method: "POST", body: { team }, project });
+    return { relation: out.relation ?? "new" };
+  },
+  async unshareMemory(project, id) {
+    const out = await call<{ taken_back?: boolean }>(`/v1/memories/${id}/share`, { method: "DELETE", project });
+    return { takenBack: Boolean(out.taken_back) };
   },
   async dismissFlag(project, id) {
     await call(`/v1/memories/${id}`, { method: "PATCH", body: { flag: null }, project });

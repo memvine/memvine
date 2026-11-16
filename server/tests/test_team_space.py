@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 from conftest import needs_db
-from test_e2e import EXTRACT_1, SESSION_1, ingest_and_synthesize
+from test_e2e import EXTRACT_1, EXTRACT_2, SESSION_1, SESSION_2, ingest_and_synthesize
 
 from memvine_server.worker import drain
 
@@ -140,3 +140,114 @@ async def test_kept_suggests_what_to_share_until_it_is_shared(client):
     # Taking the mark off makes it a suggestion again.
     cleared = await client.patch(f"/v1/memories/{rule['id']}", json={"shared_ref": None})
     assert cleared.json()["shared_ref"] is None and cleared.json()["shared_at"] is None
+
+
+# ------------------------------------------------------------------ sharing from the console
+
+
+async def seeded(client):
+    """The person's own project with the launch fact and the refunds rule, said by Priya; and a team space."""
+    from memvine_server.main import app
+
+    await ingest_and_synthesize(client, app, [{"id": "s1", "content": SESSION_1, "timestamp": "2026-09-18T10:11:00Z",
+                                               "identity": "priya@northwind.example"}])
+    memories = (await client.get("/v1/memories")).json()
+    memories = memories.get("items", memories) if isinstance(memories, dict) else memories
+    by_start = {m["statement"].split()[0]: m for m in memories}
+    return app, by_start["Launch"], by_start["Refunds"], await team_space(client)
+
+
+def console(client) -> dict:
+    """The console's caller: an organization-level credential naming the person's project."""
+    return {**MGMT, "X-Memvine-Project": client.project_slug}
+
+
+async def team_memories(client, team) -> list[dict]:
+    listed = (await client.get("/v1/memories", headers={**MGMT, "X-Memvine-Project": team["slug"]})).json()
+    return listed.get("items", listed) if isinstance(listed, dict) else listed
+
+
+@pytest.mark.asyncio
+async def test_share_from_the_console_and_take_it_back(client):
+    app, launch, rule, team = await seeded(client)
+    shared = await client.post(f"/v1/memories/{rule['id']}/share", json={"team": team["slug"]}, headers=console(client))
+    assert shared.status_code == 200, shared.text
+    body = shared.json()
+    assert body["relation"] == "new" and body["team"] == team["slug"] and body["memory"]["shared_ref"] == body["team_memory_id"]
+    (theirs,) = await team_memories(client, team)
+    assert theirs["id"] == body["team_memory_id"] and theirs["statement"] == rule["statement"] and theirs["category"] == "rule"
+    (evidence,) = theirs["evidence"]
+    assert evidence["identity"] == "priya@northwind.example" and evidence["quote"] == "Refunds over $500 always need a human approver"
+    assert evidence["episode_id"].startswith("shared:")
+    # The team space still holds no session and none of the person's source.
+    assert (await client.get("/v1/sessions", headers={**MGMT, "X-Memvine-Project": team["slug"]})).json() == []
+    source = (await client.get(f"/v1/episodes/{evidence['episode_id']}", headers={**MGMT, "X-Memvine-Project": team["slug"]})).json()
+    assert source["content"] == evidence["quote"]
+
+    again = await client.post(f"/v1/memories/{rule['id']}/share", json={"team": team["slug"]}, headers=console(client))
+    assert again.status_code == 409 and again.json()["error"]["code"] == "already-shared"
+    # A project key reaches one project: it cannot share into another.
+    by_key = await client.post(f"/v1/memories/{launch['id']}/share", json={"team": team["slug"]})
+    assert by_key.status_code == 403 and by_key.json()["error"]["code"] == "share-needs-person"
+    # Only a team space takes a share.
+    not_team = await client.post(f"/v1/memories/{launch['id']}/share", json={"team": client.project_slug}, headers=console(client))
+    assert not_team.status_code == 404
+    assert (await client.post(f"/v1/memories/{launch['id']}/share", json={"team": "no-such-space"}, headers=console(client))).status_code == 404
+
+    back = await client.delete(f"/v1/memories/{rule['id']}/share", headers=console(client))
+    assert back.status_code == 200 and back.json()["taken_back"] is True and back.json()["memory"]["shared_ref"] is None
+    assert [m["status"] for m in await team_memories(client, team)] == ["retired"]
+    assert (await client.delete(f"/v1/memories/{rule['id']}/share", headers=console(client))).status_code == 400
+    # The person's own memory is untouched, and can be shared again.
+    assert (await client.get(f"/v1/memories/{rule['id']}")).json()["status"] == "active"
+    assert (await client.post(f"/v1/memories/{rule['id']}/share", json={"team": team["slug"]}, headers=console(client))).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_what_a_teammate_also_shared_stays_when_one_takes_theirs_back(client):
+    app, _, rule, team = await seeded(client)
+    first = (await client.post(f"/v1/memories/{rule['id']}/share", json={"team": team["slug"]}, headers=console(client))).json()
+    # A teammate shares the same rule from their own project, in their own words.
+    app.state.llm.responses = {"): Refunds over $500 need a human approver": json.dumps({"match": 1, "relation": "same", "reason": "restated"}),
+                               **app.state.llm.responses}
+    theirs = await client.post("/v1/memories", headers=team["headers"], json={
+        "statement": rule["statement"], "kind": rule["kind"], "category": "rule", "subjects": rule["subjects"],
+        "said_by": "dana@northwind.example", "quote": "refunds over $500 need a human"})
+    assert theirs.json()["relation"] == "same" and theirs.json()["memory"]["id"] == first["team_memory_id"]
+
+    back = (await client.delete(f"/v1/memories/{rule['id']}/share", headers=console(client))).json()
+    assert back["taken_back"] is False, "the teammate's support keeps it"
+    (kept,) = await team_memories(client, team)
+    assert kept["status"] == "active" and [e["identity"] for e in kept["evidence"]] == ["dana@northwind.example"]
+
+
+@pytest.mark.asyncio
+async def test_a_changed_memory_replaces_the_teams_copy(client):
+    from memvine_server.main import app as the_app
+
+    app, launch, _, team = await seeded(client)
+    old = (await client.post(f"/v1/memories/{launch['id']}/share", json={"team": team["slug"]}, headers=console(client))).json()
+
+    # The launch moves, said in a later session: the person's memory replaces its old value.
+    app.state.llm.responses = {"moving launch from 29 Oct to 12 Nov": EXTRACT_2, **app.state.llm.responses}
+    turns = SESSION_2.split("\n\n")
+    events = [{"role": "user", "content": turns[0].split("\n", 1)[1], "at": "2026-10-03T14:02:00Z"},
+              {"role": "assistant", "content": turns[1].split("\n", 1)[1], "at": "2026-10-03T14:03:00Z"}]
+    assert (await client.post("/v1/sessions/ses_u/events", json={"events": events, "identity": "priya@northwind.example"})).status_code == 202
+    await client.post("/v1/sessions/ses_u/close")
+    async with the_app.state.pool.connection() as conn:
+        project_id = (await (await conn.execute("SELECT id FROM projects WHERE slug = %s", (client.project_slug,))).fetchone())["id"]
+    await drain(the_app.state.pool, the_app.state.llm, the_app.state.embedder, project_id)
+
+    kept = (await client.get("/v1/sessions/ses_u/kept")).json()["kept"]
+    moved = next(k for k in kept if k["statement"].startswith("Launch date is 12 Nov"))
+    assert moved["supersedes"] == launch["id"] and moved["updates_shared"] and moved["suggest_share"], moved
+
+    new = await client.post(f"/v1/memories/{moved['id']}/share", json={"team": team["slug"]}, headers=console(client))
+    assert new.status_code == 200 and new.json()["relation"] == "update", new.text
+    by_id = {m["id"]: m for m in await team_memories(client, team)}
+    assert by_id[old["team_memory_id"]]["status"] == "superseded"
+    assert by_id[new.json()["team_memory_id"]]["status"] == "active"
+    assert by_id[new.json()["team_memory_id"]]["supersedes"] == old["team_memory_id"]
+    recalled = (await client.post("/v1/recall", json={"query": "When is the launch?"}, headers=team["headers"])).json()
+    assert recalled["items"][0]["memory"]["statement"].startswith("Launch date is 12 Nov") and "was: Launch date is 29 Oct" in recalled["briefing"]

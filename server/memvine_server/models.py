@@ -439,6 +439,8 @@ class KeptMemory(BaseModel):
     quote: str | None = None
     shared: bool = False
     suggest_share: bool = False
+    # It replaced a memory this person had shared: sharing it replaces the team's copy of that one.
+    updates_shared: bool = False
 
 
 class SessionKept(BaseModel):
@@ -472,6 +474,19 @@ class MemoryCreate(BaseModel):
         default=None,
         description="The id of a current memory this statement replaces, as a person said: no judge is asked, the new "
                     "memory supersedes it and inherits its kind, subjects, category, thread, scope and audience unless given.")
+
+
+class MemoryShare(BaseModel):
+    team: str = Field(min_length=1, max_length=60, description="the slug of a team space the caller can open")
+
+
+class MemoryShared(BaseModel):
+    """The person's own memory after sharing or taking back, and what happened in the team space."""
+    memory: MemoryOut
+    team: str | None = None           # the team space's slug
+    team_memory_id: UUID | None = None
+    relation: str | None = None       # share: new, same (the team had it), update (it replaced the team's copy)
+    taken_back: bool | None = None    # unshare: true when the team's memory was forgotten, false when others support it
 
 
 class MemoryCreated(BaseModel):

@@ -317,7 +317,7 @@ async def kept(conn, project_id: UUID, session_id: str) -> SessionKept | None:
     rows = await (await conn.execute(
         """
         SELECT m.id, m.kind, m.category, m.statement, m.supersedes, m.conflicts_with, old.statement AS previous,
-               m.shared_at,
+               m.shared_at, old.shared_at AS old_shared_at,
                (SELECT e.quote FROM evidence e WHERE e.memory_id = m.id AND starts_with(e.episode_id, %s)
                 ORDER BY e.episode_id LIMIT 1) AS quote
         FROM memory_items m LEFT JOIN memory_items old ON old.id = m.supersedes
@@ -334,10 +334,12 @@ async def kept(conn, project_id: UUID, session_id: str) -> SessionKept | None:
     for r in rows:
         category = r["category"] or KIND_WORD.get(r["kind"], "fact")
         shared = r["shared_at"] is not None
+        # It replaces a memory the person shared: the team's copy is now out of date.
+        updates_shared = not shared and r["old_shared_at"] is not None
         # What a team wants is what holds for everyone on the project; a preference is one person's.
         items.append(KeptMemory(id=r["id"], category=category, statement=r["statement"], supersedes=r["supersedes"],
-                                previous=r["previous"], quote=r["quote"], shared=shared,
-                                suggest_share=not shared and category != "preference"))
+                                previous=r["previous"], quote=r["quote"], shared=shared, updates_shared=updates_shared,
+                                suggest_share=not shared and (category != "preference" or updates_shared)))
     superseded = len({r["supersedes"] for r in rows if r["supersedes"]})
     contradictions = sum(1 for r in rows if r["conflicts_with"])
     return SessionKept(session_id=session_id, tending=tending, kept=items, superseded=superseded,

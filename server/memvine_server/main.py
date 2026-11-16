@@ -19,7 +19,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from . import access, accounts, audit, billing, mcp_app
+from . import access, accounts, audit, billing, mcp_app, sharing
 from . import ask as ask_ops
 from . import code as code_ops
 from . import consolidation as consolidation_ops
@@ -70,6 +70,8 @@ from .models import (
     MemoryOut,
     MemoryPatch,
     MemoryRelated,
+    MemoryShare,
+    MemoryShared,
     OrgCreate,
     ProfileOut,
     ProfileRebuild,
@@ -665,6 +667,47 @@ async def patch_memory(memory_id: UUID, body: MemoryPatch, request: Request, pri
                 "UPDATE memory_items SET shared_ref = %s, shared_at = CASE WHEN %s::text IS NULL THEN NULL ELSE now() END WHERE id = %s",
                 (body.shared_ref, body.shared_ref, memory_id))
         return await get_memory(conn, principal.project_id, memory_id)
+
+
+def _console_caller(request: Request) -> Admin:
+    """Sharing from one project into another needs someone who can open both: a signed-in person or
+    an organization key. A project key reaches one project, so a plugin shares with the team
+    space's own key instead (POST /v1/memories there)."""
+    principal, admin = request.state.principal, getattr(request.state, "admin", None)
+    if admin is None or principal.key_id is not None:
+        raise HTTPException(403, {"code": "share-needs-person", "message": (
+            "Sharing here needs a signed-in person or an organization key; with a project key, post the "
+            "memory to the team space with that space's key")})
+    return admin
+
+
+@app.post("/v1/memories/{memory_id}/share", response_model=MemoryShared)
+async def share_memory(memory_id: UUID, body: MemoryShare, request: Request, principal: Principal = Depends(require_project)):
+    """Share one memory of this project with a team space the caller can open: the statement, who
+    said it, when and the quoted line it rests on. A memory that replaced one shared earlier
+    replaces the team's copy of that one."""
+    admin = _console_caller(request)
+    state = request.app.state
+    try:
+        out = await sharing.share(state.pool, state.llm, state.embedder, admin, principal.project_id, memory_id, body.team,
+                                  actor=event_ops.actor_of(request))
+    except sharing.ShareError as exc:
+        raise HTTPException(exc.status, {"code": exc.code, "message": exc.message}) from exc
+    request.state.audit_target = str(memory_id)
+    return MemoryShared(**out)
+
+
+@app.delete("/v1/memories/{memory_id}/share", response_model=MemoryShared)
+async def unshare_memory(memory_id: UUID, request: Request, principal: Principal = Depends(require_project)):
+    """Take a shared memory back: the team's memory loses this person's support, and is forgotten
+    there when nothing else supports it."""
+    admin = _console_caller(request)
+    try:
+        out = await sharing.unshare(request.app.state.pool, admin, principal.project_id, memory_id, actor=event_ops.actor_of(request))
+    except sharing.ShareError as exc:
+        raise HTTPException(exc.status, {"code": exc.code, "message": exc.message}) from exc
+    request.state.audit_target = str(memory_id)
+    return MemoryShared(**out)
 
 
 @app.get("/v1/memories/{memory_id}/history", response_model=list[MemoryEvent])

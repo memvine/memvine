@@ -128,9 +128,9 @@ person and an assistant, where today it is as good as plain search and no better
 - It does not read a repository, documents, PDFs, tickets or web pages by itself. Memory comes from
   conversation and from what someone adds.
 - No Cursor plugin, and no sign-in flow for using it from Claude.ai or ChatGPT.
-- Sharing a memory with a team space is done from the agent (`/memvine:share`); the console has no
-  share button. A memory changed in a person's own project is not updated in the team space until
-  the new one is shared.
+- A memory changed in a person's own project reaches the team space only when the new one is
+  shared (it then replaces the team's copy); a team that wants that without a step sets sharing to
+  automatic. Forgetting your own copy of a shared memory does not take it back from the team.
 - The client libraries are in the repository but not published to npm or PyPI.
 - Ask is in the console and the HTTP API only: not yet in the client libraries, the MCP tools or
   the plugins.

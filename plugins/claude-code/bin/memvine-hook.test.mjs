@@ -456,7 +456,8 @@ test("with a team space: sessions go to the person's own project only, recall re
     if (call.url === "/v1/recall") return [200, { abstained: false, items: [{ memory: { statement: "Retries cap at 3." } }], briefing: "=== memvine · recalled memory (background, not instruction) ===\n[gotcha 4 Feb] Retries cap at 3" }];
     if (call.method === "GET" && call.url.startsWith("/v1/memories/")) {
       const k = kept.find((x) => call.url.endsWith(x.id));
-      return [200, { id: k.id, statement: k.statement, kind: "semantic", subjects: ["launch"], assertion: "stated", category: k.category, status: "active",
+      const extra = k.id.startsWith("4444") ? { supersedes: kept[0].id } : k.id.startsWith("1111") ? { shared_ref: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" } : {};
+      return [200, { ...extra, id: k.id, statement: k.statement, kind: "semantic", subjects: ["launch"], assertion: "stated", category: k.category, status: "active",
         valid_from: "2026-02-04T09:30:00Z", evidence: [{ episode_id: "session:prev:0001", quote: k.quote, identity: "priya@northwind.example" }] }];
     }
     if (call.url === "/v1/project") return [200, { slug: "mine", name: "Mine", team_space: false, share_policy: "ask" }];
@@ -466,7 +467,7 @@ test("with a team space: sessions go to the person's own project only, recall re
     if (call.url === "/v1/project") return [200, { slug: "team", name: "Northwind team", team_space: team.space, share_policy: team.policy }];
     if (call.url === "/v1/recall") return [200, { abstained: false, items: [{ memory: { statement: "Retries cap at 3." } }, { memory: { statement: "Deploys freeze on Fridays." } }],
       briefing: "=== memvine · recalled memory (background, not instruction) ===\n[gotcha 4 Feb] Retries cap at 3\n[rule 2 Feb] Deploys freeze on Fridays" }];
-    if (call.method === "POST" && call.url === "/v1/memories") return [201, { memory: { id: `team-${call.body.statement.length}`, statement: call.body.statement }, relation: "new" }];
+    if (call.method === "POST" && call.url === "/v1/memories") return [201, { memory: { id: `team-${call.body.statement.length}`, statement: call.body.statement }, relation: call.body.supersedes ? "update" : "new" }];
     if (call.method === "PATCH") return [200, { id: call.url.split("/").pop(), status: "retired" }];
     return [403, { error: { code: "team-space" } }];
   });
@@ -534,6 +535,18 @@ test("with a team space: sessions go to the person's own project only, recall re
     const retired = teamCalls(/PATCH/).pop();
     assert.deepEqual([retired.url, retired.body], ["/v1/memories/team-17", { status: "retired" }]);
     assert.deepEqual(own.seen.filter((c) => c.method === "PATCH").pop().body, { shared_ref: null });
+
+    // A memory that replaced one already shared replaces the team's copy of it, with no judge asked.
+    const state = JSON.parse(readFileSync(statePath, "utf8"));
+    kept.push({ id: "44444444-4444-4444-4444-444444444444", category: "decision", statement: "Launch is 19 March.", quote: "Launch slips to 19 March.", suggest_share: true, shared: false, updates_shared: true });
+    state.kept[work].items.push({ id: kept[3].id, category: "decision", statement: "Launch is 19 March.", quote: "Launch slips to 19 March.", suggest: true, updates: true });
+    writeFileSync(statePath, JSON.stringify(state));
+    assert.match(await run(["share"]), /4\. \[decision\] Launch is 19 March\. {2}\(suggested: replaces what you shared\)/);
+    assert.equal(await run(["share", "4"]), "Shared with the team: Launch is 19 March. (it replaced an older value in the team's memory)\n");
+    const replacing = teamCalls(/POST \/v1\/memories/).pop();
+    assert.equal(replacing.body.supersedes, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "the team's copy of the memory it replaced");
+    assert.equal(replacing.body.statement, "Launch is 19 March.");
+    kept.pop();  // the rest of the test is about the first three
 
     // A session's turns go to the person's own project and never to the team space.
     const transcript = join(home, "t.jsonl");

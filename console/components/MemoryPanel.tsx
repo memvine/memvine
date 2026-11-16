@@ -5,6 +5,7 @@ import { confirmMemory, setMemoryStatus } from "@/app/actions";
 import type { MemoryDetail, MemoryItem, ThreadSummary } from "@/lib/types";
 import { CopyButton, Drawer } from "./client";
 import { MemoryTimeline } from "./MemoryTimeline";
+import { ShareActions } from "./TeamSpaces";
 import {
   AssertionBadge, Badge, button, Callout, categoryLabel, CategoryBadge, Eyebrow, formatDate, KeyValue, KeyValueList, Mono, SourceQuote,
   StatusBadge, ThreadStatusBadge,
@@ -38,6 +39,7 @@ export function MemoryActions({ m, next, size = "md" }: { m: MemoryItem; next?: 
           <button className={button("secondary", size)}><RotateCcw aria-hidden /> Restore</button>
         </form>
       )}
+      <ShareActions m={m} size={size} />
     </>
   );
 }

@@ -223,6 +223,8 @@ export async function confirmMemory(formData: FormData) {
 
 export interface ReceiptState {
   error?: string;
+  /** After Share or Take back: what happened in the team space, in a sentence. */
+  note?: string;
   /** The fact that now holds, after Wrong: the receipt's page can follow it. */
   replacedBy?: string;
 }
@@ -239,6 +241,35 @@ export async function stillTrue(_prev: ReceiptState, formData: FormData): Promis
   }
   revalidatePath("/", "layout");
   return {};
+}
+
+/** Share: copy this memory to a team space, with who said it and the quoted line it rests on. */
+export async function shareMemory(_prev: ReceiptState, formData: FormData): Promise<ReceiptState> {
+  const project = await api.currentProject();
+  const team = String(formData.get("team") ?? "");
+  if (!team) return { error: "Choose a team space." };
+  let relation: string;
+  try {
+    ({ relation } = await api.shareMemory(project.slug, String(formData.get("id")), team));
+  } catch (e) {
+    return { error: plainError(e, "Could not share it.") };
+  }
+  revalidatePath("/", "layout");
+  return { note: relation === "same" ? "The team already had this; yours is added as support."
+    : relation === "update" ? "Shared. It replaced an older value in the team's memory." : "Shared with the team." };
+}
+
+/** Take back: remove this memory from the team space (it stays when a teammate also shared it). */
+export async function unshareMemory(_prev: ReceiptState, formData: FormData): Promise<ReceiptState> {
+  const project = await api.currentProject();
+  let takenBack: boolean;
+  try {
+    ({ takenBack } = await api.unshareMemory(project.slug, String(formData.get("id"))));
+  } catch (e) {
+    return { error: plainError(e, "Could not take it back.") };
+  }
+  revalidatePath("/", "layout");
+  return { note: takenBack ? "Taken back from the team." : "A teammate shared this too, so the team keeps it; yours is private again." };
 }
 
 /** Dismiss: what background consolidation flagged is fine as it is; the flag goes, the memory stays. */

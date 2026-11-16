@@ -8,6 +8,7 @@ import { SampleBanner } from "@/components/SampleData";
 import { Sidebar } from "@/components/Sidebar";
 import { ButtonLink, Empty } from "@/components/ui";
 import { headers } from "next/headers";
+import { TeamSpacesProvider } from "@/components/TeamSpaces";
 import { currentProject, isLive, listProjects, viewer } from "@/lib/api";
 import "./globals.css";
 
@@ -62,7 +63,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             <div className="mx-auto max-w-[1180px] px-4 pt-6 pb-16 sm:px-6 md:px-8 md:pt-8">
               <ProjectGate hasProjects={projects.length > 0} fallback={<FirstProject canCreate={who?.canManage ?? true} />}>
                 {project.slug && (project.sampleSourceCount ?? 0) > 0 && <SampleBanner sources={project.sampleSourceCount ?? 0} />}
-                {children}
+                <TeamSpacesProvider spaces={project.teamSpace ? [] : projects.filter((p) => p.teamSpace).map((p) => ({ slug: p.slug, name: p.name }))}>
+                  {children}
+                </TeamSpacesProvider>
               </ProjectGate>
             </div>
           </main>

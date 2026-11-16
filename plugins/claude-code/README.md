@@ -91,6 +91,8 @@ After it:
   copies them to the team space with who said each and when. The agent is told never to share on
   its own.
 - `/memvine:unshare` takes one back.
+- When a fact you shared changes, the new memory is listed as "(suggested: replaces what you
+  shared)", and sharing it replaces the team's copy of the old one.
 
 If the team space is set to share automatically, the suggested memories are copied at the next
 session start without asking; a personal preference is never suggested. `/memvine:team --off`

@@ -172,6 +172,9 @@ export interface MemoryItem {
   flagRelated?: string | null;
   /** Why a retired memory is retired, and the memory a merged one went into (Restore un-merges it). */
   retiredReason?: "forgotten" | "merged" | null;
+  /** In a person's own project: when it was shared with a team space, and the memory it is there. */
+  sharedAt?: string | null;
+  sharedRef?: string | null;
   mergedInto?: string | null;
 }
 
@@ -673,6 +676,10 @@ export interface MemvineApi {
   /** The project's activity feed, newest first (GET /v1/events). */
   listEvents(project: string, filter?: EventFilter): Promise<EventPage>;
   setMemoryStatus(project: string, id: string, status: "active" | "retired"): Promise<void>;
+  /** Copy one memory to a team space, with who said it and the quoted line; "update" when it replaced the team's copy. */
+  shareMemory(project: string, id: string, team: string): Promise<{ relation: string }>;
+  /** Take a shared memory back; false when a teammate's support keeps it in the team space. */
+  unshareMemory(project: string, id: string): Promise<{ takenBack: boolean }>;
   /** The node and its edges (GET /v1/memories/{id}/related). */
   getRelated(project: string, id: string): Promise<MemoryRelated | null>;
   /** The project's memory graph (GET /v1/graph). */

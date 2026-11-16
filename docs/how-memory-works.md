@@ -393,9 +393,17 @@ A team can choose to share without asking (the team space's **How memories are s
 setting, `share_policy: auto`): the suggested memories are then copied by themselves at the next
 session start, and `/memvine:unshare` undoes one. Sessions stay private either way.
 
-Two copies can drift: if you later change a fact in your own memory, the team's copy does not
-follow until the new memory is shared (the team space then reconciles it against what it holds,
-like any other new fact). One open project where everyone's sessions go and anyone in the
+In the console the same step is a button: hover a memory in your own project and press **Share
+with team** (or **Shared · take back**). That works when both projects are on the same server;
+the plugin's commands also work when your project is on your own machine.
+
+When a fact you shared changes, your memory replaces it as usual, and the new one is marked as
+replacing what you shared ("1 would replace what you shared before"). Sharing it replaces the
+team's copy of the old one directly, with no judge asked. Until you share it, the team still holds
+the old value: nothing reaches the team space unless you send it, or the team shares automatically.
+
+Taking a memory back removes your support from the team's memory; when a teammate shared the same
+thing, it stays for the team with their name on it. One open project where everyone's sessions go and anyone in the
 organization can read them is still possible; it is no longer the only way.
 
 ## Forgetting

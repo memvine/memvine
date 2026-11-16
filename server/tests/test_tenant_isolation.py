@@ -71,6 +71,8 @@ BODIES: dict[tuple[str, str], dict | None] = {
     ("GET", "/v1/events"): None,
     ("GET", "/v1/graph"): None,
     ("PATCH", "/v1/memories/{memory_id}"): {"status": "retired", "confirm": True, "flag": None, "shared_ref": "hijacked"},
+    ("POST", "/v1/memories/{memory_id}/share"): {"team": "{slug}"},
+    ("DELETE", "/v1/memories/{memory_id}/share"): None,
     ("GET", "/v1/code/anchors"): None,
     ("POST", "/v1/code/check"): {"repo": "northwind/billing", "files": {"src/invoices.py": None}},
     ("POST", "/v1/export"): None,

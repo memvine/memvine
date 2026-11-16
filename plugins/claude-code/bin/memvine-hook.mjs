@@ -31,7 +31,7 @@ import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const VERSION = "0.8.0";
+export const VERSION = "0.8.1";
 const HOME = join(homedir(), ".memvine");
 export const CONFIG_PATH = join(HOME, "config.json");
 const STATE_PATH = join(HOME, "state.json");
@@ -541,7 +541,7 @@ export async function shareKept(config, cwd, argv, commandName = "share") {
     if (!live.length) { say("Nothing from the last session to share. Pass a memory id to share any memory of yours."); return; }
     say("What memory kept from the last session (private to you until shared):");
     for (const k of live) {
-      say(`  ${k.n}. [${k.category}] ${k.statement}${k.shared ? "  (shared)" : k.suggest ? "  (suggested)" : ""}`);
+      say(`  ${k.n}. [${k.category}] ${k.statement}${k.shared ? "  (shared)" : k.updates ? "  (suggested: replaces what you shared)" : k.suggest ? "  (suggested)" : ""}`);
       if (k.quote && !k.shared) say(`     goes with it, in the words said: "${k.quote}"`);
     }
     say(`Share with: ${commandName} <numbers> (or "all" for the suggested ones). Only the statement, who said it, when and those words leave your memory.`);
@@ -554,7 +554,14 @@ export async function shareKept(config, cwd, argv, commandName = "share") {
     const memory = await api(config, "GET", `/v1/memories/${encodeURIComponent(target.id)}`, undefined, 10000);
     if (!memory || memory.error) { recordError(memory, "share"); say(`Could not read memory ${target.n || target.id} (${memory ? memory.error : "not connected"}). Not shared.`); continue; }
     if (!["active", "stale"].includes(memory.status)) { say(`Not shared: "${memory.statement}" is ${memory.status}, not current.`); continue; }
-    const made = await api(team, "POST", "/v1/memories", sharePayload(memory, config.identity), 45000);
+    const payload = sharePayload(memory, config.identity);
+    // It replaced a memory that was shared: the team's copy of that one is replaced by this one.
+    const replaced = memory.supersedes
+      ? await api(config, "GET", `/v1/memories/${encodeURIComponent(memory.supersedes)}`, undefined, 10000) : null;
+    const teamCopy = replaced && !replaced.error && /^[0-9a-f-]{36}$/.test(String(replaced.shared_ref || "")) ? replaced.shared_ref : null;
+    let made = teamCopy ? await api(team, "POST", "/v1/memories", { ...payload, supersedes: teamCopy }, 45000) : null;
+    // The team's copy is gone or was already replaced there: share this as a memory of its own.
+    if (!made || made.error) made = await api(team, "POST", "/v1/memories", payload, 45000);
     if (!made || made.error || !made.memory) {
       recordError(made, "share");
       say(`Could not share "${memory.statement}" (${made ? made.error : "no answer"}${made && made.body ? `: ${String(made.body).slice(0, 160)}` : ""}). It stays private.`);
@@ -588,7 +595,9 @@ export async function unshareKept(config, cwd, argv, commandName = "unshare") {
     console.log(`Take one back with: ${commandName} <number> (or "last")`);
     return;
   }
-  const wanted = /^(the )?last( one)?$/i.test(arg) ? shared.slice(-1) : pickKept(items, arg).filter((k) => k.shared && k.teamId);
+  const numbers = /^[\d\s,and&#]+$/i.test(arg) ? (arg.match(/\d+/g) || []).map(Number) : [];
+  const wanted = /^(the )?last( one)?$/i.test(arg) ? shared.slice(-1)
+    : numbers.length ? shared.filter((k) => numbers.includes(k.n)) : shared.filter((k) => k.id === arg.toLowerCase());
   if (!wanted.length) { console.log(`Nothing shared matches "${arg}"; run ${commandName} with no argument to see the list.`); return; }
   for (const target of wanted) {
     if (target.mine) {
@@ -626,7 +635,9 @@ export function unreportedSessions(state, cwd, currentId, now = Date.now()) {
 /** What the agent is told beside the user's line, so "forget the last one" has something to act
  *  on; and with a team space connected (`share`: {command, policy}), which of them could be shared. */
 export function keptContext(items, forgetCommand, share) {
-  const mark = (k) => (!share ? "" : k.shared ? " (shared with the team)" : k.suggest ? " (could be shared with the team)" : "");
+  const mark = (k) => (!share ? "" : k.shared ? " (shared with the team)"
+    : k.updates ? " (replaces what the user shared with the team: the team's copy is out of date until this is shared)"
+      : k.suggest ? " (could be shared with the team)" : "");
   const lines = items.map((k, i) => `${i + 1}. [${k.category}] ${k.statement.replace(/\.$/, "")}${k.previous ? ` (superseded: ${k.previous.replace(/\.$/, "")})` : ""}${mark(k)}`);
   const out = [`${MARKER} · what memory kept from the previous session in this folder ===`, ...lines,
     `If the user asks to forget one of these ("forget the last one" is number ${items.length}), run \`${forgetCommand} <number>\` and tell them what was forgotten.`];
@@ -666,6 +677,8 @@ export async function keptNotice(config, cwd, currentId, forgetCommand, shareCom
     .map((k) => ({
       id: k.id, category: k.category, statement: k.statement, previous: k.previous || undefined,
       quote: k.quote || undefined, shared: Boolean(k.shared) || undefined,
+      // It replaced a memory this person shared: the team's copy is out of date until this one is shared.
+      updates: Boolean(k.updates_shared) || undefined,
       // An older server does not say: anything but a personal preference is worth offering.
       suggest: (k.suggest_share === undefined ? !k.shared && k.category !== "preference" : Boolean(k.suggest_share)) || undefined,
     }));
@@ -675,10 +688,11 @@ export async function keptNotice(config, cwd, currentId, forgetCommand, shareCom
   const undo = 'To undo one, say "forget the last one" (or name it).';
   if (!config.team) return { user: `memvine · last session here: ${kept.summary} ${undo}`, context: keptContext(items, forgetCommand) };
   const offered = items.filter((k) => k.suggest && !k.shared).length;
+  const updating = items.filter((k) => k.updates && !k.shared).length;
   const some = `${offered} of them`;
   let sharing = "It is private to you.";
   if (offered && policy === "auto") sharing = `It is private to you; ${some} ${offered === 1 ? "is" : "are"} being shared with the team (say "unshare" to take one back).`;
-  else if (offered) sharing = `It is private to you; ${some} could be shared with the team: ask "what can I share?" or say "share all".`;
+  else if (offered) sharing = `It is private to you; ${some} could be shared with the team${updating ? ` (${updating} would replace what you shared before)` : ""}: ask "what can I share?" or say "share all".`;
   return {
     user: `memvine · last session here: ${kept.summary} ${sharing} ${undo}`,
     context: keptContext(items, forgetCommand, { command: shareCommand, policy }),
@@ -717,6 +731,7 @@ export async function forgetKept(config, cwd, argv, commandName = "forget") {
   const k = items.find((x) => x.id === target.id);
   if (k) { k.forgotten = true; saveState(state); }
   console.log(`Forgotten: ${result.statement}${k && k.previous ? `\nCurrent again: ${k.previous}` : ""}`);
+  if (k && k.shared && k.teamId) console.log(`The team still has it: ${commandName.replace(/forget$/, "unshare")} ${items.indexOf(k) + 1} takes it back from the team too.`);
 }
 
 // ------------------------------------------------------------------ sending

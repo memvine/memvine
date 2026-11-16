@@ -429,6 +429,18 @@ export const mockApi: MemvineApi = {
     recordEvent(data, old.id, "corrected", { by: next.id });
     return next;
   },
+  async shareMemory(project, id) {
+    const memory = projectData(project).memories.find((m) => m.id === id);
+    if (!memory) throw new Error("404 not-found");
+    Object.assign(memory, { sharedAt: new Date().toISOString(), sharedRef: `team-${id}` });
+    return { relation: "new" };
+  },
+  async unshareMemory(project, id) {
+    const memory = projectData(project).memories.find((m) => m.id === id);
+    if (!memory) throw new Error("404 not-found");
+    Object.assign(memory, { sharedAt: null, sharedRef: null });
+    return { takenBack: true };
+  },
   async setMemoryStatus(project, id, status) {
     const data = projectData(project);
     const memory = data.memories.find((m) => m.id === id);
