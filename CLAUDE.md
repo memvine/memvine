@@ -81,7 +81,7 @@ self-host; nothing is measured on it, and quoted results are Claude's.) Last res
 - Examples in code, tests and docs use the invented "Northwind" billing world. Never put real
   company, customer or employer details in the repo.
 
-## Status (15 Nov 2026)
+## Status (16 Nov 2026)
 
 Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next/later.
 
@@ -92,8 +92,9 @@ Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next
   service. The laptop server is retired.
   After each deploy: `MEMVINE_SMOKE_KEY=mv_mk_... python3 benchmark/smoke/hosted.py --api <url> --console <url>`
   (throwaway project, deleted at the end; `--no-synthesis` skips the real model; `--conversation`
-  adds conversation mode). Last run 15 Nov, with `--conversation`, on the profile and consolidation
-  code (migration 0013): 18/18.
+  adds conversation mode). Last run 16 Nov, with `--conversation`, on the personal-project and team-space
+  code (migration 0014, plugin 0.8.0): 18/18; a throwaway team space on the hosted server refused a
+  session and took a shared memory with its author (the smoke test does not cover that yet).
 - The server image installs `server/requirements.lock`; rebuild it after changing `pyproject.toml`
   (`server/README.md`, Docker).
 - Backups: the `backup` cron service dumps the database nightly to the bucket `the backup bucket`
