@@ -38,7 +38,8 @@ cd server && .venv/bin/python ../benchmark/memory/check.py            # ~5 min, 
 cd server && .venv/bin/python ../benchmark/memory/check.py --agent-e2e  # + real Claude Code with/without memory (~30 min)
 ```
 Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local machine) or
-`anthropic` with `ANTHROPIC_API_KEY`. Last results: 25/25; agent test 9/9 right with memory,
+`anthropic` with `ANTHROPIC_API_KEY`. (`openai` is any OpenAI-compatible server, for people who
+self-host; nothing is measured on it, and quoted results are Claude's.) Last results: 28/28 (16 Nov); agent test 9/9 right with memory,
 0/9 without. Don't ship a change to extraction, reconciliation or recall without running it.
 
 ## Decisions to keep
@@ -65,6 +66,15 @@ Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local
   There is no "v1/v2" anywhere.
 - **In coding mode, recall carries what the question needs and nothing twice**, abstains on unrelated questions,
   and keeps standing rules in their own always-on section.
+- **A person's sessions are theirs.** On a team, sessions go to a personal project only its owner
+  opens (`projects.owner_user_id`; `auth.find_project` is the one gate), and the team's project is
+  a team space that refuses conversation and holds what people shared (`projects.team_space`,
+  `refuse_conversation`). The plugins send sessions to the person's own project only, read both on
+  recall, and share one memory at a time with its author and quoted line (`share` in
+  `plugins/claude-code/bin/memvine-hook.mjs`). Memvine suggests what to share; the agent never shares
+  on its own. A team may set `share_policy: auto`. A new route that reads a project must stay behind
+  `require_project` or `find_project`: `test_personal_projects.py` aims every project route at
+  someone else's personal project.
 - **Unreviewed memories are served.** Review (Keep / Wrong / Forget) is feedback, not a gate;
   forgotten memories become private drop cases and are never re-learned.
 - **Graph work is on hold** (`docs/plans/`): plain-text memory must work for agents first.

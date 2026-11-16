@@ -8,6 +8,9 @@ GitHub issues in this repo, labelled `now` / `next` / `later` / `parked`, with `
 `area:` label.
 
 ## Now (this week)
+- Personal projects and team spaces (a person's sessions stay theirs; the team gets what they
+  share): built and tested locally, migration 0014, plugin 0.8.0. Not deployed. To learn from the
+  first real teams: do people share what is suggested?
 - Public release, the owner's to do by hand after their own check: make the repository public,
   switch on private vulnerability reporting, publish the client libraries on npm and PyPI (#11)
 - Re-point both laptops' plugins to Railway (#2)

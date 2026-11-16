@@ -46,6 +46,16 @@ node ~/.memvine/codex/bin/memvine-codex.mjs uninstall   # takes out the MCP bloc
 `uninstall` keeps `~/.memvine/config.json`, which the Claude Code plugin shares; delete it to
 forget the key.
 
+On a team, the key you install with is your own project's, and the team space is added beside it
+(see "Your own project and a team space" in the Claude Code plugin's README; the behaviour is the
+same):
+
+```
+node ~/.memvine/codex/bin/memvine-codex.mjs team mv_sk_<the team space's key> [api-url]
+node ~/.memvine/codex/bin/memvine-codex.mjs share            # lists what the last session kept; share 1 3 | all | last
+node ~/.memvine/codex/bin/memvine-codex.mjs unshare last
+```
+
 ## What it does
 
 | Codex hook | What happens |

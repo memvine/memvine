@@ -1,7 +1,8 @@
 # Running your own Memvine server
 
 One host, three containers: Postgres with pgvector, the API (with its synthesis worker), and the
-console. You need Docker and an Anthropic API key (extraction runs on it). People are grouped into
+console. You need Docker and a key for a model, which turns conversation into memory: Anthropic's
+by default, or any server that speaks the OpenAI API ("Other models" below). People are grouped into
 **organizations**: each gets a management key, signs in to the console with it, and sees only its
 own projects. For one person or one team, one organization is enough.
 
@@ -12,7 +13,7 @@ one Mac, using a Claude subscription instead of an API key).
 
 ```sh
 cd deploy
-cp .env.example .env        # set POSTGRES_PASSWORD, MEMVINE_OPERATOR_KEY, ANTHROPIC_API_KEY
+cp .env.example .env        # set POSTGRES_PASSWORD, MEMVINE_OPERATOR_KEY and the model's key
 docker compose up -d --build
 curl -s localhost:8400/health     # {"ok":true,...}
 ```
@@ -75,6 +76,14 @@ organization of their own, or `closed` for neither. Any other server setting fro
 `server/README.md` goes in a file `deploy/.env.api`, one `NAME=value` per line, which the API
 container reads when it exists.
 
+**For a team whose members keep their sessions to themselves.** In the console's **New project**:
+an owner or admin creates one **Team space**, and gives its key to the team; each person creates
+their own project (**Only me**), connects their agent to it with the command shown, and then adds
+the team space with `/memvine:team mv_sk_<team space key> https://api.example.com`. Sessions go to
+each person's own project, which nobody else in the organization can open; the team space refuses
+sessions and holds what people share (`docs/how-memory-works.md`, "Your own memory and the
+team's"). Whoever holds the operator key and the database can still read everything on the server.
+
 A project is in `coding` mode unless you choose otherwise: it keeps few, durable memories. Choose
 `conversation` for one person's long conversation with an assistant
 (`memory_mode` on the project; `docs/how-memory-works.md`).
@@ -85,7 +94,7 @@ A project is in `coding` mode unless you choose otherwise: it keeps few, durable
   stop ingestion at a limit (recall keeps working). Credits only count usage, nothing is charged:
   1 per 1,000 characters ingested, 0.1 per recall.
 - **Retention.** Set per project; raw transcripts older than the window are dropped, memories stay.
-- **Model spend.** Extraction runs on `ANTHROPIC_API_KEY`. Roughly one extraction call per ~6,000
+- **Model spend.** Extraction runs on the model key in `.env`. Roughly one extraction call per ~6,000
   characters of conversation, plus one reconciliation call per extracted fact and a page rebuild
   per changed subject. Sonnet 5.5 costs about $35 to ingest a 100K-token BEAM conversation set
   (20 conversations); `MEMVINE_LLM_MODEL=claude-haiku-5-5` is about a tenth of that.
@@ -95,6 +104,42 @@ A project is in `coding` mode unless you choose otherwise: it keeps few, durable
 - **Upgrades.** Back up, then `git pull && docker compose up -d --build`. Pending schema migrations
   apply at startup, each in a transaction (`docker compose exec api memvine-server migrations`
   lists them; see "Schema and migrations" in `server/README.md`).
+
+## Other models
+
+Memvine is built and measured on Anthropic's models. It can use any server that speaks the OpenAI
+chat completions API instead. In `.env`, in place of `ANTHROPIC_API_KEY`:
+
+```sh
+MEMVINE_LLM_BACKEND=openai
+MEMVINE_LLM_API_KEY=sk-...
+MEMVINE_LLM_MODEL=gpt-5.6
+```
+
+| Provider | `MEMVINE_LLM_BASE_URL` |
+| --- | --- |
+| OpenAI | leave it out |
+| OpenRouter | `https://openrouter.ai/api/v1` |
+| Ollama on the same machine | `http://host.docker.internal:11434/v1`, and no key |
+| Anything else | the address its documentation gives for the OpenAI-compatible API |
+
+`MEMVINE_LLM_MODEL_FAST` names a cheaper model for the many small judgements (which memory a new
+fact replaces, which memories a question needs); without it they run on `MEMVINE_LLM_MODEL`.
+
+What to expect:
+
+- **Quality is not measured on other models.** The prompts were written against Claude, and the
+  memory check (`benchmark/memory`) has only been run on Claude. Run it on your model before you
+  trust it: `MEMVINE_LLM_BACKEND=openai` with the settings above, then the command in that README.
+- **Use a capable model.** It has to follow a long instruction and reply in exact JSON. In one
+  trial an 8-billion-parameter local model chose the right two memories from a short session but
+  wrote JSON that could not be read, so nothing was kept, and it took six minutes.
+- **A local model needs a large context window.** The instruction is about 1,500 tokens, and the
+  conversation, the model's thinking and its reply come on top. In the same trial Ollama's default
+  window of 4,096 tokens overflowed and the reply was nonsense; `OLLAMA_CONTEXT_LENGTH=32768`
+  fixed that.
+- The server starts without checking the key. A wrong key or model name shows as failed jobs in
+  the console (Sources) and in `docker compose logs api`.
 
 ## Not built
 

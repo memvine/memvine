@@ -70,6 +70,9 @@ person and an assistant, where today it is as good as plain search and no better
 ### Work for a team and be run by one
 
 - Organizations, people with roles, invite links, and audiences that decide who may read which memory.
+- A person's sessions can stay their own: a personal project only they open, and a team space that
+  refuses sessions and holds only the memories people chose to share, each with who said it. Memvine
+  suggests what to share after a session; a team can also have the suggested ones shared by themselves.
 - Each project is isolated from every other, enforced in the database, and every administrative
   change is in an audit log.
 - A console to read memories, sources, activity, requests and usage.
@@ -82,7 +85,7 @@ person and an assistant, where today it is as good as plain search and no better
 
 | Check | Result |
 | --- | --- |
-| Memory check for coding mode: what is kept, dropped, updated and recalled, with a real model | 25 of 25 |
+| Memory check for coding mode: what is kept, dropped, updated and recalled, with a real model | 28 of 28 |
 | Agent test: Claude Code answering questions about a project | 9 of 9 right with Memvine, 0 of 9 without |
 | BEAM long-conversation benchmark, 100K tokens, scored the published way, 300 questions | Memvine 0.892 (before the person's profile was added), plain search 0.889, the whole conversation in the prompt 0.903 |
 | Smoke test on the hosted service, including Ask and conversation mode | 18 of 18 |
@@ -103,8 +106,9 @@ person and an assistant, where today it is as good as plain search and no better
 - **A changed value is tracked only when the model sees the change.** On the benchmark's questions
   about updated values the profile is level with plain search, not ahead.
 - **It can serve a wrong memory.** Unreviewed memories are served; review is feedback, not a gate.
-- **Quality depends on the model.** Extraction and answers use Anthropic models (an API key, or a
-  Claude subscription on a local machine). No other provider is supported.
+- **Quality depends on the model.** Memvine is built and measured on Anthropic models (an API key,
+  or a Claude subscription on a local machine). Any server that speaks the OpenAI API can be used
+  in their place, but nothing here has been measured on another model.
 - **Keyword search assumes English.**
 
 ### Limits of the evidence
@@ -115,12 +119,18 @@ person and an assistant, where today it is as good as plain search and no better
   held-out conversations or at 500K and above scored the published way.
 - The coding-mode checks are built by the author. Nobody outside has yet used Memvine on real
   work for long enough to show it helps a team.
+- Sharing from a personal project to a team space was tried once end to end with a real model, on
+  one invented session. Whether the suggestions are the right ones, and whether people act on
+  them, has not been measured.
 
 ### Not built
 
 - It does not read a repository, documents, PDFs, tickets or web pages by itself. Memory comes from
   conversation and from what someone adds.
 - No Cursor plugin, and no sign-in flow for using it from Claude.ai or ChatGPT.
+- Sharing a memory with a team space is done from the agent (`/memvine:share`); the console has no
+  share button. A memory changed in a person's own project is not updated in the team space until
+  the new one is shared.
 - The client libraries are in the repository but not published to npm or PyPI.
 - Ask is in the console and the HTTP API only: not yet in the client libraries, the MCP tools or
   the plugins.

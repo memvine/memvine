@@ -44,6 +44,26 @@ session and A's organization key (both naming B's project and naming their own).
 of B's comes back (B's data carries a marker word) and nothing of B's changes (a before/after
 snapshot of B's rows), and repeats the check over MCP.
 
+**Inside one organization.** Members of an organization can open every project of it, with two
+exceptions made for people's sessions (migration 0014):
+
+- A **personal project** (`projects.owner_user_id`) is opened only by the person who created it.
+  The organization's owner and admins, and an organization key, get 404 for it; it is absent from
+  their project list, their audit log and their synthesis health, and its audit lines stay its
+  owner's after it is deleted. Any member may create one and manages it like an owner.
+  `server/tests/test_personal_projects.py` fills one with marked data and aims every project route
+  in the app at it as the organization's owner, an admin and an organization key: nothing comes
+  back and nothing changes. The operator key still reads everything on the server.
+- A **team space** (`projects.team_space`) refuses conversation: `POST /v1/ingest` and session
+  events answer 403 `team-space`, whoever sends them, and a project that already holds sessions or
+  sources cannot be turned into one. It holds memories people posted from their own projects, each
+  with its author, date and one quoted line (`server/tests/test_team_space.py`).
+
+What this does not do: a person's sessions are still stored on the server their own project is
+on, readable by whoever runs that server (the operator key, the database). Running that project
+on a server of one's own is the only way to keep them off someone else's machine. A shared memory
+carries a quoted line of the session, which the plugin shows before sharing.
+
 ## Rate limits
 
 `server/memvine_server/security.py`, an in-process sliding window (the API runs as one replica). The

@@ -23,12 +23,17 @@ Each project uses one of two modes:
 | `coding` (the default) | A team's coding agents | Very little: the decisions, rules, gotchas, facts and preferences that the code itself cannot tell you |
 | `conversation` | One person's long conversation with an assistant | The whole conversation, searchable, and a small profile of the person |
 
+**On a team, your sessions stay yours.** Each person's sessions go to a project only they can open.
+The team has a second project, a *team space*, that refuses sessions and holds only the memories
+people chose to share. After a session Memvine says which of your new memories are worth sharing,
+and you say which ones go. Every agent on the team is briefed from both.
+
 More detail: [How Memvine memory works](docs/how-memory-works.md).
 
 ## Get started
 
-**1. Get a server.** Run your own with Docker. You need an Anthropic API key, because Memvine uses
-a model to pick out the memories.
+**1. Get a server.** Run your own with Docker. You need a key for a model, because Memvine uses
+one to pick out the memories: Anthropic's by default, or any server that speaks the OpenAI API.
 
 ```sh
 git clone https://github.com/memvine/memvine && cd memvine/deploy
@@ -44,7 +49,7 @@ invitation: write to hello@memvine.dev.
 
 | Agent | How |
 | --- | --- |
-| Claude Code | `/plugin marketplace add memvine/memvine`, `/plugin install memvine@memvine`, then `/memvine:connect mv_sk_... you@company.com [api-url]`. See [`plugins/claude-code`](plugins/claude-code). |
+| Claude Code | `/plugin marketplace add memvine/memvine`, `/plugin install memvine@memvine`, then `/memvine:connect mv_sk_... you@company.com [api-url]`. On a team, add the team space with `/memvine:team mv_sk_...`. See [`plugins/claude-code`](plugins/claude-code). |
 | OpenAI Codex CLI | One `install` command. See [`plugins/codex`](plugins/codex). |
 | Any MCP client | Point it at `/mcp` on your server. |
 | Your own code | The [TypeScript](sdk/typescript) or [Python](sdk/python) library, or the [HTTP API](server). |
@@ -73,7 +78,7 @@ For now the libraries are installed from a clone of this repository
 Two tests, both in this repository and both runnable:
 
 - **Coding mode.** The [memory check](benchmark/memory) uses a real model to test what must be
-  kept, dropped and recalled: 25 of 25 pass. In its agent test, Claude Code answered 9 of 9
+  kept, dropped and recalled: 28 of 28 pass. In its agent test, Claude Code answered 9 of 9
   questions correctly with Memvine's memory and 0 of 9 without it.
 - **Conversation mode.** On the [BEAM](benchmark/beam/README.md) long-term memory benchmark
   (100K-token conversations, 300 questions, scored the published way):
@@ -91,8 +96,10 @@ Two tests, both in this repository and both runnable:
 - It does not beat plain search at recalling details from a long conversation. It is level with it.
 - It learns from conversations and from what people add. It does not read your repository,
   documents or tickets by itself.
-- It needs Anthropic models, and taking in a conversation costs model calls.
-- No outside team has yet used it on real work for long enough to show that it helps.
+- It is built and measured on Anthropic models. Other models can be used but are not measured.
+  Taking in a conversation costs model calls.
+- No outside team has yet used it on real work for long enough to show that it helps. Whether
+  people share what their memory suggests is not known either: that part is new and unmeasured.
 
 The full list, with what has and has not been measured:
 [What Memvine can and cannot do](docs/what-memvine-does.md).

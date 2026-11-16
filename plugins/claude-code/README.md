@@ -70,9 +70,35 @@ and if it had replaced an older fact, that fact is current again. You can do the
 `/memvine:forget` lists the last session's memories, `/memvine:forget last` or
 `/memvine:forget 2` forgets one, and `/memvine:forget <memory id>` forgets any memory.
 
-Commands: `/memvine:connect`, `/memvine:status`, `/memvine:cut`, `/memvine:backfill`,
-`/memvine:disconnect`, `/memvine:forget`. The `memvine` skill lets the model search memory itself
-for "why is this like this" questions.
+### Your own project and a team space
+
+`/memvine:connect` names the project your sessions go to: your own. On a team, add the team space:
+
+```
+/memvine:team mv_sk_<the team space's key> [api-url] [--here]
+```
+
+A team space is a project that refuses sessions and holds only what people shared; the command
+refuses a key whose project takes sessions, so a conversation cannot end up where teammates read.
+After it:
+
+- Your sessions keep going to your own project and nowhere else.
+- Every brief and every prompt is answered from both memories; the team's part comes under its
+  own heading, and a memory in both is said once.
+- The line about what the last session kept now ends with what could be shared ("1 of them could
+  be shared with the team"). `/memvine:share` lists the memories with the quoted words that would
+  go along; `/memvine:share 1 3`, `/memvine:share all` (the suggested ones) or `/memvine:share last`
+  copies them to the team space with who said each and when. The agent is told never to share on
+  its own.
+- `/memvine:unshare` takes one back.
+
+If the team space is set to share automatically, the suggested memories are copied at the next
+session start without asking; a personal preference is never suggested. `/memvine:team --off`
+disconnects the team space.
+
+Commands: `/memvine:connect`, `/memvine:team`, `/memvine:share`, `/memvine:unshare`,
+`/memvine:status`, `/memvine:cut`, `/memvine:backfill`, `/memvine:disconnect`, `/memvine:forget`.
+The `memvine` skill lets the model search memory itself for "why is this like this" questions.
 
 `/memvine:connect <key> <identity> [api-url] --here` binds only this folder (this repository) to
 that key; without `--here` the key is the machine-wide default. `/memvine:disconnect` stops this
@@ -84,7 +110,8 @@ its history. It first lists them (dates, turns, size, credits) and sends only af
 `--days 30` limits it to recent ones. Sessions already sent live are skipped, and the same
 filtering and redaction apply.
 
-Configuration lives in `~/.memvine/config.json` (`apiUrl`, `apiKey`, `identity`, `deny`: a list
+Configuration lives in `~/.memvine/config.json` (`apiUrl`, `apiKey`, `identity`, `team`: the team
+space's `apiUrl` and `apiKey`, `deny`: a list
 of path fragments for projects never to send; `projects`: the per-folder bindings `--here` and
 `/memvine:disconnect` write). Environment variables `MEMVINE_API_URL`, `MEMVINE_API_KEY` and
 `MEMVINE_IDENTITY` override it.

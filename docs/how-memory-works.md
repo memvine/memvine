@@ -357,6 +357,47 @@ Serving re-checks every citation, so forgetting or replacing a memory takes its 
 the worker marks profiles dirty from the events log and rebuilds a dirty one at most every ten
 minutes. Console: People, and the project profile on Home.
 
+## Your own memory and the team's
+
+People will not connect an agent that shows their sessions to their whole team. So on a team
+there are two places:
+
+- **Your own project.** Your sessions go here and become memory, as described above. In the
+  console it is a personal project: only you open it, whatever role anyone else in the
+  organization holds, and an organization key does not reach it either.
+- **A team space.** A project that refuses sessions (the server answers 403 to conversation,
+  whoever sends it) and holds only memories people shared. It never contains a session.
+
+```
+/memvine:connect mv_sk_<your own project's key> you@company.com
+/memvine:team    mv_sk_<the team space's key>
+```
+
+From then on:
+
+1. **Sessions go to your own project, and nowhere else.** The plugin never sends a turn to the
+   team space, and the team space would refuse it.
+2. **Recall reads both.** Your agent is briefed from your memory and from the team's, and a memory
+   in both is said once.
+3. **Memvine suggests, you share.** The next session opens with what the last one kept: "Memory
+   kept 1 rule and 1 preference. It is private to you; 1 of them could be shared with the team".
+   Anything but a personal preference is suggested. `/memvine:share` lists them with the words that
+   would go along; `/memvine:share 1 3` or `/memvine:share all` shares.
+4. **What is shared is one memory, not the session.** The statement, what kind of thing it is, who
+   said it, when, and the one quoted line it rests on. In the team space its source is that line
+   under your name. A teammate cannot open the session behind it.
+5. **`/memvine:unshare` takes one back.** The team's copy is retired when your share made it; a
+   memory the team already had from someone else stays.
+
+A team can choose to share without asking (the team space's **How memories are shared here**
+setting, `share_policy: auto`): the suggested memories are then copied by themselves at the next
+session start, and `/memvine:unshare` undoes one. Sessions stay private either way.
+
+Two copies can drift: if you later change a fact in your own memory, the team's copy does not
+follow until the new memory is shared (the team space then reconciles it against what it holds,
+like any other new fact). One open project where everyone's sessions go and anyone in the
+organization can read them is still possible; it is no longer the only way.
+
 ## Forgetting
 
 Memory forgets in four ways:
