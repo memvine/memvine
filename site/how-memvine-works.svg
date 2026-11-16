@@ -1,44 +1,77 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="480" viewBox="0 0 1200 480" role="img" aria-labelledby="t d">
   <title id="t">What Memvine does</title>
-  <desc id="d">Three columns. Said today: six lines of a session, of which two matter later (Dana says never to go above 3 retries; Priya says the launch moves to 12 March). Kept: Memvine keeps only those two as memories, each with who said it and when, and the launch date it replaces. Known tomorrow: in a later session with another person, the agent caps a new retry at 3 and answers that the launch is on 12 March.</desc>
+  <desc id="d">Three parts, played in order. Said today: six lines of a session. A stem grows down beside them, and four lines fade as it passes; two stay (you say the tests use port 5433, not 5432, and to always deploy with make deploy). Kept: a leaf opens for each of those two, with the memory and who said it and when. Known tomorrow: in a teammate's session, their agent runs the tests on port 5433 and deploys with make deploy.</desc>
+  <!-- Each element's resting style is the finished picture, so it reads the same where animation
+       is off (reduced motion, or a viewer that does not animate). The typeface loads only where
+       the file may fetch it (the website embeds it as an object); as an image it falls back to
+       the system face. -->
   <style>
-    text { font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 20px; }
+    @import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&amp;display=swap");
+    svg { color-scheme: dark; }  /* embedded in a dark page, the corners stay clear */
+    text { font-family: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 20px; }
     .head { font-size: 30px; font-weight: 600; fill: #e8ede7; }
-    .dim { fill: #8a978e; }
+    .said { fill: #c9d1ca; }
+    .gone { --end: 0.3; opacity: 0.3; }
     .lit { fill: #e8ede7; font-weight: 500; }
     .who { fill: #8a978e; font-size: 17px; }
     .new { fill: #a8e4bf; font-weight: 500; }
     .stem { fill: none; stroke: #3e8c5e; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .stem[pathLength] { stroke-dasharray: 1; }
+    .a { animation-duration: 12.5s; animation-timing-function: cubic-bezier(0.3, 0.6, 0.2, 1); animation-iteration-count: infinite; }
+    .stem[pathLength].a { animation-timing-function: linear; }
+    @media (prefers-reduced-motion: reduce) { .a { animation: none !important; } }
+    @keyframes said0 { 0%, 2.12% { opacity: 0; transform: translateY(7px); } 5.72% { opacity: 1; transform: none; } 8.12% { opacity: 1; transform: none; } 13.72% { opacity: var(--end); transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes said1 { 0%, 5.25% { opacity: 0; transform: translateY(7px); } 8.85% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes said2 { 0%, 8.38% { opacity: 0; transform: translateY(7px); } 11.98% { opacity: 1; transform: none; } 14.38% { opacity: 1; transform: none; } 19.98% { opacity: var(--end); transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes said3 { 0%, 11.50% { opacity: 0; transform: translateY(7px); } 15.10% { opacity: 1; transform: none; } 17.50% { opacity: 1; transform: none; } 23.10% { opacity: var(--end); transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes said4 { 0%, 14.63% { opacity: 0; transform: translateY(7px); } 18.23% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes said5 { 0%, 17.75% { opacity: 0; transform: translateY(7px); } 21.35% { opacity: 1; transform: none; } 23.75% { opacity: 1; transform: none; } 29.35% { opacity: var(--end); transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes stem { 0%, 2.40% { stroke-dashoffset: 1; opacity: 1; } 23.20% { stroke-dashoffset: 0; opacity: 1; } 88.00% { stroke-dashoffset: 0; opacity: 1; } 93.60%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+    @keyframes leaf1 { 0%, 7.99% { transform: rotate(-70deg) scale(0); opacity: 1; } 12.39% { transform: rotate(4deg) scale(1.06); opacity: 1; } 14.39% { transform: none; opacity: 1; } 88.00% { transform: none; opacity: 1; } 93.60%, 100% { transform: none; opacity: 0; } }
+    @keyframes kept1 { 0%, 11.59% { opacity: 0; transform: translateY(7px); } 15.19% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes leaf4 { 0%, 17.37% { transform: rotate(-70deg) scale(0); opacity: 1; } 21.77% { transform: rotate(4deg) scale(1.06); opacity: 1; } 23.77% { transform: none; opacity: 1; } 88.00% { transform: none; opacity: 1; } 93.60%, 100% { transform: none; opacity: 0; } }
+    @keyframes kept4 { 0%, 20.97% { opacity: 0; transform: translateY(7px); } 24.57% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes to1 { 0%, 26.40% { stroke-dashoffset: 1; opacity: 1; } 30.40% { stroke-dashoffset: 0; opacity: 1; } 88.00% { stroke-dashoffset: 0; opacity: 1; } 93.60%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+    @keyframes head1 { 0%, 29.60% { opacity: 0; transform: translateY(7px); } 33.20% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes ask1 { 0%, 29.60% { opacity: 0; transform: translateY(7px); } 33.20% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes answer1 { 0%, 34.40% { opacity: 0; transform: translateY(7px); } 38.00% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes to4 { 0%, 36.80% { stroke-dashoffset: 1; opacity: 1; } 40.80% { stroke-dashoffset: 0; opacity: 1; } 88.00% { stroke-dashoffset: 0; opacity: 1; } 93.60%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+    @keyframes head4 { 0%, 40.00% { opacity: 0; transform: translateY(7px); } 43.60% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes ask4 { 0%, 40.00% { opacity: 0; transform: translateY(7px); } 43.60% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes answer4 { 0%, 44.80% { opacity: 0; transform: translateY(7px); } 48.40% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
   </style>
+  <defs>
+    <linearGradient id="leaf" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#5a9a78"/><stop offset="1" stop-color="#a6d8bb"/></linearGradient>
+  </defs>
 
   <rect x="0.5" y="0.5" width="1199" height="479" rx="18" fill="#0b1310" stroke="#1f2e26"/>
 
-  <!-- Said today: a session. Most of it is not worth keeping. -->
   <text class="head" x="56" y="84">Said today</text>
-  <text class="dim" x="56" y="160">Agent: The export failed again.</text>
-  <text class="lit" x="56" y="212">Dana: Never go above 3 retries.</text>
-  <text class="dim" x="56" y="264">Agent: Fixed. Tests pass now.</text>
-  <text class="dim" x="56" y="316">Agent: Opening the pull request.</text>
-  <text class="lit" x="56" y="368">Priya: Launch moves to 12 March.</text>
-  <text class="dim" x="56" y="420">Agent: Noted. Anything else?</text>
+  <text class="head" x="516" y="84">Kept</text>
+  <text class="head" x="852" y="84">Known tomorrow</text>
 
-  <!-- Kept: the two lines that stay true. -->
-  <text class="head" x="500" y="84">Kept</text>
-  <path class="stem" d="M404 206 H472 M464 200 L472 206 L464 212"/>
-  <text class="lit" x="500" y="212">Retries cap at 3.</text>
-  <text class="who" x="500" y="240">Dana, 4 Feb</text>
+  <!-- Said today: a session. The stem grows down past it; most lines fade as it passes. -->
+  <text class="said gone a" style="animation-name: said0" x="56" y="160">Agent: The tests fail to connect.</text>
+  <text class="lit a" style="animation-name: said1" x="56" y="212">You: Tests use port 5433, not 5432.</text>
+  <text class="said gone a" style="animation-name: said2" x="56" y="264">Agent: Fixed. Tests pass now.</text>
+  <text class="said gone a" style="animation-name: said3" x="56" y="316">Agent: Opening the pull request.</text>
+  <text class="lit a" style="animation-name: said4" x="56" y="368">You: Always deploy with make deploy.</text>
+  <text class="said gone a" style="animation-name: said5" x="56" y="420">Agent: Noted. Anything else?</text>
 
-  <path class="stem" d="M404 362 H472 M464 356 L472 362 L464 368"/>
-  <text class="lit" x="500" y="368">Launch is 12 March.</text>
-  <text class="who" x="500" y="396">Priya, 4 Feb. Was 5 March.</text>
+  <!-- Kept: a leaf for each line that stays true. -->
+  <path class="stem a" style="animation-name: stem" pathLength="1" d="M446 112 C 436 190, 452 250, 442 320 S 438 420, 446 458"/>
+  <g transform="translate(443.4 205) rotate(9)"><g class="a" style="animation-name: leaf1"><path d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="0.8"/><path d="M3 0 H55 M17 0 q5 -5 10 -7 M17 0 q5 5 10 7 M30 0 q5 -4 9 -6 M30 0 q5 4 9 6" fill="none" stroke="#d8f5e3" stroke-opacity="0.4" stroke-width="0.7"/></g></g>
+  <g class="a" style="animation-name: kept1"><text class="lit" x="516" y="212">Tests run on port 5433.</text><text class="who" x="516" y="240">Said by you today</text></g>
+  <g transform="translate(437.6 361) rotate(9)"><g class="a" style="animation-name: leaf4"><path d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="0.8"/><path d="M3 0 H55 M17 0 q5 -5 10 -7 M17 0 q5 5 10 7 M30 0 q5 -4 9 -6 M30 0 q5 4 9 6" fill="none" stroke="#d8f5e3" stroke-opacity="0.4" stroke-width="0.7"/></g></g>
+  <g class="a" style="animation-name: kept4"><text class="lit" x="516" y="368">Deploy with make deploy.</text><text class="who" x="516" y="396">Said by you today</text></g>
 
-  <!-- Known tomorrow: another session, another person. -->
-  <text class="head" x="860" y="84">Known tomorrow</text>
-  <path class="stem" d="M764 206 H832 M824 200 L832 206 L824 212"/>
-  <text class="dim" x="860" y="198">Sam: Make the sync job retry.</text>
-  <text class="new" x="860" y="228">Agent: Done, capped at 3.</text>
-
-  <path class="stem" d="M764 362 H832 M824 356 L832 362 L824 368"/>
-  <text class="dim" x="860" y="354">Sam: When do we launch?</text>
-  <text class="new" x="860" y="384">Agent: 12 March.</text>
+  <!-- Known tomorrow: a teammate's session. -->
+  <path class="stem a" style="animation-name: to1" pathLength="1" d="M772 206 H826"/>
+  <path class="stem a" style="animation-name: head1" d="M818 200 L826 206 L818 212"/>
+  <text class="said a" style="animation-name: ask1" x="852" y="198">Teammate: Run the tests.</text>
+  <text class="new a" style="animation-name: answer1" x="852" y="228">Agent: Ran them on port 5433.</text>
+  <path class="stem a" style="animation-name: to4" pathLength="1" d="M772 362 H826"/>
+  <path class="stem a" style="animation-name: head4" d="M818 356 L826 362 L818 368"/>
+  <text class="said a" style="animation-name: ask4" x="852" y="354">Teammate: Deploy this.</text>
+  <text class="new a" style="animation-name: answer4" x="852" y="384">Agent: Ran make deploy.</text>
 </svg>

@@ -29,7 +29,7 @@
       <span>memvine</span>
     </a>
     <nav aria-label="Primary">
-      <a href="https://github.com/memvine/memvine/blob/main/docs/how-memory-works.md">How it works</a>
+      <a href="/how-it-works">How it works</a>
       <a href="https://github.com/memvine/memvine">GitHub</a>
       <a class="nav-console" href="https://app.memvine.dev">Open the console</a>
     </nav>
@@ -54,12 +54,12 @@
 
     <section class="recall" aria-labelledby="recall-title">
       <h2 id="recall-title">Teach one agent once. Every agent on your team remembers.</h2>
-      <div class="brief" role="figure" aria-label="A briefing as an agent sees it">
-        <p class="brief-line"><span class="tag">[decision 15 Oct, supersedes 6 Oct]</span> The public launch moved to 14 Nov because legal pushed back on the refund copy <span class="was">(was: planned for 31 Oct)</span></p>
-        <p class="brief-line"><span class="tag">[rule 26 Oct, contradicts 24 Oct]</span> Weekend escalations page the on-call engineer right away</p>
-        <p class="brief-line"><span class="tag">[gotcha 3 Oct, anchored src/queue.py]</span> Retries cap at 3. The broker rate-limits us above that.</p>
-        <p class="brief-line"><span class="tag">[rule 21 Oct, extends 21 Oct]</span> Only Priya merges release work</p>
-      </div>
+      <ol class="teach">
+        <li>Today, you tell your agent: use <code>make deploy</code>, never <code>kubectl</code>.</li>
+        <li>Tomorrow, a teammate's coding agent deploys with <code>make deploy</code>.</li>
+        <li>Next week, another teammate's coding agent does the same.</li>
+        <li>Next month, your own new session still remembers.</li>
+      </ol>
     </section>
 
     <section class="connect" id="connect" aria-labelledby="connect-title">
@@ -88,7 +88,7 @@ node ~/.memvine/src/plugins/codex/bin/memvine-codex.mjs install mv_sk_... you@co
   <footer class="bottom">
     <span>Memvine</span>
     <nav aria-label="Footer">
-      <a href="https://github.com/memvine/memvine/blob/main/docs/how-memory-works.md">How it works</a>
+      <a href="/how-it-works">How it works</a>
       <a href="https://github.com/memvine/memvine">GitHub</a>
       <a href="https://app.memvine.dev">Console</a>
       <a href="/terms">Terms</a>

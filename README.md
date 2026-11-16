@@ -1,6 +1,6 @@
 <a id="readme-top"></a>
 
-<p align="center"><img src="docs/how-memvine-works.svg" alt="Said today: six lines of a session, two of which matter later. Kept: Memvine keeps those two, with who said each and when. Known tomorrow: in a later session with someone else, the agent already knows them." width="960" /></p>
+<p align="center"><img src="site/how-memvine-works.svg" alt="Said today: six lines of a session, two of which matter later. Kept: Memvine keeps those two, with who said each and when. Known tomorrow: in a teammate's session, their agent already knows them." width="960" /></p>
 
 <h1 align="center">Memvine</h1>
 
@@ -97,7 +97,7 @@ import { Memvine } from "@memvine/sdk";
 const mv = new Memvine({ apiKey: process.env.MEMVINE_KEY!, baseUrl: process.env.MEMVINE_URL });
 
 // During a session: send what is said.
-const s = mv.session("demo-1", { agent: "my-agent", identity: "priya@example.com" });
+const s = mv.session("demo-1", { agent: "my-agent", identity: "you@example.com" });
 await s.send("user", "Retries cap at 3: the broker rate-limits us above that.");
 await s.close();                              // Memvine turns the session into memory
 
@@ -115,7 +115,7 @@ from memvine_sdk import Memvine
 mv = Memvine(os.environ["MEMVINE_KEY"], base_url=os.environ["MEMVINE_URL"])
 
 # During a session: send what is said.
-s = mv.session("demo-1", agent="my-agent", identity="priya@example.com")
+s = mv.session("demo-1", agent="my-agent", identity="you@example.com")
 s.send("user", "Retries cap at 3: the broker rate-limits us above that.")
 s.close()                                     # Memvine turns the session into memory
 

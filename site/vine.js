@@ -310,12 +310,13 @@
     document.addEventListener("pointerleave", () => { pointer = null; });
   }
 
-  // The briefing reveals its lines once, when it comes into view.
-  const brief = document.querySelector(".brief");
-  if (brief && "IntersectionObserver" in window) {
+  // The short timeline under "Teach one agent once" plays once, when it comes into view.
+  const teach = document.querySelector(".teach");
+  if (teach && "IntersectionObserver" in window) {
+    teach.classList.add("ready");
     const io = new IntersectionObserver((entries) => {
-      for (const e of entries) if (e.isIntersecting) { brief.classList.add("shown"); io.disconnect(); }
+      for (const e of entries) if (e.isIntersecting) { teach.classList.add("shown"); io.disconnect(); }
     }, { threshold: 0.35 });
-    io.observe(brief);
-  } else if (brief) brief.classList.add("shown");
+    io.observe(teach);
+  }
 })();

@@ -61,6 +61,7 @@ a:focus-visible, .button:focus-visible {
 .top {
   position: absolute;
   top: 0; left: 0; right: 0;
+  z-index: 2; /* above main: the hero starts at the top of the page and would take the clicks */
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -177,32 +178,73 @@ h2 {
   text-wrap: balance;
 }
 
-.brief {
-  margin-top: 56px;
+/* Said once, remembered after: a short stem down the left, the day it was said at its top and a
+   leaf for each later session. vine.js adds "ready" (hide, then play) and "shown" (in view). */
+
+.teach {
+  --lh: 1.4em;
+  display: grid;
+  gap: 38px;
+  margin: 60px 0 0;
+  padding: 0 0 0 64px;
   max-width: var(--col);
-  padding: 28px 32px;
-  background: var(--surface);
-  border: 1px solid var(--hair);
-  border-radius: 16px;
-  font-family: var(--mono);
-  font-size: 15.5px;
-  line-height: 1.6;
+  list-style: none;
+  font-size: clamp(20px, 1.7vw, 25px);
+  line-height: 1.4;
+  letter-spacing: -0.012em;
+}
+.teach li { position: relative; text-wrap: balance; }
+.teach li:first-child { font-weight: 500; }
+.teach code { font-family: var(--mono); font-size: 0.86em; letter-spacing: 0; }
+
+/* the stem: each line carries the stretch down to the next one */
+.teach li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: -50px;
+  top: calc(var(--lh) / 2);
+  width: 2px;
+  height: calc(100% + 38px);
+  border-radius: 1px;
+  background: var(--stem);
+  transform-origin: top;
+}
+/* where it was said, then a leaf for each time it was remembered */
+.teach li::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: -49px;
+  top: calc(var(--lh) / 2 - 10px);
+  width: 38px;
+  height: 20px;
+  background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%22-1 -10 38 20%22%3E%3Cdefs%3E%3ClinearGradient id=%22g%22%3E%3Cstop offset=%220%22 stop-color=%22%235a9a78%22/%3E%3Cstop offset=%221%22 stop-color=%22%23a6d8bb%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d=%22M0 0C8 -10 26 -8 36 0C26 8 8 10 0 0Z%22 fill=%22url%28%23g%29%22 stroke=%22%23bfe9cf%22 stroke-opacity=%22.45%22 stroke-width=%22.6%22/%3E%3Cpath d=%22M2 0H33%22 fill=%22none%22 stroke=%22%23d8f5e3%22 stroke-opacity=%22.4%22 stroke-width=%22.5%22/%3E%3C/svg%3E") no-repeat center / contain;
+  transform: rotate(7deg);
+  transform-origin: left center;
+}
+.teach li:first-child::before {
+  left: -55px;
+  top: calc(var(--lh) / 2 - 6px);
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--sprout);
+  border-radius: 50%;
+  background: var(--night);
+  transform: none;
 }
 
-.brief-line { margin: 0; }
-.brief-line + .brief-line { margin-top: 18px; }
-.brief .tag { color: var(--sprout); }
-.brief .was { color: var(--ash); }
-
-.brief-line {
-  opacity: 0;
-  transform: translateY(6px);
-  transition: opacity 700ms ease, transform 700ms cubic-bezier(0.2, 0.7, 0.15, 1);
-}
-.brief.shown .brief-line { opacity: 1; transform: none; }
-.brief.shown .brief-line:nth-child(2) { transition-delay: 220ms; }
-.brief.shown .brief-line:nth-child(3) { transition-delay: 440ms; }
-.brief.shown .brief-line:nth-child(4) { transition-delay: 660ms; }
+.teach.ready li { opacity: 0; transform: translateY(6px); }
+.teach.ready li::after { transform: scaleY(0); }
+.teach.ready li:not(:first-child)::before { transform: rotate(-50deg) scale(0); }
+.teach.shown li { opacity: 1; transform: none; transition: opacity 600ms ease, transform 600ms cubic-bezier(0.2, 0.7, 0.15, 1); }
+.teach.shown li::after { transform: none; transition: transform 500ms ease-in-out; }
+.teach.shown li:not(:first-child)::before { transform: rotate(7deg); transition: transform 520ms cubic-bezier(0.3, 1.5, 0.5, 1); }
+.teach.shown li:nth-child(1)::after { transition-delay: 350ms; }
+.teach.shown li:nth-child(2), .teach.shown li:nth-child(2)::before { transition-delay: 800ms; }
+.teach.shown li:nth-child(2)::after { transition-delay: 1150ms; }
+.teach.shown li:nth-child(3), .teach.shown li:nth-child(3)::before { transition-delay: 1600ms; }
+.teach.shown li:nth-child(3)::after { transition-delay: 1950ms; }
+.teach.shown li:nth-child(4), .teach.shown li:nth-child(4)::before { transition-delay: 2400ms; }
 
 .commands {
   display: grid;
@@ -242,6 +284,29 @@ h2 {
 
 .close { padding: 10vh var(--gutter) 18vh; }
 .close .statement { max-width: 24ch; }
+
+/* How it works: one screen. The picture plays itself (how-memvine-works.svg; a tall one on phones). */
+
+.top nav a[aria-current="page"] { color: var(--linen); }
+
+.how { padding: 112px var(--gutter) 10vh; }
+.how h1 {
+  margin: 0;
+  font-size: clamp(34px, 4.2vw, 60px);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -0.032em;
+}
+.how .lede { margin-top: 14px; max-width: 70ch; opacity: 1; animation: none; }
+.how .actions { margin-top: 28px; opacity: 1; animation: none; }
+.how .picture { display: block; width: 100%; max-width: 1200px; margin-top: 28px; aspect-ratio: 1200 / 480; }
+.how .picture.tall { display: none; max-width: 464px; aspect-ratio: 464 / 850; }
+
+@media (max-width: 720px) {
+  .how { padding-top: 104px; }
+  .how .picture.wide { display: none; }
+  .how .picture.tall { display: block; }
+}
 
 /* Terms and privacy: one column of plain text */
 
@@ -285,7 +350,10 @@ h2 {
   .hero h1 .line { display: inline; overflow: visible; padding: 0; margin: 0; }
   .hero h1 .line > span { display: inline; transform: none; opacity: 0; animation: appear 900ms ease 120ms forwards; }
   .grows { gap: 16vh; }
-  .brief { padding: 22px 20px; font-size: 14px; }
+  .teach { padding: 0 44px 0 54px; gap: 30px; }
+  .teach li:not(:last-child)::after { left: -42px; height: calc(100% + 30px); }
+  .teach li::before { left: -41px; }
+  .teach li:first-child::before { left: -47px; }
   #vine { opacity: 0.62; }
   .bottom { flex-direction: column; align-items: flex-start; }
 }
@@ -295,5 +363,6 @@ h2 {
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .hero h1 .line > span, .lede, .actions { animation: none; transform: none; opacity: 1; }
-  .brief-line { transition: none; }
+  .teach.ready li, .teach.ready li::before, .teach.ready li::after { opacity: 1; transform: none; transition: none; }
+  .teach.ready li:not(:first-child)::before { transform: rotate(7deg); }
 }

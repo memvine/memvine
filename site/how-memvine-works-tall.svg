@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="464" height="850" viewBox="0 0 464 850" role="img" aria-labelledby="t d">
+  <title id="t">What Memvine does</title>
+  <desc id="d">Three parts, played in order. Said today: six lines of a session. A stem grows down beside them, and four lines fade as it passes; two stay (you say the tests use port 5433, not 5432, and to always deploy with make deploy). Kept: a leaf opens for each of those two, with the memory and who said it and when. Known tomorrow: in a teammate's session, their agent runs the tests on port 5433 and deploys with make deploy.</desc>
+  <!-- Each element's resting style is the finished picture, so it reads the same where animation
+       is off (reduced motion, or a viewer that does not animate). The typeface loads only where
+       the file may fetch it (the website embeds it as an object); as an image it falls back to
+       the system face. -->
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&amp;display=swap");
+    svg { color-scheme: dark; }  /* embedded in a dark page, the corners stay clear */
+    text { font-family: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 20px; }
+    .head { font-size: 26px; font-weight: 600; fill: #e8ede7; }
+    .said { fill: #c9d1ca; }
+    .gone { --end: 0.3; opacity: 0.3; }
+    .lit { fill: #e8ede7; font-weight: 500; }
+    .who { fill: #8a978e; font-size: 17px; }
+    .new { fill: #a8e4bf; font-weight: 500; }
+    .stem { fill: none; stroke: #3e8c5e; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .stem[pathLength] { stroke-dasharray: 1; }
+    .a { animation-duration: 12.5s; animation-timing-function: cubic-bezier(0.3, 0.6, 0.2, 1); animation-iteration-count: infinite; }
+    .stem[pathLength].a { animation-timing-function: linear; }
+    @media (prefers-reduced-motion: reduce) { .a { animation: none !important; } }
+    @keyframes said0 { 0%, 1.20% { opacity: 0; transform: translateY(7px); } 4.80% { opacity: 1; transform: none; } 7.02% { opacity: 1; transform: none; } 12.62% { opacity: var(--end); transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes said1 { 0%, 3.42% { opacity: 0; transform: translateY(7px); } 7.02% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes said2 { 0%, 5.83% { opacity: 0; transform: translateY(7px); } 9.43% { opacity: 1; transform: none; } 11.83% { opacity: 1; transform: none; } 17.43% { opacity: var(--end); transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes said3 { 0%, 8.23% { opacity: 0; transform: translateY(7px); } 11.83% { opacity: 1; transform: none; } 14.23% { opacity: 1; transform: none; } 19.83% { opacity: var(--end); transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes said4 { 0%, 10.63% { opacity: 0; transform: translateY(7px); } 14.23% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes said5 { 0%, 13.04% { opacity: 0; transform: translateY(7px); } 16.64% { opacity: 1; transform: none; } 19.04% { opacity: 1; transform: none; } 24.64% { opacity: var(--end); transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes stem { 0%, 2.40% { stroke-dashoffset: 1; opacity: 1; } 29.60% { stroke-dashoffset: 0; opacity: 1; } 88.00% { stroke-dashoffset: 0; opacity: 1; } 93.60%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+    @keyframes leaf1 { 0%, 22.77% { transform: rotate(-70deg) scale(0); opacity: 1; } 27.17% { transform: rotate(4deg) scale(1.06); opacity: 1; } 29.17% { transform: none; opacity: 1; } 88.00% { transform: none; opacity: 1; } 93.60%, 100% { transform: none; opacity: 0; } }
+    @keyframes kept1 { 0%, 26.37% { opacity: 0; transform: translateY(7px); } 29.97% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes leaf4 { 0%, 26.92% { transform: rotate(-70deg) scale(0); opacity: 1; } 31.32% { transform: rotate(4deg) scale(1.06); opacity: 1; } 33.32% { transform: none; opacity: 1; } 88.00% { transform: none; opacity: 1; } 93.60%, 100% { transform: none; opacity: 0; } }
+    @keyframes kept4 { 0%, 30.52% { opacity: 0; transform: translateY(7px); } 34.12% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes ask1 { 0%, 36.00% { opacity: 0; transform: translateY(7px); } 39.60% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes answer1 { 0%, 40.80% { opacity: 0; transform: translateY(7px); } 44.40% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes ask4 { 0%, 45.60% { opacity: 0; transform: translateY(7px); } 49.20% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+    @keyframes answer4 { 0%, 50.40% { opacity: 0; transform: translateY(7px); } 54.00% { opacity: 1; transform: none; } 88.00% { opacity: var(--end, 1); transform: none; } 93.60%, 100% { opacity: 0; transform: none; } }
+  </style>
+  <defs>
+    <linearGradient id="leaf" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#5a9a78"/><stop offset="1" stop-color="#a6d8bb"/></linearGradient>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="463" height="849" rx="18" fill="#0b1310" stroke="#1f2e26"/>
+
+  <text class="head" x="84" y="66">Said today</text>
+  <text class="head" x="84" y="420">Kept</text>
+  <text class="head" x="84" y="660">Known tomorrow</text>
+
+  <!-- Said today: a session. The stem grows down past it; most lines fade as it passes. -->
+  <text class="said gone a" style="animation-name: said0" x="84" y="124">Agent: The tests fail to connect.</text>
+  <text class="lit a" style="animation-name: said1" x="84" y="168">You: Tests use port 5433, not 5432.</text>
+  <text class="said gone a" style="animation-name: said2" x="84" y="212">Agent: Fixed. Tests pass now.</text>
+  <text class="said gone a" style="animation-name: said3" x="84" y="256">Agent: Opening the pull request.</text>
+  <text class="lit a" style="animation-name: said4" x="84" y="300">You: Always deploy with make deploy.</text>
+  <text class="said gone a" style="animation-name: said5" x="84" y="344">Agent: Noted. Anything else?</text>
+
+  <!-- Kept: a leaf for each line that stays true. -->
+  <path class="stem a" style="animation-name: stem" pathLength="1" d="M42 92 C 30 200, 56 290, 44 390 S 50 540, 44 590"/>
+  <g transform="translate(39.8 465) rotate(9) scale(0.5)"><g class="a" style="animation-name: leaf1"><path d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="0.8"/><path d="M3 0 H55 M17 0 q5 -5 10 -7 M17 0 q5 5 10 7 M30 0 q5 -4 9 -6 M30 0 q5 4 9 6" fill="none" stroke="#d8f5e3" stroke-opacity="0.4" stroke-width="0.7"/></g></g>
+  <g class="a" style="animation-name: kept1"><text class="lit" x="84" y="472">Tests run on port 5433.</text><text class="who" x="84" y="500">Said by you today</text></g>
+  <g transform="translate(44.2 541) rotate(9) scale(0.5)"><g class="a" style="animation-name: leaf4"><path d="M0 0 C 13 -17, 44 -13, 60 0 C 44 13, 13 17, 0 0 Z" fill="url(#leaf)" stroke="#bfe9cf" stroke-opacity="0.45" stroke-width="0.8"/><path d="M3 0 H55 M17 0 q5 -5 10 -7 M17 0 q5 5 10 7 M30 0 q5 -4 9 -6 M30 0 q5 4 9 6" fill="none" stroke="#d8f5e3" stroke-opacity="0.4" stroke-width="0.7"/></g></g>
+  <g class="a" style="animation-name: kept4"><text class="lit" x="84" y="548">Deploy with make deploy.</text><text class="who" x="84" y="576">Said by you today</text></g>
+
+  <!-- Known tomorrow: a teammate's session. -->
+  <text class="said a" style="animation-name: ask1" x="84" y="710">Teammate: Run the tests.</text>
+  <text class="new a" style="animation-name: answer1" x="84" y="738">Agent: Ran them on port 5433.</text>
+  <text class="said a" style="animation-name: ask4" x="84" y="790">Teammate: Deploy this.</text>
+  <text class="new a" style="animation-name: answer4" x="84" y="818">Agent: Ran make deploy.</text>
+</svg>

@@ -1,8 +1,10 @@
 # memvine.dev
 
 The homepage. Static files, no build step: `index.html`, `styles.css`, `vine.js` (the vine
-that grows as the page is read) and `icon.svg`, plus `terms.html` and `privacy.html` (served at
-`/terms` and `/privacy`; drafts until a lawyer has reviewed them). Open `index.html` in a browser, or
+that grows as the page is read) and `icon.svg`; `how-it-works.html` (served at `/how-it-works`: one
+screen around the animated picture `how-memvine-works.svg`, which the repository's README and docs show too;
+`how-memvine-works-tall.svg` is the same picture stacked for phones); and `terms.html` and
+`privacy.html` (served at `/terms` and `/privacy`; drafts until a lawyer has reviewed them). Open `index.html` in a browser, or
 `python3 -m http.server 8787` here and visit `http://127.0.0.1:8787/`.
 
 Deployed on Railway as the `www` service, root directory `site/`, custom domain `memvine.dev`
