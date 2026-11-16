@@ -26,9 +26,14 @@ services:
     environment:
       MEMVINE_DATABASE_URL: postgresql://memvine:${POSTGRES_PASSWORD}@db:5432/memvine
       MEMVINE_MANAGEMENT_KEY: ${MEMVINE_OPERATOR_KEY:?set MEMVINE_OPERATOR_KEY in .env}
-      MEMVINE_LLM_BACKEND: anthropic
-      MEMVINE_LLM_MODEL: ${MEMVINE_LLM_MODEL:-claude-sonnet-5-5}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY in .env}
+      # The model that turns conversation into memory: Anthropic, or any OpenAI-compatible
+      # server (.env.example shows both). Left empty, each takes the server's default.
+      MEMVINE_LLM_BACKEND: ${MEMVINE_LLM_BACKEND:-}
+      MEMVINE_LLM_MODEL: ${MEMVINE_LLM_MODEL:-}
+      MEMVINE_LLM_MODEL_FAST: ${MEMVINE_LLM_MODEL_FAST:-}
+      MEMVINE_LLM_BASE_URL: ${MEMVINE_LLM_BASE_URL:-}
+      MEMVINE_LLM_API_KEY: ${MEMVINE_LLM_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       MEMVINE_EMBEDDINGS_BACKEND: fastembed
       # Who may create an account in the console: invite (only with an invite link from an
       # organization admin), open (anyone who can reach the server), closed.
@@ -39,6 +44,9 @@ services:
         required: false
     volumes:
       - fastembed:/var/cache/fastembed
+    # So a model server on this machine (Ollama) is reachable as host.docker.internal on Linux too.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${MEMVINE_API_PORT:-8400}:8400"
     healthcheck:

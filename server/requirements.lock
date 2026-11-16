@@ -65,7 +65,9 @@ httpcore2==2.16.0 ; sys_platform != 'emscripten'
 httptools==0.9.0
     # via uvicorn
 httpx==0.28.1
-    # via huggingface-hub
+    # via
+    #   memvine-server (pyproject.toml)
+    #   huggingface-hub
 httpx2==2.16.0
     # via
     #   anthropic

@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,13 +41,20 @@ class Settings(BaseSettings):
 
     # LLM backend for extraction and reconciliation:
     #   anthropic  - the Anthropic SDK; needs ANTHROPIC_API_KEY (or an `ant auth login` profile)
+    #   openai     - any server that speaks the OpenAI chat completions API (OpenAI, OpenRouter,
+    #                Gemini, Groq, a local Ollama): set llm_base_url, llm_api_key and llm_model
     #   claude-cli - `claude -p` on the local machine, billed to a Claude subscription; dev only
     #   fake       - deterministic canned answers, for tests
     llm_backend: str = "anthropic"
     llm_model: str = "claude-sonnet-5-5"
     # High-volume, simple judgements (reconciliation, session state) run on a fast model;
-    # thread pages and knowledge extraction keep llm_model.
+    # thread pages and knowledge extraction keep llm_model. With the openai backend it is
+    # llm_model unless set.
     llm_model_fast: str = "claude-haiku-5-5"
+    # The openai backend: where the server is, and its key (OPENAI_API_KEY is read when this is
+    # empty; a local server needs none).
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_api_key: str = ""
     # Model names handed to `claude --model` when llm_backend is claude-cli.
     claude_cli_model: str = "sonnet"
     claude_cli_model_fast: str = "haiku"
@@ -135,6 +143,13 @@ class Settings(BaseSettings):
     # A memory this many days old that no briefing served in this many days is listed for review
     # (GET /v1/memories?unused=true, the project's unused_count). Never hidden or deleted for it.
     memory_unused_days: int = 60
+
+    @field_validator("llm_backend", "llm_model", "llm_model_fast", "llm_base_url", mode="before")
+    @classmethod
+    def _empty_is_unset(cls, value, info):
+        """Docker Compose hands the container an empty variable for each of these that .env leaves
+        out, and an empty model name or address is never meant."""
+        return cls.model_fields[info.field_name].default if value == "" else value
 
 
 settings = Settings()

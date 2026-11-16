@@ -25,7 +25,8 @@ cd .. && node --test plugins/codex/bin/ plugins/claude-code/bin/
   numbered file in `server/memvine_server/migrations/`; an applied one is never edited.
 - A change to extraction, reconciliation or recall is checked with a real model before it ships:
   `cd server && .venv/bin/python ../benchmark/memory/check.py` (about five minutes; needs
-  `ANTHROPIC_API_KEY` with `MEMVINE_LLM_BACKEND=anthropic`, or a local Claude subscription).
+  `ANTHROPIC_API_KEY` with `MEMVINE_LLM_BACKEND=anthropic`, or a local Claude subscription). Its
+  results are quoted for Claude; a run on another model (`MEMVINE_LLM_BACKEND=openai`) says so.
 - Examples in code, tests and docs use the invented "Northwind" billing company. Never put a real
   company's, customer's or employer's details in the repository.
 - CI does not run on pushes: run the checks above before opening a pull request.
