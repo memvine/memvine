@@ -21,7 +21,11 @@ What it does (each step prints PASS/FAIL with detail and time; exit 1 on any fai
      GET /v1/health/synthesis?project=<slug> answers and reports no failed synthesis for the project.
      The project is deleted (?confirm=<slug>) in a finally block, whatever happened, and the run
      checks it is gone and its key no longer works.
-  3. Latency per call: p50 and max per endpoint; a warning for any non-synthesis call over 2 s.
+  3. A team space in a second throwaway project `smoke-team-<random>` (no model needed): its key
+     reads it as a team space; a session and an ingest sent to it are refused (403 team-space) and it
+     holds no session; a shared memory keeps who said it, when and the quoted line, and a recall
+     serves it. Deleted in a finally block like the first.
+  4. Latency per call: p50 and max per endpoint; a warning for any non-synthesis call over 2 s.
 """
 from __future__ import annotations
 
@@ -210,6 +214,7 @@ def main() -> int:
             f"set {args.management_key_env} to the operator or an organization key (mv_mk_...) to run the project checks")))
     else:
         project_flow(api, http, run, mkey, args)
+        team_space_flow(api, http, run, mkey, args)
         if args.conversation and not args.no_synthesis:
             conversation_flow(api, http, run, mkey, args)
 
@@ -430,6 +435,70 @@ def conversation_flow(api: str, http: Http, run: Run, mkey: str, args) -> None:
             if run.step("conversation mode: a small profile of the person is kept", ingest):
                 run.step("conversation mode: a detail question is answered with the number", recall_detail)
                 run.step("conversation mode: a summary question gets digests", recall_summary)
+    finally:
+        if s.get("created"):
+            cleanup(api, http, run, mkey, slug, s.get("key"))
+
+
+def team_space_flow(api: str, http: Http, run: Run, mkey: str, args) -> None:
+    """A team space in its own throwaway project (migration 0014): it refuses conversation, whoever
+    sends it, and takes a memory someone shared, with who said it, when and the one quoted line it
+    rests on. No model is needed: nothing is extracted, and there is nothing yet to reconcile with."""
+    slug = f"smoke-team-{secrets.token_hex(4)}"
+    s: dict = {}
+    quote = "never run the invoice backfill against prod without a dry run"
+
+    def create_project():
+        status, body, _ = http.call("POST", f"{api}/v1/projects", token=mkey, label="POST /v1/projects", body={
+            "name": slug, "slug": slug, "tags": ["smoke"], "team_space": True,
+            "description": "Smoke-test team space, deleted at the end of the run."})
+        need(status == 201 and isinstance(body, dict) and body.get("team_space") is True, f"HTTP {status}: {short(body)}")
+        s["created"] = True
+        status, body, _ = http.call("POST", f"{api}/v1/projects/{slug}/keys", token=mkey, label="POST /v1/projects/{slug}/keys",
+                                    body={"name": "smoke"})
+        need(status == 201 and isinstance(body, dict) and str(body.get("key", "")).startswith("mv_sk_"), f"key: HTTP {status}")
+        s["key"] = body["key"]
+        status, body, _ = http.call("GET", f"{api}/v1/project", token=s["key"], label="GET /v1/project")
+        need(status == 200 and isinstance(body, dict) and body.get("team_space") is True and body.get("share_policy") == "ask",
+             f"the key does not read its project as a team space: HTTP {status}: {short(body)}")
+        return slug
+
+    def refuses_conversation():
+        status, body, _ = http.call("POST", f"{api}/v1/sessions/smoke-{secrets.token_hex(4)}/events", token=s["key"],
+                                    label="POST /v1/sessions/{id}/events", body={"events": [{"role": "user", "content": "A session turn."}]})
+        need(status == 403 and isinstance(body, dict) and (body.get("error") or {}).get("code") == "team-space",
+             f"a session was not refused: HTTP {status}: {short(body)}")
+        episode = {"id": f"smoke-{secrets.token_hex(4)}", "content": "User: a transcript.", "timestamp": "2026-11-03T09:05:00+00:00"}
+        status, body, _ = http.call("POST", f"{api}/v1/ingest", token=s["key"], label="POST /v1/ingest", body={"items": [episode]})
+        need(status == 403, f"conversation was not refused: HTTP {status}: {short(body)}")
+        status, body, _ = http.call("GET", f"{api}/v1/sessions?project={slug}", token=mkey, label="GET /v1/sessions")
+        need(status == 200 and body == [], f"the team space holds a session: HTTP {status}: {short(body)}")
+        return "a session and an ingest both refused (403 team-space); it holds no session"
+
+    def takes_a_shared_memory():
+        status, body, _ = http.call("POST", f"{api}/v1/memories", token=s["key"], label="POST /v1/memories", body={
+            "statement": "Never run the Northwind invoice backfill against prod without a --dry-run pass first.",
+            "kind": "procedural", "category": "rule", "subjects": ["backfill"],
+            "said_by": "dana@northwind.example", "said_at": "2026-11-03T09:05:00+00:00", "quote": quote})
+        need(status == 201 and isinstance(body, dict) and body.get("memory"), f"HTTP {status}: {short(body)}")
+        evidence = (body["memory"].get("evidence") or [{}])[0]
+        need(evidence.get("identity") == "dana@northwind.example", f"the author is not on it: {short(evidence)}")
+        need(evidence.get("quote") == quote, f"the quoted line is not on it: {short(evidence)}")
+        need(str(body["memory"].get("valid_from", "")).startswith("2026-11-03"), f"its date is not when it was said: {body['memory'].get('valid_from')}")
+        return "author, date and quoted line kept"
+
+    def recall_serves_it():
+        status, body, _ = http.call("POST", f"{api}/v1/recall", token=s["key"], label="POST /v1/recall",
+                                    body={"query": "How do I run the invoice backfill against prod?"})
+        need(status == 200 and isinstance(body, dict), f"HTTP {status}: {short(body)}")
+        need("dry-run" in (body.get("briefing") or ""), f"the shared rule is not in the briefing: {short(body.get('briefing'))}")
+        return "a teammate's recall gets the shared rule"
+
+    try:
+        if run.step(f"team space: create project {slug}", create_project):
+            run.step("team space: sessions and conversation are refused", refuses_conversation)
+            if run.step("team space: a shared memory keeps who said it", takes_a_shared_memory):
+                run.step("team space: recall serves the shared memory", recall_serves_it)
     finally:
         if s.get("created"):
             cleanup(api, http, run, mkey, slug, s.get("key"))
