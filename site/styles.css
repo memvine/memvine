@@ -287,7 +287,9 @@ button.button { font: inherit; font-size: 16.5px; font-weight: 500; letter-spaci
 .close { padding: 10vh var(--gutter) 18vh; }
 .close .statement { max-width: 24ch; }
 
-/* How it works: one screen. The picture plays itself (how-memvine-works.svg; a tall one on phones). */
+/* How it works: one lesson followed through a real run. The four steps go down a stem on the left
+   and the screen for the chosen step is on the right; on a narrow screen each step has its screen
+   under it. A session is real text set as a transcript; a console screen is a screenshot. */
 
 .top nav a[aria-current="page"] { color: var(--linen); }
 
@@ -300,14 +302,178 @@ button.button { font: inherit; font-size: 16.5px; font-weight: 500; letter-spaci
   letter-spacing: -0.032em;
 }
 .how .lede { margin-top: 14px; max-width: 70ch; opacity: 1; animation: none; }
-.how .actions { margin-top: 28px; opacity: 1; animation: none; }
-.how .picture { display: block; width: 100%; max-width: 1200px; margin-top: 28px; aspect-ratio: 1200 / 480; }
-.how .picture.tall { display: none; max-width: 464px; aspect-ratio: 464 / 850; }
+.how .actions { margin-top: 36px; opacity: 1; animation: none; }
 
-@media (max-width: 720px) {
+.tour {
+  display: grid;
+  grid-template-columns: minmax(260px, 370px) minmax(0, 1fr);
+  grid-template-rows: repeat(4, auto) 1fr;
+  column-gap: clamp(32px, 5vw, 88px);
+  max-width: 1120px;
+}
+.step { display: contents; }
+
+/* Pinned (how-it-works.html adds the class when the window can hold the tour): the tour stays put
+   while this much page scrolls under it, and the scrolling moves through the steps. */
+.tour-track { margin-top: 38px; }
+/* (room inside the track, not padding: a pinned thing stays within its parent's content) */
+.tour-track.pinned::after { content: ""; display: block; height: clamp(900px, 160vh, 1500px); }
+/* (how-it-works.html sets --tour-top so the tour sits in the middle of the window) */
+.tour-track.pinned .tour { position: sticky; top: var(--tour-top, 20px); }
+/* a screen is never taller than the window less its caption and a margin, so the tour always fits */
+.tour-track.pinned .screen { max-height: clamp(260px, calc(100vh - 130px), 760px); }
+
+/* a short window: everything a little tighter, so the pinned tour still fits in it */
+@media (min-width: 861px) and (max-height: 720px) {
+  .tour-track.pinned .step > button { padding-bottom: 14px; }
+  .tour-track.pinned .step > button .name { font-size: 20px; }
+  .tour-track.pinned .step > button .what { margin-top: 3px; font-size: 15px; line-height: 1.4; }
+  .tour-track.pinned .step > button::before { top: 4px; }
+  .tour-track.pinned .step:first-child > button::before { top: 7px; }
+  .tour-track.pinned .screen { max-height: clamp(260px, calc(100vh - 100px), 760px); }
+  .tour-track.pinned .talk { padding: 16px 20px; font-size: 14.5px; line-height: 1.45; }
+  .tour-track.pinned .talk p + p, .tour-track.pinned .talk p + ul, .tour-track.pinned .talk ul + p { margin-top: 10px; }
+  .tour-track.pinned .talk ul { margin-top: 10px; }
+  .tour-track.pinned figcaption { margin-top: 8px; font-size: 13.5px; }
+}
+
+.step > button {
+  --lh: 1.3em;
+  grid-column: 1;
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0 0 26px 56px;
+  border: 0;
+  background: none;
+  color: var(--ash);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.step > button .name {
+  display: block;
+  font-size: clamp(21px, 1.8vw, 25px);
+  font-weight: 500;
+  line-height: var(--lh);
+  letter-spacing: -0.015em;
+  color: var(--linen);
+  opacity: 0.55;
+  transition: opacity 200ms ease;
+}
+.step > button .what { display: block; margin-top: 5px; max-width: 34ch; font-size: 16px; line-height: 1.45; }
+.step > button:hover .name, .step.current > button .name { opacity: 1; }
+.step.current > button { color: var(--linen); }
+.step > button:focus-visible { outline: 2px solid var(--sprout); outline-offset: 6px; border-radius: 4px; }
+
+/* the stem, and where the lesson was said, then a leaf for each thing that happened to it */
+.step:not(:last-child) > button::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 16px;
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--stem);
+}
+.step > button::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 7px;
+  top: 6px;
+  width: 38px;
+  height: 20px;
+  background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%22-1 -10 38 20%22%3E%3Cdefs%3E%3ClinearGradient id=%22g%22%3E%3Cstop offset=%220%22 stop-color=%22%235a9a78%22/%3E%3Cstop offset=%221%22 stop-color=%22%23a6d8bb%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d=%22M0 0C8 -10 26 -8 36 0C26 8 8 10 0 0Z%22 fill=%22url%28%23g%29%22 stroke=%22%23bfe9cf%22 stroke-opacity=%22.45%22 stroke-width=%22.6%22/%3E%3Cpath d=%22M2 0H33%22 fill=%22none%22 stroke=%22%23d8f5e3%22 stroke-opacity=%22.4%22 stroke-width=%22.5%22/%3E%3C/svg%3E") no-repeat center / contain;
+  opacity: 0.4;
+  transform: rotate(7deg) scale(0.86);
+  transform-origin: left center;
+  transition: opacity 200ms ease, transform 260ms cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.step.current > button::before { opacity: 1; transform: rotate(7deg); }
+.step:first-child > button::before {
+  left: 1px;
+  top: 10px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--sprout);
+  border-radius: 50%;
+  background: var(--night);
+  transform: none;
+}
+
+.step > figure {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  align-self: start;
+  margin: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 240ms ease, visibility 0s linear 240ms;
+}
+.step.current > figure { opacity: 1; visibility: visible; transition-delay: 0s; }
+.step figcaption { margin-top: 12px; font-size: 14.5px; line-height: 1.45; color: var(--ash); }
+
+/* a console screen: the top of the page, as much as the window can hold; it never moves */
+.screen {
+  position: relative;
+  width: 400px;
+  max-width: 100%;
+  max-height: clamp(480px, calc(100vh - 290px), 760px);
+  overflow: hidden;
+  border: 1px solid var(--hair-strong);
+  border-radius: 14px;
+  background: #0d0d0f;
+}
+.screen img { display: block; width: 100%; height: auto; }
+.screen::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 40px;
+  background: linear-gradient(rgba(13, 13, 15, 0), #0d0d0f);
+  pointer-events: none;
+}
+
+/* a session, word for word */
+.talk {
+  max-width: 600px;
+  padding: 22px 24px;
+  border: 1px solid var(--hair-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 15.5px;
+  line-height: 1.5;
+}
+.talk p { margin: 0; }
+.talk p + p, .talk p + ul, .talk ul + p { margin-top: 14px; }
+.talk .you { padding-left: 14px; border-left: 2px solid var(--sprout); color: var(--linen); }
+.talk .agent, .talk ul { color: var(--ash); }
+.talk ul { margin: 14px 0 0; padding-left: 20px; }
+.talk li + li { margin-top: 4px; }
+.talk strong { font-weight: 500; color: var(--linen); }
+.talk code { font-family: var(--mono); font-size: 0.88em; }
+.talk .who { display: block; margin-bottom: 3px; font-size: 13.5px; color: var(--ash); }
+
+.how .real { margin: 30px 0 0; max-width: 72ch; font-size: 15.5px; line-height: 1.5; color: var(--ash); }
+
+@media (max-width: 860px) {
   .how { padding-top: 104px; }
-  .how .picture.wide { display: none; }
-  .how .picture.tall { display: block; }
+  .tour-track { margin-top: 36px; }
+  .tour { display: block; }
+  .step { display: block; }
+  .step > button { padding-bottom: 18px; cursor: default; }
+  .step > button .name { opacity: 1; }
+  .step > button, .step.current > button { color: var(--linen); }
+  .step > button::before { opacity: 1; transform: rotate(7deg); }
+  .step:first-child > button::before { transform: none; }
+  .step:not(:last-child) > button::after { display: none; }
+  .step > figure { opacity: 1; visibility: visible; margin-bottom: 44px; }
+  .screen { max-height: 560px; }
+  .talk { padding: 18px 18px; font-size: 15px; }
+}
 }
 
 /* Terms and privacy: one column of plain text */
@@ -367,4 +533,5 @@ button.button { font: inherit; font-size: 16.5px; font-weight: 500; letter-spaci
   .hero h1 .line > span, .lede, .actions { animation: none; transform: none; opacity: 1; }
   .teach.ready li, .teach.ready li::before, .teach.ready li::after { opacity: 1; transform: none; transition: none; }
   .teach.ready li:not(:first-child)::before { transform: rotate(7deg); }
+  .step > figure, .step > button::before, .step > button .name { transition: none; }
 }

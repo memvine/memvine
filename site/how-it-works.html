@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>How Memvine works</title>
-  <meta name="description" content="Memvine reads each coding session, keeps the few things that stay true, and tells the next agent. One picture shows how.">
+  <meta name="description" content="One lesson followed through a real run: said once to a coding agent, kept by Memvine with its source, used by a teammate's agent, and rechecked when the code changed.">
   <meta property="og:title" content="How Memvine works">
   <meta property="og:description" content="Memvine reads each session, keeps the few things that stay true, and tells the next agent.">
   <meta property="og:url" content="https://memvine.dev/how-it-works">
@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
   <header class="top">
@@ -35,9 +35,75 @@
 
   <main class="how">
     <h1>How Memvine works</h1>
-    <p class="lede">It reads each session, keeps the few things that stay true, and tells the next agent.</p>
-    <object class="picture wide" type="image/svg+xml" data="how-memvine-works.svg" role="img" aria-label="Said today: six lines of a session, two of which matter later. Kept: Memvine keeps those two, with who said each and when. Known tomorrow: in a teammate's session, their agent already knows them."></object>
-    <object class="picture tall" type="image/svg+xml" data="how-memvine-works-tall.svg" role="img" aria-label="Said today: six lines of a session, two of which matter later. Kept: Memvine keeps those two, with who said each and when. Known tomorrow: in a teammate's session, their agent already knows them."></object>
+    <p class="lede">Your agent should not need telling twice. Here is one lesson, followed through a real run.</p>
+
+    <div class="tour-track">
+    <div class="tour">
+      <section class="step current">
+        <button type="button" aria-controls="said" aria-current="step">
+          <span class="name">Said</span>
+          <span class="what">You tell your agent something the code does not say: the long timeout is deliberate.</span>
+        </button>
+        <figure id="said">
+          <div class="talk">
+            <p class="you"><span class="who">You</span>I'm tidying export.py before the release. Read it and tell me what you would change. Don't edit anything yet.</p>
+            <p class="agent"><span class="who">Your agent</span>Here's what I'd change in <code>export.py</code>, in rough priority order. I haven't edited anything. …</p>
+            <p class="you"><span class="who">You</span>Leave the timeout in export.py alone. 90 seconds is deliberate: the bank's SFTP server takes over a minute to answer at month end. It was lowered to 15 once and the nightly export failed for three days.</p>
+            <p class="agent"><span class="who">Your agent</span>Understood. I won't touch <code>TIMEOUT_SECONDS</code>, and it stays at 90. I didn't flag it in my review, so nothing I proposed changes it. …</p>
+          </div>
+          <figcaption>Your session in Claude Code, with the Memvine plugin installed.</figcaption>
+        </figure>
+      </section>
+
+      <section class="step">
+        <button type="button" aria-controls="kept">
+          <span class="name">Kept</span>
+          <span class="what">From that whole session Memvine keeps one thing: the lesson, with your own words as its source.</span>
+        </button>
+        <figure id="kept">
+          <div class="screen">
+            <img src="how-kept.png" width="860" height="1314" alt="The Memvine console, a memory's page. The memory reads: The bank's SFTP server takes over a minute to respond at month end, so the export timeout (TIMEOUT_SECONDS in export.py) must stay at 90 seconds; do not lower it. Its status is active. Under Evidence is the line you said, with Claude Code, billing-api, you@example.com and the time.">
+          </div>
+          <figcaption>The memory's page in the Memvine console, half a minute after the session.</figcaption>
+        </figure>
+      </section>
+
+      <section class="step">
+        <button type="button" aria-controls="used">
+          <span class="name">Used</span>
+          <span class="what">A teammate's agent, in a new session, is asked to lower the timeout. It already knows why not.</span>
+        </button>
+        <figure id="used">
+          <div class="talk">
+            <p class="you"><span class="who">A teammate</span>The export job takes too long to give up when the bank is down. Lower the timeout in export.py to 10 seconds.</p>
+            <p class="agent"><span class="who">Their agent</span>I haven't changed anything. <code>TIMEOUT_SECONDS</code> in <code>export.py:7</code> is still 90, and project memory says it should stay there:</p>
+            <ul>
+              <li>The bank's SFTP server takes over a minute to respond at month end.</li>
+              <li>Someone lowered the timeout to 15 before, and the nightly export failed for three days.</li>
+            </ul>
+            <p class="agent">At 10 seconds, the export would probably time out every month end. It would give up quickly when the bank is really down, but it would also give up when the bank is only slow. …</p>
+          </div>
+          <figcaption>A teammate's session, in their own copy of the repository. Nobody told this agent.</figcaption>
+        </figure>
+      </section>
+
+      <section class="step">
+        <button type="button" aria-controls="rechecked">
+          <span class="name">Rechecked</span>
+          <span class="what">Later, export.py changes. Memvine knows the memory is about that file, marks it as possibly outdated and tells agents to check the code.</span>
+        </button>
+        <figure id="rechecked">
+          <div class="screen">
+            <img src="how-rechecked.png" width="860" height="1574" loading="lazy" alt="The same memory's page. Its status is now stale, and a notice reads: May be outdated. export.py changed since 17 Nov 2026. Agents see this warning with the memory. Confirm it if it still holds, or retire it. The evidence below it is unchanged.">
+          </div>
+          <figcaption>The same page after a commit changed export.py. One click confirms the memory or retires it.</figcaption>
+        </figure>
+      </section>
+    </div>
+    </div>
+
+    <p class="real">Every screen is from one run on 17 November 2026: Claude Code with the Memvine plugin, a Memvine server on a laptop and a sample repository. A “…” marks where a reply is shortened.</p>
+
     <div class="actions">
       <a class="button primary" href="/#connect">Connect an agent</a>
       <a class="button" href="https://github.com/memvine/memvine/blob/main/docs/how-memory-works.md">Read the details</a>
@@ -55,5 +121,55 @@
     </nav>
   </footer>
 
+  <script>
+    // Scrolling moves through the steps: the tour stays in place while the page scrolls under it.
+    // Choosing a step scrolls to it. On a narrow screen, or in a window too short to hold the tour,
+    // nothing is pinned and choosing a step simply shows its screen. Without this script every
+    // step is still there to read.
+    const track = document.querySelector(".tour-track");
+    const tour = track.querySelector(".tour");
+    const steps = [...tour.querySelectorAll(".step")];
+    let TOP = 0;                                      // where the tour sits while pinned
+
+    const show = (step) => {
+      for (const s of steps) {
+        s.classList.toggle("current", s === step);
+        if (s === step) s.querySelector("button").setAttribute("aria-current", "step");
+        else s.querySelector("button").removeAttribute("aria-current");
+      }
+    };
+    const distance = () => track.offsetHeight - tour.offsetHeight;
+    const pinned = () => track.classList.contains("pinned");
+
+    function fit() {
+      // measure the tour as it would be pinned; pin it if the window can hold it, in the middle
+      track.classList.add("pinned");
+      const room = innerHeight - tour.offsetHeight;
+      const fits = matchMedia("(min-width: 861px)").matches && room >= 24;
+      TOP = fits ? Math.round(Math.min(140, room / 2)) : 0;
+      tour.style.setProperty("--tour-top", TOP + "px");
+      track.classList.toggle("pinned", fits);
+      follow();
+    }
+
+    function follow() {
+      if (!pinned()) return;
+      const p = Math.min(1, Math.max(0, (TOP - track.getBoundingClientRect().top) / distance()));
+      show(steps[Math.min(steps.length - 1, Math.floor(p * steps.length))]);
+    }
+
+    steps.forEach((step, i) => {
+      step.querySelector("button").addEventListener("click", () => {
+        if (!pinned()) return show(step);
+        const top = track.getBoundingClientRect().top + scrollY - TOP;
+        scrollTo({ top: top + distance() * (i + 0.5) / steps.length });
+      });
+    });
+
+    addEventListener("scroll", follow, { passive: true });
+    addEventListener("resize", fit);
+    addEventListener("load", fit);
+    fit();
+  </script>
 </body>
 </html>
