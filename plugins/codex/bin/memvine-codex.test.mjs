@@ -277,3 +277,21 @@ test("share and team say what to do when no team space is connected", async () =
   assert.match(await run("team"), /^No team space connected\. Usage: node ".*memvine-codex\.mjs" team <team-space-key starting with mv_sk_>/);
   assert.match(await run("status"), /No team space connected: what memory keeps stays in your own project/);
 });
+
+// Codex installs Memvine from this repository's own marketplace (`codex plugin marketplace add
+// memvine/memvine`, then `codex plugin add memvine@memvine`), so nobody has to clone it.
+test("the Codex marketplace points at a plugin that holds everything install needs", async () => {
+  const repo = fileURLToPath(new URL("../../../", import.meta.url));
+  const market = JSON.parse(readFileSync(join(repo, ".agents", "plugins", "marketplace.json"), "utf8"));
+  const entry = market.plugins.find((p) => p.name === "memvine");
+  assert.equal(market.name, "memvine");
+  assert.deepEqual(entry.source, { source: "local", path: "./plugins" });
+  const root = join(repo, entry.source.path);
+  const manifest = JSON.parse(readFileSync(join(root, ".codex-plugin", "plugin.json"), "utf8"));
+  const { VERSION } = await import("../../claude-code/bin/memvine-hook.mjs");
+  assert.equal(manifest.name, "memvine");
+  assert.equal(manifest.version, VERSION, "the Codex manifest's version follows the plugin's");
+  // Codex copies the plugin folder into its cache: both scripts must be inside it.
+  assert.ok(existsSync(join(root, "codex", "bin", "memvine-codex.mjs")));
+  assert.ok(existsSync(join(root, "claude-code", "bin", "memvine-hook.mjs")));
+});
