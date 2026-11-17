@@ -64,20 +64,32 @@
 
     <section class="connect" id="connect" aria-labelledby="connect-title">
       <h2 id="connect-title">Connect any agent.</h2>
-      <div class="commands">
-        <div class="command">
-          <h3>Claude Code</h3>
-          <pre><code>/plugin marketplace add memvine/memvine
-/plugin install memvine@memvine
-/memvine:connect mv_sk_... you@company.com</code></pre>
-        </div>
-        <div class="command">
-          <h3>Codex CLI</h3>
-          <pre><code>git clone --depth 1 https://github.com/memvine/memvine ~/.memvine/src
-node ~/.memvine/src/plugins/codex/bin/memvine-codex.mjs install mv_sk_... you@company.com</code></pre>
-        </div>
-      </div>
-      <p class="also">Claude Code and Codex connect in one command. Any other agent connects through the TypeScript or Python SDK, or MCP.</p>
+      <p class="also">Paste one prompt into Claude Code, Codex or another coding agent. It installs Memvine and connects itself.</p>
+      <p class="paste"><button class="button primary" type="button" data-copy="connect-prompt" data-copied="Copied">Copy prompt</button></p>
+      <details class="prompt">
+        <summary>Read the prompt first</summary>
+        <pre id="connect-prompt"><code>Connect this machine to Memvine, the shared memory for my team's coding agents.
+
+Project key: mv_sk_...
+Email: the one `git config user.email` prints
+
+If the key above still ends in "...", stop and tell me to put my project key there (it is under API keys at https://app.memvine.dev) and paste this again. Do not ask me for the key.
+
+If you are Claude Code, run:
+  claude plugin marketplace add memvine/memvine
+  claude plugin install memvine@memvine
+  node "$(ls -dt ~/.claude/plugins/cache/memvine/memvine/*/ | head -1)bin/memvine-hook.mjs" connect &lt;key&gt; &lt;email&gt;
+
+If you are Codex, run:
+  codex plugin marketplace add memvine/memvine
+  codex plugin add memvine@memvine
+  node "$(ls -dt ~/.codex/plugins/cache/memvine/memvine/*/ | head -1)codex/bin/memvine-codex.mjs" install &lt;key&gt; &lt;email&gt;
+Then remind me to type /hooks in Codex and trust the five memvine hooks.
+
+If you are another agent, stop and point me to https://github.com/memvine/memvine#quick-start.
+
+Run nothing else. Tell me what each command printed, never the key, and tell me to start a new session when it is done.</code></pre>
+      </details>
     </section>
 
     <section class="close">

@@ -319,4 +319,15 @@
     }, { threshold: 0.35 });
     io.observe(teach);
   }
+  // "Copy prompt": the text of the element the button names goes to the clipboard.
+  for (const button of document.querySelectorAll("[data-copy]")) {
+    const label = button.textContent;
+    button.addEventListener("click", async () => {
+      const source = document.getElementById(button.dataset.copy);
+      if (!source) return;
+      try { await navigator.clipboard.writeText(source.textContent); button.textContent = button.dataset.copied || "Copied"; }
+      catch { const d = source.closest("details"); if (d) d.open = true; getSelection().selectAllChildren(source); }
+      setTimeout(() => { button.textContent = label; }, 1800);
+    });
+  }
 })();

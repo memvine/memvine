@@ -246,22 +246,24 @@ h2 {
 .teach.shown li:nth-child(3)::after { transition-delay: 1950ms; }
 .teach.shown li:nth-child(4), .teach.shown li:nth-child(4)::before { transition-delay: 2400ms; }
 
-.commands {
-  display: grid;
-  gap: 32px;
-  margin-top: 56px;
-  max-width: var(--col);
-}
+/* Connect: one prompt to paste into an agent, shown in full to anyone who opens it */
 
-.command h3 {
-  margin: 0 0 14px;
-  font-size: 17px;
-  font-weight: 500;
-  letter-spacing: -0.005em;
-}
+button.button { font: inherit; font-size: 16.5px; font-weight: 500; letter-spacing: -0.005em; cursor: pointer; }
 
-.command pre {
-  margin: 0;
+.paste { margin: 36px 0 0; }
+
+.prompt { margin-top: 26px; max-width: var(--col); }
+.prompt summary {
+  width: max-content;
+  font-size: 16.5px;
+  color: var(--ash);
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+.prompt summary:hover, .prompt[open] summary { color: var(--linen); }
+.prompt summary:focus-visible { outline: 2px solid var(--sprout); outline-offset: 4px; border-radius: 4px; }
+.prompt pre {
+  margin: 18px 0 0;
   padding: 22px 24px;
   background: var(--surface);
   border: 1px solid var(--hair);
