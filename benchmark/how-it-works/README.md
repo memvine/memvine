@@ -4,13 +4,13 @@
 `run.py` makes that run again: real Claude Code sessions with the Memvine plugin, on a local server
 and console, in a small sample repository (Northwind's billing API).
 
-1. **Said.** You ask your agent to review `export.py`, then tell it the 90-second timeout is
+1. **Conversation.** You ask your agent to review `export.py`, then tell it the 90-second timeout is
    deliberate and why.
-2. **Kept.** Memvine keeps that one lesson, quotes your words as its source, and ties it to
+2. **Memory saved.** Memvine keeps that one lesson, quotes your words as its source, and ties it to
    `export.py`.
-3. **Used.** A teammate's fresh agent, in its own copy of the repository, is asked to lower the
+3. **Memory recalled.** A teammate's fresh agent, in its own copy of the repository, is asked to lower the
    timeout to 10 seconds.
-4. **Rechecked.** A commit changes `export.py`; at the teammate's next session start the memory turns
+4. **Memory rechecked.** A commit changes `export.py`; at the teammate's next session start the memory turns
    stale ("may be outdated").
 
 ```sh
