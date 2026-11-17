@@ -21,28 +21,28 @@ export default async function AudiencesPage() {
     <>
       <PageHeader
         icon={Users}
-        title="Audiences"
+        title="Who sees what"
         count={audiences.length}
-        description="Who may read which memory. Memory sent without an audience is visible to everyone in the project; memory sent to an audience is recalled only by the identities it reaches."
+        description="Who may read which memory. A memory sent without a group is visible to everyone in the project; a memory sent to a group is recalled only by the people in it. (The API calls a group an audience.)"
       />
 
       {manage && (
         <Card className="mb-6">
-          <CardHeader title="Create or replace an audience" description="Saving an existing slug replaces it." />
+          <CardHeader title="Create or replace a group" description="Saving an existing name replaces it." />
           <CardBody><AudienceForm /></CardBody>
         </Card>
       )}
 
-      <h2 className="mb-2 text-[13.5px] font-medium text-text">{plural(audiences.length, "audience")}</h2>
+      <h2 className="mb-2 text-[13.5px] font-medium text-text">{plural(audiences.length, "group")}</h2>
       <Table minWidth={600} className="mb-8">
         <THead>
-          <Th className="w-[200px]">Audience</Th>
+          <Th className="w-[200px]">Group</Th>
           <Th>Who it reaches</Th>
           <Th align="right" className="w-[110px]">Memories</Th>
           {manage && <Th align="right" className="w-[100px]"><span className="sr-only">Actions</span></Th>}
         </THead>
         <TBody>
-          {audiences.length === 0 && <TableEmpty colSpan={manage ? 4 : 3}>No audiences yet. Everything in this project is visible to every identity.</TableEmpty>}
+          {audiences.length === 0 && <TableEmpty colSpan={manage ? 4 : 3}>No groups yet. Everything in this project is visible to everyone in it.</TableEmpty>}
           {audiences.map((a) => (
             <Tr key={a.slug}>
               <Td><span className="flex items-center gap-2"><Mono className="text-text">{a.slug}</Mono><Badge tone="outline">{a.kind}</Badge></span></Td>
@@ -54,7 +54,7 @@ export default async function AudiencesPage() {
                 <Td align="right">
                   <form action={deleteAudience}>
                     <input type="hidden" name="slug" value={a.slug} />
-                    <button className={button("danger", "sm")} disabled={a.memoryCount > 0} title={a.memoryCount ? "Memories still use this audience" : undefined}>Delete</button>
+                    <button className={button("danger", "sm")} disabled={a.memoryCount > 0} title={a.memoryCount ? "Memories still use this group" : undefined}>Delete</button>
                   </form>
                 </Td>
               )}

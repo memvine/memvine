@@ -400,7 +400,7 @@ export async function updateProject(_prev: ProjectFormState, formData: FormData)
   }
   const cap = capRaw === "" ? null : Number(capRaw);
   const retention = retentionRaw === "" ? null : Number(retentionRaw);
-  if (cap !== null && !(cap >= 0)) return { error: "The cap is a number of credits, or empty for uncapped." };
+  if (cap !== null && !(cap >= 0)) return { error: "The cap is a number of units, or empty for uncapped." };
   if (retention !== null && !(Number.isInteger(retention) && retention >= 1 && retention <= 3650)) {
     return { error: "Retention is 1 to 3,650 days, or empty to keep sources forever." };
   }

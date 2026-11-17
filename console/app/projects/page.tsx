@@ -50,7 +50,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
           <span className="w-20 text-right">Memories</span>
           <span className="w-16 text-right">Sources</span>
           <span className="w-12 text-right">Keys</span>
-          <span className="w-32 text-right">Credits / cap</span>
+          <span className="w-32 text-right">Units / cap</span>
           <span className="w-20 text-right">Retention</span>
           <span className="w-28 text-right">Last API call</span>
           <span className="w-8" />

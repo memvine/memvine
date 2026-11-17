@@ -72,7 +72,7 @@ export function MemoryFacts({ m, thread }: { m: MemoryItem; thread?: ThreadSumma
       {m.subjects.length > 0 && (
         <KeyValue label="About"><span className="flex flex-wrap gap-1">{m.subjects.map((s) => <Badge key={s}>{s}</Badge>)}</span></KeyValue>
       )}
-      <KeyValue label="Audience">{m.audience === "project" ? "Every identity in the project" : <Badge>{m.audience}</Badge>}</KeyValue>
+      <KeyValue label="Seen by">{m.audience === "project" ? "Everyone in the project" : <Badge>{m.audience}</Badge>}</KeyValue>
     </KeyValueList>
   );
 }

@@ -18,7 +18,7 @@ export default async function UsagePage() {
       <PageHeader
         icon={ChartColumn}
         title="Usage"
-        description="Credits over the last 30 days. Sending conversation costs 1 credit per 1,000 characters (a re-send of the same text is free); each recall costs 0.1."
+        description="Usage over the last 30 days, counted in units. Sending conversation costs 1 unit per 1,000 characters (a re-send of the same text is free); each recall costs 0.1. Units only count usage: nothing is charged."
       />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
@@ -30,9 +30,9 @@ export default async function UsagePage() {
       </div>
 
       <Card className="mt-6">
-        <CardHeader title="Credits per day" description={project.name} />
+        <CardHeader title="Units per day" description={project.name} />
         <CardBody>
-          <UsageChart unit="credits" days={usage.map((d) => ({ date: d.date, ingest: d.ingestCredits, recall: d.recallCredits }))} />
+          <UsageChart unit="units" days={usage.map((d) => ({ date: d.date, ingest: d.ingestCredits, recall: d.recallCredits }))} />
         </CardBody>
       </Card>
 
@@ -40,7 +40,7 @@ export default async function UsagePage() {
       <Table minWidth={420}>
         <THead>
           <Th>Project</Th>
-          <Th align="right">Credits</Th>
+          <Th align="right">Units</Th>
           <Th align="right">Monthly cap</Th>
         </THead>
         <TBody>

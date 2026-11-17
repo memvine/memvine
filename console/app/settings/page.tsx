@@ -250,7 +250,7 @@ export default async function SettingsPage() {
           <Section
             id="audit"
             title="Audit log"
-            description={<>Every change to projects, keys, audiences, identities and memories, with the key that made it. The last 50 are shown; <code className="font-mono text-[12px]">GET /v1/audit</code> returns more.</>}
+            description={<>Every change to projects, keys, groups, identities and memories, with the key that made it. The last 50 are shown; <code className="font-mono text-[12px]">GET /v1/audit</code> returns more.</>}
           >
             <Table minWidth={680}>
               <THead>

@@ -25,7 +25,7 @@ const NAV: { group: string; items: { href: string; label: string; icon: Icon }[]
   { group: "Connect", items: [
     { href: "/connect", label: "Connect your agent", icon: PlugZap },
     { href: "/integrations", label: "Integrations", icon: Plug },
-    { href: "/audiences", label: "Audiences", icon: Users },
+    { href: "/audiences", label: "Who sees what", icon: Users },
   ] },
   { group: "Developer", items: [
     { href: "/activity", label: "Activity", icon: History },
@@ -52,14 +52,13 @@ function initials(text: string) {
 
 export interface SidebarViewer { label: string; detail?: string | null; canSignOut: boolean }
 
-export function Sidebar({ projects, current, live, viewer, credits, reviewCount = 0 }: {
+export function Sidebar({ projects, current, live, viewer, reviewCount = 0 }: {
   /** Current memories awaiting review: a badge on Home. */
   reviewCount?: number;
   projects: Project[];
   current: string;
   live: boolean;
   viewer: SidebarViewer | null;
-  credits: { used: number; cap: number | null } | null;
 }) {
   const pathname = usePathname();
   const form = useRef<HTMLFormElement>(null);
@@ -148,28 +147,7 @@ export function Sidebar({ projects, current, live, viewer, credits, reviewCount 
         ))}
       </nav>
 
-      <div className="shrink-0 space-y-2 border-t border-border p-3">
-        {credits && (
-          <Link href="/usage" className="block rounded-lg border border-border bg-surface-2 px-3 py-2.5 transition-colors hover:border-border-strong">
-            <div className="flex items-center justify-between text-[12px]">
-              <span className="font-medium text-text">Credits this month</span>
-              <span className="tabular-nums text-text-3">
-                <span className="text-text">{Math.round(credits.used).toLocaleString()}</span>
-                {credits.cap !== null && ` / ${credits.cap.toLocaleString()}`}
-              </span>
-            </div>
-            {credits.cap !== null ? (
-              <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-3">
-                <div
-                  className={cx("h-full rounded-full", credits.used >= credits.cap ? "bg-bad" : "bg-accent")}
-                  style={{ width: `${Math.min(100, (credits.used / Math.max(1, credits.cap)) * 100)}%` }}
-                />
-              </div>
-            ) : (
-              <div className="mt-1 text-[11.5px] text-text-3">No monthly cap</div>
-            )}
-          </Link>
-        )}
+      <div className="shrink-0 border-t border-border p-3">
         <div className="flex items-center gap-2.5 rounded-lg px-1 py-1">
           <span className="grid size-8 shrink-0 place-items-center rounded-full bg-surface-3 text-[11.5px] font-semibold text-text-2" aria-hidden>{initials(who)}</span>
           <div className="min-w-0 flex-1 leading-tight">

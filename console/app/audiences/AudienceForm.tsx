@@ -10,7 +10,7 @@ export function AudienceForm() {
   return (
     <form action={action} className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <input name="slug" placeholder="Audience slug, e.g. acme" aria-label="Audience slug" className={`${inputClass} max-w-56 font-mono`} />
+        <input name="slug" placeholder="Group name, e.g. acme" aria-label="Group name" className={`${inputClass} max-w-56 font-mono`} />
         <Select name="kind" value={kind} onChange={(e) => setKind(e.target.value as "fixed" | "rule")} aria-label="Kind" wrapperClassName="w-[210px]">
           <option value="fixed">Fixed list of identities</option>
           <option value="rule">Rule on a trait</option>
@@ -27,7 +27,7 @@ export function AudienceForm() {
         </div>
       )}
       <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={pending} className={button("primary")}>{pending ? "Saving…" : "Save audience"}</button>
+        <button type="submit" disabled={pending} className={button("primary")}>{pending ? "Saving…" : "Save group"}</button>
         {state.error && <FormError>{state.error}</FormError>}
         {state.saved && <p className="text-[12.5px] text-good">Saved “{state.saved}”.</p>}
       </div>

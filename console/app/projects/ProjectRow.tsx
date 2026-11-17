@@ -55,13 +55,13 @@ export function ProjectRow({ project, current, lastActivity, created, canManage 
           <div className="tabular-nums 2xl:w-20 2xl:text-right 2xl:text-[13px]" title="memories">{project.memoryCount.toLocaleString()}<span className="text-text-3 2xl:hidden"> memories</span></div>
           <div className="tabular-nums text-text-2 2xl:w-16 2xl:text-right 2xl:text-[13px]" title="sources">{project.sourceCount.toLocaleString()}<span className="text-text-3 2xl:hidden"> sources</span></div>
           <div className="tabular-nums text-text-2 2xl:w-12 2xl:text-right 2xl:text-[13px]" title="live API keys">{project.keyCount}<span className="text-text-3 2xl:hidden"> keys</span></div>
-          <div className="tabular-nums 2xl:w-32 2xl:text-right" title="credits used this month / monthly cap">
+          <div className="tabular-nums 2xl:w-32 2xl:text-right" title="units used this month / monthly cap">
             {project.monthlyCreditCap === null
               ? <span className="text-text-3">{project.monthCredits.toLocaleString()} · uncapped</span>
               : <span className={capped ? "font-medium text-bad" : "text-text-2"}>
                   {project.monthCredits.toLocaleString()} / {project.monthlyCreditCap.toLocaleString()}
                 </span>}
-            <span className="text-text-3 2xl:hidden"> credits</span>
+            <span className="text-text-3 2xl:hidden"> units</span>
           </div>
           <div className="text-text-2 2xl:w-20 2xl:text-right" title="how long raw sources are kept">
             <span className="text-text-3 2xl:hidden">keeps sources </span>{project.retentionDays === null ? "Forever" : `${project.retentionDays} days`}
@@ -97,8 +97,8 @@ export function ProjectRow({ project, current, lastActivity, created, canManage 
           <input name="tags" defaultValue={project.tags.join(", ")} placeholder="tags, comma-separated" aria-label="Tags" className={`${inputClass} max-w-xs`} />
           <label className="flex items-center gap-1.5 text-[12.5px] text-text-2">
             Monthly cap
-            <input name="cap" type="number" min="0" defaultValue={project.monthlyCreditCap ?? ""} placeholder="uncapped" aria-label="Monthly credit cap" className={`${inputClass} w-28`} />
-            credits
+            <input name="cap" type="number" min="0" defaultValue={project.monthlyCreditCap ?? ""} placeholder="uncapped" aria-label="Monthly cap in units" className={`${inputClass} w-28`} />
+            units
           </label>
           <label className="flex items-center gap-1.5 text-[12.5px] text-text-2">
             Keep sources

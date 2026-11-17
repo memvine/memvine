@@ -19,7 +19,7 @@ const relevance = (n: number | null | undefined) => (n === null || n === undefin
 /** The server's abstain_reason codes, said plainly. */
 const ABSTAIN_REASON: Record<string, string> = {
   empty_store: "This project has no memory yet, so there was nothing to search.",
-  no_candidates: "Memory exists, but none of it is visible to this question: everything was excluded, outside the reader's audiences, or recorded after the as-of time.",
+  no_candidates: "Memory exists, but none of it is visible to this question: everything was excluded, outside the groups the reader is in, or recorded after the as-of time.",
   below_threshold: "The closest memory is not relevant enough to the question to be served.",
   not_needed: "Some memories are close, but none would change the answer to this question.",
 };
