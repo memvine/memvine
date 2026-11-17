@@ -220,12 +220,16 @@ function ClaudeCode({ apiUrl, keyValue, who }: { apiUrl: string; keyValue: strin
 function Codex({ apiUrl, keyValue, who }: { apiUrl: string; keyValue: string; who: string }) {
   return (
     <ol className="space-y-4">
-      <Sub n={1} code={`git clone --depth 1 https://github.com/memvine/memvine ~/.memvine/src && node ~/.memvine/src/plugins/codex/bin/memvine-codex.mjs install ${keyValue} ${who} ${apiUrl}`}
-           after="Needs Node 18+ and Codex CLI 0.155 or later. It registers the MCP server and five session hooks in ~/.codex.">
-        In a terminal, run this one command:
+      <Sub n={1} code={"codex plugin marketplace add memvine/memvine\ncodex plugin add memvine@memvine"}
+           after="Needs Node 18+ and Codex CLI 0.155 or later.">
+        In a terminal, add the plugin’s marketplace and install it:
       </Sub>
-      <Sub n={2}>Start <code className="font-mono text-text">codex</code>, type <code className="font-mono text-text">/hooks</code> and trust the five memvine hooks. Codex skips a new hook until you trust it.</Sub>
-      <Sub n={3} code="node ~/.memvine/codex/bin/memvine-codex.mjs status">Check it:</Sub>
+      <Sub n={2} code={`node "$(ls -dt ~/.codex/plugins/cache/memvine/memvine/*/ | head -1)codex/bin/memvine-codex.mjs" install ${keyValue} ${who} ${apiUrl}`}
+           after="It registers the MCP server and five session hooks in ~/.codex.">
+        Connect it:
+      </Sub>
+      <Sub n={3}>Start <code className="font-mono text-text">codex</code>, type <code className="font-mono text-text">/hooks</code> and trust the five memvine hooks. Codex skips a new hook until you trust it.</Sub>
+      <Sub n={4} code="node ~/.memvine/codex/bin/memvine-codex.mjs status">Check it:</Sub>
     </ol>
   );
 }

@@ -86,7 +86,7 @@ Use your project key (`mv_sk_...`):
 | Agent | How |
 | --- | --- |
 | Claude Code | `/plugin marketplace add memvine/memvine`, `/plugin install memvine@memvine`, then `/memvine:connect mv_sk_... you@company.com [api-url]`. On a team, add the team space with `/memvine:team mv_sk_...`. See [`plugins/claude-code`](plugins/claude-code). |
-| OpenAI Codex CLI | One `install` command. See [`plugins/codex`](plugins/codex). |
+| OpenAI Codex CLI | `codex plugin marketplace add memvine/memvine`, `codex plugin add memvine@memvine`, then one connect command. See [`plugins/codex`](plugins/codex). |
 | Any MCP client | Point it at `/mcp` on your server. |
 | Your own code | The [TypeScript](sdk/typescript) or [Python](sdk/python) library, or the [HTTP API](server). |
 

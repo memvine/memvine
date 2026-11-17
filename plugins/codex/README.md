@@ -8,11 +8,13 @@ How memory is made, connected and forgotten: [How Memvine memory works](../../do
 ## Install
 
 Needs Node 18+ on your `PATH` and Codex CLI with hooks (0.155 or later; `codex features list`
-shows `hooks  stable  true`). One command, with a project key from the console's **API keys**
-screen and the email your memories are attributed to:
+shows `hooks  stable  true`). Add the plugin from Codex's marketplace, then connect it with a
+project key from the console's **API keys** screen and the email your memories are attributed to:
 
 ```
-git clone --depth 1 https://github.com/memvine/memvine ~/.memvine/src && node ~/.memvine/src/plugins/codex/bin/memvine-codex.mjs install mv_sk_... you@company.com
+codex plugin marketplace add memvine/memvine
+codex plugin add memvine@memvine
+node "$(ls -dt ~/.codex/plugins/cache/memvine/memvine/*/ | head -1)codex/bin/memvine-codex.mjs" install mv_sk_... you@company.com
 ```
 
 Add the API URL as a third argument for a self-hosted server
@@ -33,7 +35,8 @@ What `install` does:
    marker lines, and nothing else in the file changes. The block holds the key, so the file is
    made readable only by you. A `[mcp_servers.memvine]` table you added by hand is replaced.
 3. Adds five hooks to `~/.codex/hooks.json`, after any hooks already there.
-4. Copies the hook script to `~/.memvine/codex/`, so the checkout can be deleted afterwards.
+4. Copies the hook script to `~/.memvine/codex/`, so the hooks do not depend on Codex's copy of
+   the plugin or on a checkout.
 
 Running it again changes nothing; running it with a new key replaces the key. `$CODEX_HOME` is
 honoured when set. `--no-hooks` registers only the MCP server.
@@ -111,4 +114,4 @@ idempotence, other config left untouched, a hand-written table replaced, an unre
 
 `package.json` publishes this as the `memvine-codex` npm package (`npm pack` copies the shared
 `memvine-hook.mjs` from the Claude Code plugin into `lib/`). Once it is published,
-`npx -y memvine-codex install mv_sk_... you@company.com` replaces the clone.
+`npx -y memvine-codex install mv_sk_... you@company.com` installs and connects in one command.

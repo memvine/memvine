@@ -66,8 +66,10 @@ export default async function IntegrationsPage() {
         <Card className="min-w-0">
           <CardHeader icon={Terminal} title="Codex CLI" description="Automatic session capture for Codex CLI" />
           <CardBody className="space-y-3 text-[13px] text-text-2">
-            <p>One command registers the MCP server and the session hooks in <code className="font-mono">~/.codex</code>. Sends what you typed and Codex&apos;s final answers, never tool output or file contents.</p>
-            <Snippet>{`git clone --depth 1 https://github.com/memvine/memvine ~/.memvine/src && node ~/.memvine/src/plugins/codex/bin/memvine-codex.mjs install mv_sk_... ${email} ${base}`}</Snippet>
+            <p>Two commands add the plugin; the third registers the MCP server and the session hooks in <code className="font-mono">~/.codex</code>. Sends what you typed and Codex&apos;s final answers, never tool output or file contents.</p>
+            <Snippet>{`codex plugin marketplace add memvine/memvine
+codex plugin add memvine@memvine
+node "$(ls -dt ~/.codex/plugins/cache/memvine/memvine/*/ | head -1)codex/bin/memvine-codex.mjs" install mv_sk_... ${email} ${base}`}</Snippet>
             <p className="text-[12px] text-text-3">Then start <code className="font-mono">codex</code>, type <code className="font-mono">/hooks</code> and trust the five memvine hooks; Codex runs a new hook only once you trust it.</p>
           </CardBody>
         </Card>
