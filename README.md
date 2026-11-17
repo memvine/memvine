@@ -188,9 +188,9 @@ The full list, with what has and has not been measured:
 | `docs/` | How it works, what it can and cannot do, security |
 | `site/` | The memvine.dev homepage |
 
-Each directory has its own README. There is also an earlier, separate tool in [`src/`](src): a
-command-line program that keeps memory as markdown files inside a repository, with no server. See
-[docs/git-native-cli.md](docs/git-native-cli.md).
+Each directory has its own README. [`legacy/cli/`](legacy/cli) holds an earlier, separate tool: a
+command-line program that keeps memory as markdown files inside a repository, with no server. It is
+not part of the memory service and is no longer developed.
 
 ## Documentation
 
@@ -200,7 +200,7 @@ command-line program that keeps memory as markdown files inside a repository, wi
 | [What Memvine can and cannot do](docs/what-memvine-does.md) | Every claim, with what has and has not been measured |
 | [Self-hosting guide](deploy/README.md) | Running, operating and upgrading your own server |
 | [Security](docs/security.md) | What Memvine protects, what an operator has to set up, and the known limits |
-| [Roadmap](ROADMAP.md) and [changelog](CHANGELOG.md) | What is planned and what has shipped |
+| [Roadmap](ROADMAP.md) | What is planned |
 
 ## Contributing
 

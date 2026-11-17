@@ -16,7 +16,8 @@
   "homepage": "https://memvine.dev",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/memvine/memvine.git"
+    "url": "git+https://github.com/memvine/memvine.git",
+    "directory": "legacy/cli"
   },
   "license": "MIT",
   "author": "Vishal Gupta <hello@memvine.dev>",

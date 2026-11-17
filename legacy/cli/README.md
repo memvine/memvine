@@ -2,8 +2,9 @@
 
 The original memvine: a command-line tool and MCP server that keeps memory as markdown files inside
 your repository, with no server, no account and no model calls. It is published on npm as
-[`memvine`](https://www.npmjs.com/package/memvine) and its source is in [`src/`](../src). It is a
-separate tool from the Memvine memory service that the [main README](../README.md) describes.
+[`memvine`](https://www.npmjs.com/package/memvine) and its source is in [`src/`](src). It is a
+separate tool from the Memvine memory service that the [main README](../../README.md) describes, and it
+lives in this folder (`legacy/cli/`) with its own package, tests and benchmark.
 
 Git-native memory for coding agents. What your agent learns lives in your
 repo, travels with the clone, and expires when the code changes.
@@ -26,7 +27,7 @@ so it stays fast and its results are explainable.
 
 ## Architecture
 
-![memvine architecture](architecture.svg)
+![memvine architecture](docs/architecture.svg)
 
 ## Quickstart
 
@@ -34,7 +35,7 @@ With Node 22 or later and Git, install it from npm (`npm install -g memvine`), o
 
 ```bash
 git clone https://github.com/memvine/memvine.git
-cd memvine
+cd memvine/legacy/cli
 npm ci
 npm run build
 npm link

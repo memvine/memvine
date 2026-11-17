@@ -2,7 +2,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 .DS_Store
-benchmark/out/
+legacy/cli/benchmark/out/
 
 # Agent worktrees
 .claude/worktrees/

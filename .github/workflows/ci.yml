@@ -1,4 +1,4 @@
-name: Release checks
+name: Release checks (legacy CLI)
 # Manual only (Actions tab → Run workflow): the account's GitHub Actions quota ran out, so pushes
 # and pull requests do not trigger it. Run checks locally; see CONTRIBUTING.md.
 on: workflow_dispatch
@@ -12,12 +12,16 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         node: ['22.0.0', '22', '24']
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: legacy/cli
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+          cache-dependency-path: legacy/cli/package-lock.json
       - run: npm ci
       - run: npm test
       - run: npm run benchmark

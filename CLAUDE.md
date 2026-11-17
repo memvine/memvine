@@ -15,6 +15,8 @@ for work in progress, and serves recall back into each session.
 - `plugins/claude-code`, `plugins/codex`: the agent plugins (hooks send turns, recall each prompt).
 - `sdk/typescript`, `sdk/python`; `benchmark/`: the memory check and evaluation harnesses.
 - `site/`: the memvine.dev homepage (static HTML, CSS and a canvas vine; nginx Dockerfile).
+- `legacy/cli/`: the earlier git-native CLI (npm `memvine`), a separate tool with its own package,
+  tests and benchmark. Not part of the service; leave it alone unless asked.
 - `deploy/railway/` (hosting, in progress), `deploy/laptop/` (a team server on one Mac).
 - `docs/how-memory-works.md`; `docs/plans/` holds parked plans (graph work: on hold, below).
 

@@ -2,9 +2,9 @@
 
 Thanks for your interest! memvine is young and contributions genuinely shape it.
 
-This repository holds two things: the Memvine memory service (`server/`, `console/`, `plugins/`,
-`sdk/`, `deploy/`, `benchmark/`), and the earlier git-native CLI (`src/`, published on npm as
-`memvine`). They are set up and tested separately.
+This repository is the Memvine memory service (`server/`, `console/`, `plugins/`, `sdk/`, `deploy/`,
+`benchmark/`). An earlier, separate tool, the git-native CLI published on npm as `memvine`, is kept
+in `legacy/cli/` with its own package and tests.
 
 ## The memory service
 
@@ -31,15 +31,16 @@ cd .. && node --test plugins/codex/bin/ plugins/claude-code/bin/
   company's, customer's or employer's details in the repository.
 - CI does not run on pushes: run the checks above before opening a pull request.
 
-## The git-native CLI
+## The git-native CLI (`legacy/cli/`)
 
 ```bash
+cd legacy/cli
 npm install
 npm run build
 npm test
 ```
 
-Its principles (please keep these, for the CLI in `src/`):
+Its principles (please keep these, for the CLI in `legacy/cli/src/`):
 
 1. **No LLM calls inside the CLI.** Judgment belongs to the calling agent via
    MCP tool descriptions. It stays pure git + files.
