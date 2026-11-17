@@ -3,6 +3,7 @@ dist/
 *.tsbuildinfo
 .DS_Store
 legacy/cli/benchmark/out/
+benchmark/how-it-works/out/
 
 # Agent worktrees
 .claude/worktrees/

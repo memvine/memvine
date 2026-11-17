@@ -160,7 +160,9 @@ Two tests, both in this repository and both runnable:
   | Memvine | 0.892 |
   | Plain search over the conversation | 0.889 |
 
-  Memvine is level with plain search here, not ahead of it.
+  Memvine is level with plain search here, not ahead of it. These are 15 of the benchmark's 20
+  conversations, and Memvine's retrieval was adjusted on these same 15, so its score is not a
+  held-out result: the five conversations not yet run are the fair test.
 
 ## Limits
 
@@ -216,6 +218,13 @@ cd server && .venv/bin/python -m pytest -q    # the server's tests
 
 Please report a security problem privately, as [SECURITY.md](SECURITY.md) describes, and not in a
 public issue.
+
+## Acknowledgements
+
+The BEAM runner's dataset loading, model calls and scoring started from the
+[harness Past Corp published](https://github.com/pastdotdev/benchmarks/tree/main/beam) for its own
+BEAM run (MIT); the answer and judge prompts are ExaBase's, unchanged, and keep their own terms. Details are in
+[benchmark/beam/NOTICE.md](benchmark/beam/NOTICE.md).
 
 ## License
 
