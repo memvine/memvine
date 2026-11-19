@@ -291,6 +291,8 @@ test("the Codex marketplace points at a plugin that holds everything install nee
   const { VERSION } = await import("../../claude-code/bin/memvine-hook.mjs");
   assert.equal(manifest.name, "memvine");
   assert.equal(manifest.version, VERSION, "the Codex manifest's version follows the plugin's");
+  const npmPackage = JSON.parse(readFileSync(join(root, "codex", "package.json"), "utf8"));
+  assert.equal(npmPackage.version, VERSION, "the npm package memvine-codex has the plugin's version");
   // Codex copies the plugin folder into its cache: both scripts must be inside it.
   assert.ok(existsSync(join(root, "codex", "bin", "memvine-codex.mjs")));
   assert.ok(existsSync(join(root, "claude-code", "bin", "memvine-hook.mjs")));
