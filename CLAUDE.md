@@ -100,8 +100,8 @@ Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next
 - The server image installs `server/requirements.lock`; rebuild it after changing `pyproject.toml`
   (`server/README.md`, Docker).
 - `site/terms.html` and `site/privacy.html` are drafts a lawyer has not reviewed.
-- Pending, the operator's: a Slack webhook for alerts, an outside uptime check, a monthly limit on
-  the Anthropic key, re-pointing each laptop's plugin (#2).
+- Operator work for the hosted service (alerts, uptime check, model spend limit, re-pointing the
+  laptops' plugins) is tracked in the private repository's issues.
 - The repository is private. Making it public and publishing packages happen only on the owner's
   explicit go, after their own end-to-end test; an agent never does either on its own. What is ready
   for that day: a secrets scan of the whole history and a read of every issue found nothing that

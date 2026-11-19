@@ -9,19 +9,14 @@ GitHub issues in this repo, labelled `now` / `next` / `later` / `parked`, with `
 `area:` label.
 
 ## Now (this week)
+- The first public release (0.1.0, `CHANGELOG.md`): the repository goes public and the client
+  libraries go to npm and PyPI (#11).
 - Personal projects and team spaces (a person's sessions stay theirs; the team gets what they
-  share): deployed to the hosted service on 16 Nov (migration 0014), with the console's Share button and plugin 0.8.1 on main (an
-  installed plugin gets it by updating). To learn from the first real teams: do people share what
-  is suggested?
-- Public release, the owner's to do by hand after their own check: make the repository public,
-  switch on private vulnerability reporting, publish the client libraries on npm and PyPI (#11)
-- Re-point both laptops' plugins to the hosted service (#2)
-- Review real capture after a week of use (#6)
-- A BEAM result scored the published way, beside plain search and full context, with cost and
-  limits stated (#17; the local reading so far is in `benchmark/beam/README.md`)
-- Self-hosting that works from a clean checkout (`deploy/README.md`)
-- Operator steps left for production: a Slack address for alerts, an outside uptime check, a monthly
-  limit on the Anthropic key, a lawyer's review of `/terms` and `/privacy`
+  share), live on the hosted service since 16 Nov. To learn from the first real teams: do people
+  share what is suggested?
+- Review real capture after a week of use (#6).
+- BEAM: score the five conversations not yet run, the fair, held-out test of conversation mode
+  (#17; the reading so far is in `benchmark/beam/README.md`).
 
 ## Next (this month)
 - Cursor plugin (#8) · self-serve sign-up (#9)
@@ -50,4 +45,5 @@ checks on `api` and `console`, pinned server dependencies, HSTS on the API, term
 and a runbook. Conversation mode (the conversation
 stored whole and searched, a small profile of the person tidied in the background, and digests for
 summary questions); the BEAM runner with plain-search and full-context baselines, scored the
-published way on 15 conversations.
+published way on 15 conversations; self-hosting checked from a fresh clone; the hosted service's setup moved to a private
+repository so this one holds only the open-source core.

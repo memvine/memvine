@@ -22,3 +22,6 @@ benchmark/memory/check-profiles.txt
 benchmark/memory/check-agent-e2e.json
 __pycache__/
 *.pyc
+
+# Local agent and preview settings
+.claude/
