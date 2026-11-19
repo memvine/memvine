@@ -17,7 +17,8 @@ for work in progress, and serves recall back into each session.
 - `site/`: the memvine.dev homepage (static HTML, CSS and a canvas vine; nginx Dockerfile).
 - `legacy/cli/`: the earlier git-native CLI (npm `memvine`), a separate tool with its own package,
   tests and benchmark. Not part of the service; leave it alone unless asked.
-- `deploy/railway/` (hosting, in progress), `deploy/laptop/` (a team server on one Mac).
+- `deploy/`: self-hosting with Docker (`deploy/README.md`); `deploy/laptop/` (a team server on one
+  Mac). The hosted service's own setup is in the private repository `memvine/memvine-cloud`.
 - `docs/how-memory-works.md`; `docs/plans/` holds parked plans (graph work: on hold, below).
 
 ## Setup and tests
@@ -87,29 +88,22 @@ self-host; nothing is measured on it, and quoted results are Claude's.) Last res
 
 Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next/later.
 
-- Hosted on Railway (project `memvine`: `postgres`, `api`, `console`, `www`, `backup`; see
-  `deploy/railway/README.md`, runbook in section 9). Open to invited teams only (`MEMVINE_SIGNUP=invite`).
-  Deploy with `railway up server --path-as-root --service api` (and `console`, `site` → `www`).
-  `railway up` does not read `railway.json`: health checks, cron and restart policy are set on the
-  service. The laptop server is retired.
+- A hosted instance runs at `app.memvine.dev` (API `api.memvine.dev`, site `www.memvine.dev`),
+  open to invited teams only (`MEMVINE_SIGNUP=invite`). How it is deployed, backed up and run lives
+  in the private repository `memvine/memvine-cloud` (`HOSTING.md`, runbook): never put hosting
+  details (providers' service names, buckets, DNS, runbooks) back in this repository.
   After each deploy: `MEMVINE_SMOKE_KEY=mv_mk_... python3 benchmark/smoke/hosted.py --api <url> --console <url>`
   (throwaway project, deleted at the end; `--no-synthesis` skips the real model; `--conversation`
-  adds conversation mode). Last run 16 Nov, with `--conversation`, on the personal-project and team-space
-  code (migration 0014, plugin 0.8.1): 23/23, the team-space steps among them. Sharing from the
-  console was checked by hand on the hosted server with two throwaway projects (share, refuse a
-  second share, a changed memory replacing the team's copy, take back); the smoke test does not
-  cover that.
+  adds conversation mode). Last run 16 Nov, with `--conversation`: 23/23, the team-space steps among
+  them. Sharing from the console was checked by hand (share, refuse a second share, a changed
+  memory replacing the team's copy, take back); the smoke test does not cover that.
 - The server image installs `server/requirements.lock`; rebuild it after changing `pyproject.toml`
   (`server/README.md`, Docker).
-- Backups: the `backup` cron service dumps the database nightly to the bucket `the backup bucket`
-  and restore-tests the dump (`deploy/railway/README.md` section 8).
-- Addresses: `api.memvine.dev`, `app.memvine.dev`, `www.memvine.dev` (CNAMEs at the DNS provider); the
-  bare `memvine.dev` forwards to `www`. `site/terms.html` and `site/privacy.html` are drafts a
-  lawyer has not reviewed.
+- `site/terms.html` and `site/privacy.html` are drafts a lawyer has not reviewed.
 - Pending, the operator's: a Slack webhook for alerts, an outside uptime check, a monthly limit on
   the Anthropic key, re-pointing each laptop's plugin (#2).
-- The repository is private. Making it public is the owner's to do, by hand, after their own
-  check: an agent never changes the repository's visibility or publishes a package. What is ready
+- The repository is private. Making it public and publishing packages happen only on the owner's
+  explicit go, after their own end-to-end test; an agent never does either on its own. What is ready
   for that day: a secrets scan of the whole history and a read of every issue found nothing that
   must not be public (15 Nov); `@memvine/sdk` (npm) and `memvine-sdk` (PyPI) build and pass their
   checks and neither name is taken (#11). After it is public: switch on private vulnerability

@@ -15,7 +15,7 @@ GitHub issues in this repo, labelled `now` / `next` / `later` / `parked`, with `
   is suggested?
 - Public release, the owner's to do by hand after their own check: make the repository public,
   switch on private vulnerability reporting, publish the client libraries on npm and PyPI (#11)
-- Re-point both laptops' plugins to Railway (#2)
+- Re-point both laptops' plugins to the hosted service (#2)
 - Review real capture after a week of use (#6)
 - A BEAM result scored the published way, beside plain search and full context, with cost and
   limits stated (#17; the local reading so far is in `benchmark/beam/README.md`)
@@ -37,7 +37,7 @@ password reset by email, SSO/MFA.
 Context graph (#19; plans in `docs/plans/`) — until plain-text memory is proven with real teams.
 
 ## Shipped (October 2026)
-Hosting on Railway; memory admission rules (three tests); a tight recall briefing; one memory model;
+The hosted service; memory admission rules (three tests); a tight recall briefing; one memory model;
 review loop; memory that ages; history and activity feed; recency weighting; per-project memory
 rules and categories; profiles; background consolidation; security pass; Connect page; Claude Code
 plugin 0.7.2 and Codex plugin 0.6.1; the local memory check (agent test: 9/9 right with memory,
@@ -47,7 +47,7 @@ plugin 0.7.2 and Codex plugin 0.6.1; the local memory check (agent test: 9/9 rig
 Addresses `api.`, `app.` and `www.memvine.dev`; nightly backups, each one restore-tested; recall
 that lets the fast model pick what the task needs; production readiness for invited teams: health
 checks on `api` and `console`, pinned server dependencies, HSTS on the API, terms and privacy drafts,
-and a runbook (`deploy/railway/README.md` section 9). Conversation mode (the conversation
+and a runbook. Conversation mode (the conversation
 stored whole and searched, a small profile of the person tidied in the background, and digests for
 summary questions); the BEAM runner with plain-search and full-context baselines, scored the
 published way on 15 conversations.

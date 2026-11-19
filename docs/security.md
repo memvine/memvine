@@ -1,8 +1,8 @@
 # Security
 
 What Memvine protects and how, what an operator has to configure, and the known limits. The API
-(`server/`) and the console (`console/`) are meant to sit on the public internet (Railway, see
-`deploy/railway/README.md`).
+(`server/`) and the console (`console/`) are meant to sit on the public internet, behind a host or
+proxy that terminates TLS (`deploy/README.md`).
 
 ## Credentials
 
@@ -87,7 +87,7 @@ Counters live in memory: a restart clears them.
 
 ## The client address behind proxies
 
-The socket peer behind Railway is Railway's edge (public traffic) or the console (private network),
+The socket peer behind a cloud host is the host's edge (public traffic) or the console (private network),
 so the address comes from `X-Forwarded-For`, which anyone can send. The API reads the chain from the
 right: hops added by a trusted proxy are skipped, and the first address a trusted proxy did not
 vouch for is the client. A peer that is not a trusted proxy is the client, whatever the header says.
@@ -95,15 +95,16 @@ IPv4-mapped IPv6 addresses are read as IPv4.
 
 `MEMVINE_TRUSTED_PROXIES` (default `private`): comma-separated addresses and CIDR ranges; `private`
 stands for loopback, 10/8, 172.16/12, 192.168/16, 100.64/10 (CGNAT), 169.254/16, fc00::/7 and
-fe80::/10. That fits Railway (its edge and private network use private ranges, and a container is
-not reachable from the internet directly), Docker and a local tunnel. Set it to `""` when the API
+fe80::/10. That fits hosts whose edge and private network use private ranges (Railway, Fly.io and
+most container platforms, where a container is not reachable from the internet directly), Docker and
+a local tunnel. Set it to `""` when the API
 is exposed directly on a network where untrusted hosts have private addresses.
 
 The console calls the API server-side, so it relays the browser's `X-Forwarded-For`
 (`console/lib/forwarded.ts`); the API believes it because the console is a trusted (private) peer.
 
 To check a deployment: make a call with a project key from a known address and look at the key's
-`last_used_ip` (console → API keys). If it shows a Railway address instead of yours, add that range
+`last_used_ip` (console → API keys). If it shows your host's address instead of yours, add that range
 to `MEMVINE_TRUSTED_PROXIES`; until then every client shares one per-address budget.
 
 ## Request size
@@ -120,7 +121,8 @@ The server fetches one URL: `MEMVINE_ALERT_WEBHOOK_URL`, set by the operator (ht
 No route fetches a URL a customer supplies, so there is no customer-controlled server-side request.
 A future feature that does (customer webhooks, URL import) must resolve the host and refuse
 loopback, private, link-local and metadata addresses (127/8, 10/8, 172.16/12, 192.168/16,
-169.254.169.254, fc00::/7, fe80::/10, `*.railway.internal`), re-checking after redirects.
+169.254.169.254, fc00::/7, fe80::/10, and the host's internal names such as `*.railway.internal`),
+re-checking after redirects.
 
 ## Responses and logs
 
@@ -146,8 +148,8 @@ loopback, private, link-local and metadata addresses (127/8, 10/8, 172.16/12, 19
 - `next.config.ts`: `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy:
   strict-origin-when-cross-origin`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, and
   `Strict-Transport-Security` (one year, subdomains) in production over HTTPS.
-- CSRF: server actions check that `Origin` matches the request's host (Next.js); Railway keeps the
-  `Host` header, so both the custom domain and the `*.up.railway.app` domain work. If a proxy rewrites
+- CSRF: server actions check that `Origin` matches the request's host (Next.js); most hosts keep the
+  `Host` header, so both a custom domain and the host's own domain work. If a proxy rewrites
   `Host`, list the public origins in `MEMVINE_CONSOLE_ALLOWED_ORIGINS` (`app.example.com,...`). The two
   GET routes that act with the cookie (`/export`, `/logout`) refuse `Sec-Fetch-Site: cross-site`.
 - Client bundles: a production build's `.next/static` contains no key and no reference to
@@ -157,13 +159,13 @@ loopback, private, link-local and metadata addresses (127/8, 10/8, 172.16/12, 19
 ## What an operator must configure
 
 1. `MEMVINE_MANAGEMENT_KEY` on the **API only**: `mv_mk_` plus 32+ random characters, kept in
-   Railway and a password manager. **Never set it on a public console**: a console holding it serves
+   the host's secret settings and a password manager. **Never set it on a public console**: a console holding it serves
    every page as the operator, with no sign-in (that mode exists for a console on localhost).
 2. `MEMVINE_SIGNUP=invite` (or `closed`) on a public API: in `open` mode anyone can create an
    organization. The first account may always sign up.
-3. `MEMVINE_TRUSTED_PROXIES`: keep `private` on Railway and verify with `last_used_ip` (above).
+3. `MEMVINE_TRUSTED_PROXIES`: keep `private` behind a container host and verify with `last_used_ip` (above).
 4. Postgres without a public domain or TCP proxy; the API reaches it on the private network.
-5. HTTPS only (Railway terminates TLS); leave `MEMVINE_INSECURE_COOKIES` unset.
+5. HTTPS only (the host or a proxy terminates TLS); leave `MEMVINE_INSECURE_COOKIES` unset.
 6. A monthly limit on the Anthropic key and credit caps per project (model spend is the cost an
    abuser can run up with a stolen project key).
 
