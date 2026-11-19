@@ -202,7 +202,7 @@ not part of the memory service and is no longer developed.
 | [What Memvine can and cannot do](docs/what-memvine-does.md) | Every claim, with what has and has not been measured |
 | [Self-hosting guide](deploy/README.md) | Running, operating and upgrading your own server |
 | [Security](docs/security.md) | What Memvine protects, what an operator has to set up, and the known limits |
-| [Roadmap](ROADMAP.md) | What is planned |
+| [Roadmap](ROADMAP.md) and [changelog](CHANGELOG.md) | What is planned and what has shipped |
 
 ## Contributing
 

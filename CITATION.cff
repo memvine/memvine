@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use Memvine in your work, please cite it as below."
+title: "Memvine: memory for AI agents"
+type: software
+authors:
+  - family-names: "Gupta"
+    given-names: "Vishal"
+repository-code: "https://github.com/memvine/memvine"
+url: "https://memvine.dev"
+license: MIT
+version: "0.1.0"
+abstract: >-
+  Memvine reads each AI agent session, keeps the few things that stay true, with their source,
+  and briefs the next agent. It has two modes: a coding mode that keeps little for a team's coding
+  agents, and a conversation mode that stores one person's conversation whole beside a small
+  profile. Memories about code are rechecked when that code changes.
+keywords:
+  - agent memory
+  - AI agents
+  - coding agents
+  - MCP
+  - long-term memory

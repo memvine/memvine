@@ -2,6 +2,8 @@
 
 Thanks for your interest! memvine is young and contributions genuinely shape it.
 
+Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
+
 This repository is the Memvine memory service (`server/`, `console/`, `plugins/`, `sdk/`, `deploy/`,
 `benchmark/`). An earlier, separate tool, the git-native CLI published on npm as `memvine`, is kept
 in `legacy/cli/` with its own package and tests.

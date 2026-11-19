@@ -3,7 +3,8 @@
 Memvine is an open-source project. The aim is memory that demonstrably works, for a long
 conversation with an assistant (a small profile of the person beside the searchable conversation) and
 for a team's coding agents (keep little),
-with results anyone can reproduce. There are no paid plans and none are planned. Work items are
+with results anyone can reproduce. The core is open source under MIT and stays complete for
+anyone who runs it themselves; a managed service built on it may follow later. Work items are
 GitHub issues in this repo, labelled `now` / `next` / `later` / `parked`, with `P0`–`P2` and an
 `area:` label.
 

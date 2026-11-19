@@ -114,4 +114,6 @@ Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next
   must not be public (15 Nov); `@memvine/sdk` (npm) and `memvine-sdk` (PyPI) build and pass their
   checks and neither name is taken (#11). After it is public: switch on private vulnerability
   reporting (`SECURITY.md` points to it; GitHub offers it on public repositories only).
-- Later: password reset by email, SSO. No billing or paid plans: Memvine is an open-source project.
+- Later: password reset by email, SSO. The core stays open source (MIT) and complete for
+  self-hosting; a managed service may be built on it later, with any code only it needs kept in a
+  separate private repository (decided 18 Nov).

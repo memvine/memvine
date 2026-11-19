@@ -1,0 +1,29 @@
+name: Bug report
+description: Something does not work as the docs say.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Please never paste API keys, transcripts or other private data. Security problems go to SECURITY.md, not here."
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      placeholder: "1. ...\n2. ...\n3. ..."
+  - type: input
+    id: where
+    attributes:
+      label: Where it ran
+      description: "Self-hosted or app.memvine.dev; the plugin version (memvine status), and your OS."
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      render: text
