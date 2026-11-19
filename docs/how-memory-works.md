@@ -2,7 +2,7 @@
 
 **Memories grow on the trellis of the code. When the trellis moves, the vine notices.**
 
-![Said today: six lines of a session, two of which matter later. Kept: Memvine keeps those two, with who said each and when. Known tomorrow: in a teammate's session, their agent already knows them.](../site/how-memvine-works.svg)
+![One lesson followed through a real run: a conversation, the memory Memvine saved from it with its source, a teammate's agent recalling it, and the memory marked as possibly outdated after the code changed.](images/memvine-run.png)
 
 Your agents talk. Memvine reads what they say, keeps the parts that stay true, ties each one to
 where it came from, and hands the relevant ones back at the start of the next task. A memory is a

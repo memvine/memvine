@@ -1,6 +1,6 @@
 <a id="readme-top"></a>
 
-<p align="center"><img src="site/how-memvine-works.svg" alt="Said today: six lines of a session, two of which matter later. Kept: Memvine keeps those two, with who said each and when. Known tomorrow: in a teammate's session, their agent already knows them." width="960" /></p>
+<p align="center"><img src="docs/images/memvine-run.png" alt="One lesson followed through a real run, in four steps. Conversation: you tell your agent the 90-second timeout in export.py is deliberate, and why. Memory saved: the Memvine console shows the one memory kept from that session, with your words as its source. Memory recalled: a teammate's agent, asked to lower the timeout, declines and gives the reason from memory. Memory rechecked: after export.py changes, the same memory is marked stale, May be outdated." width="960" /></p>
 
 <h1 align="center">Memvine</h1>
 
@@ -47,11 +47,16 @@ another MCP client.
   came from and who said it. A web console lets you browse, correct and forget them.
 - **It works where your agents are.** Plugins for Claude Code and Codex, an MCP endpoint for other
   agents, and TypeScript and Python libraries for your own code.
-- **Yours to run.** Open source under MIT. Run it on your own machine with Docker.
+- **It notices when the code moves.** A memory about a file is tied to that file, and when the file
+  changes it is marked as possibly outdated, so agents check the code instead of trusting old advice.
+- **Yours to run.** The core is open source under MIT: run the server and console on your own
+  machine with Docker, or use the hosted service at [app.memvine.dev](https://app.memvine.dev), open
+  by invitation.
 
 > [!NOTE]
-> Memvine is early. It passes its own tests and a public benchmark, but no outside team has yet
-> used it on real work for long enough to show that it helps. See [Limits](#limits).
+> Memvine is early. It passes its own memory check, and on a public benchmark it is level with plain
+> search, not ahead of it. No outside team has yet used it on real work for long enough to show that
+> it helps. See [Does it work?](#does-it-work) and [Limits](#limits).
 
 ### Two modes
 

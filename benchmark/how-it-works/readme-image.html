@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root { --night:#0b1310; --linen:#e8ede7; --ash:#8a978e; --sprout:#a8e4bf; --stem:#3e8c5e; --surface:#111c16; --hair:rgba(232,237,231,.22); }
+* { box-sizing: border-box; }
+body { margin:0; width:1600px; background:var(--night); color:var(--linen); font-family:"Instrument Sans",system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+.wrap { padding:56px 56px 60px; }
+.title { display:flex; align-items:center; gap:12px; font-size:22px; font-weight:500; letter-spacing:-.01em; color:var(--ash); }
+.title svg { width:22px; height:22px; color:var(--sprout); }
+.row { display:grid; grid-template-columns:repeat(4,1fr); gap:28px; margin-top:34px; position:relative; }
+.row::before { content:""; position:absolute; left:8px; right:8px; top:9px; height:2px; background:var(--stem); }
+.step { position:relative; }
+.dot { width:20px; height:20px; border-radius:50%; background:var(--night); border:2px solid var(--sprout); position:relative; z-index:1; }
+.name { margin-top:18px; font-size:26px; font-weight:500; letter-spacing:-.015em; }
+.what { margin-top:6px; font-size:16px; line-height:1.45; color:var(--ash); min-height:70px; }
+.panel { margin-top:16px; height:470px; border:1px solid var(--hair); border-radius:12px; overflow:hidden; position:relative; background:#0d0d0f; }
+.panel img { display:block; width:100%; }
+.panel::after { content:""; position:absolute; inset:auto 0 0 0; height:50px; background:linear-gradient(rgba(13,13,15,0),#0d0d0f); }
+.talk { background:var(--surface); padding:20px; font-size:15px; line-height:1.5; }
+.talk::after { background:linear-gradient(rgba(17,28,22,0),var(--surface)); }
+.talk p { margin:0 0 14px; }
+.who { display:block; font-size:12.5px; color:var(--ash); margin-bottom:3px; }
+.you { padding-left:12px; border-left:2px solid var(--sprout); }
+.agent { color:#aab6ad; }
+code { font-family:ui-monospace,Menlo,monospace; font-size:.9em; }
+.foot { margin-top:22px; font-size:14px; color:var(--ash); }
+</style></head><body><div class="wrap">
+<div class="title"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17.5V9"/><path d="M10 11C10 7.4 7.6 5 4 5c0 3.6 2.4 6 6 6Z"/><path d="M10 9c0-3.3 2.2-5.5 5.6-5.5 0 3.3-2.2 5.5-5.6 5.5Z"/></svg>memvine: one lesson, followed through a real run</div>
+<div class="row">
+ <div class="step"><div class="dot"></div><div class="name">Conversation</div><div class="what">You tell your agent something the code does not say: the long timeout is deliberate.</div>
+  <div class="panel talk"><p class="you"><span class="who">You</span>Leave the timeout in export.py alone. 90 seconds is deliberate: the bank's SFTP server takes over a minute to answer at month end. It was lowered to 15 once and the nightly export failed for three days.</p><p class="agent"><span class="who">Your agent</span>Understood. I won't touch <code>TIMEOUT_SECONDS</code>, and it stays at 90. …</p></div></div>
+ <div class="step"><div class="dot"></div><div class="name">Memory saved</div><div class="what">From the whole session Memvine keeps one thing: the lesson, with your own words as its source.</div>
+  <div class="panel"><img src="../../site/how-kept.png"></div></div>
+ <div class="step"><div class="dot"></div><div class="name">Memory recalled</div><div class="what">A teammate's agent, in a new session, is asked to lower the timeout. It already knows why not.</div>
+  <div class="panel talk"><p class="you"><span class="who">A teammate</span>The export job takes too long to give up when the bank is down. Lower the timeout in export.py to 10 seconds.</p><p class="agent"><span class="who">Their agent</span>I haven't changed anything. <code>TIMEOUT_SECONDS</code> in <code>export.py:7</code> is still 90, and project memory says it should stay there:</p><ul class="agent" style="margin:0 0 14px;padding-left:20px"><li>The bank's SFTP server takes over a minute to respond at month end.</li><li>Someone lowered the timeout to 15 before, and the nightly export failed for three days.</li></ul><p class="agent">…</p></div></div>
+ <div class="step"><div class="dot"></div><div class="name">Memory rechecked</div><div class="what">Later, export.py changes. Memvine marks the memory as possibly outdated and tells agents to check the code.</div>
+  <div class="panel"><img src="../../site/how-rechecked.png"></div></div>
+</div>
+<div class="foot">Real Claude Code sessions with the Memvine plugin, and the Memvine console. Replies shortened where marked “…”.</div>
+</div></body></html>

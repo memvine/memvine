@@ -28,3 +28,7 @@ The model's words change from run to run, so the page quotes one run (17 Nov 202
 replies are shortened. The outcome held on each of three runs: one memory kept, the teammate's agent
 declines and gives the reason, and the memory turns stale after the commit. `shot.mjs` takes the
 console screenshots; its usage is at the top of the file.
+
+`readme-image.html` lays the same run out as one picture for the repository's README; render it
+with headless Chrome (`--window-size=1600,800 --force-device-scale-factor=1.5 --screenshot`) and save
+it as `docs/images/memvine-run.png`.
