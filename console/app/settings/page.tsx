@@ -3,11 +3,11 @@ import type { ReactNode } from "react";
 import { Settings } from "lucide-react";
 import { changeRole, createOrg, createOrgKey, removeMember, revokeInvite, revokeOrgKey, switchOrg } from "@/app/actions";
 import {
-  Badge, button, Card, CardBody, formatDate, Mono, PageHeader, Select, Table, TableEmpty, TBody, Td, Th, THead, timeAgo, Tr,
+  Badge, button, Card, CardBody, CardHeader, formatDate, Mono, PageHeader, Select, Table, TableEmpty, TBody, Td, Th, THead, timeAgo, Tr,
 } from "@/components/ui";
 import { currentProject, listAudit, listInvites, listMembers, listOrgKeys, listOrgs, listProjects, orgInfo } from "@/lib/api";
 import { CategoriesEditor, InstructionsForm, ModeForm, SharePolicyForm } from "./MemoryRules";
-import { InviteForm, PasswordForm } from "./PeopleForms";
+import { InviteForm, PasswordForm, ResetLinkForm } from "./PeopleForms";
 import { SecretForm } from "./SecretForm";
 
 function Section({ id, title, description, children }: { id: string; title: string; description?: ReactNode; children: ReactNode }) {
@@ -35,6 +35,9 @@ export default async function SettingsPage() {
   const liveKeys = keys.filter((k) => !k.revokedAt).length;
   const owners = members.filter((m) => m.role === "owner").length;
   const openInvites = invites.filter((i) => !i.acceptedAt);
+  // Whose password this person may reset: not their own (Settings → password), an owner's only as an owner.
+  const resettable = members.filter((m) => m.id !== info.user?.id && (m.role !== "owner" || info.role === "owner"))
+    .map((m) => ({ id: m.id, email: m.email }));
 
   return (
     <>
@@ -105,6 +108,12 @@ export default async function SettingsPage() {
             {manager && (
               <Card className="mb-4">
                 <CardBody><InviteForm /></CardBody>
+              </Card>
+            )}
+            {manager && resettable.length > 0 && (
+              <Card className="mb-4">
+                <CardHeader title="Reset a password" description="For a member who forgot theirs. Someone who also belongs to another organization gets a link from the server's operator instead." />
+                <CardBody><ResetLinkForm people={resettable} /></CardBody>
               </Card>
             )}
             <Table minWidth={620}>

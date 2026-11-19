@@ -111,11 +111,14 @@ BODIES: dict[tuple[str, str], dict | None] = {
     ("GET", "/v1/org/members"): None,
     ("PATCH", "/v1/org/members/{user_id}"): {"role": "member"},
     ("DELETE", "/v1/org/members/{user_id}"): None,
+    ("POST", "/v1/org/members/{user_id}/reset"): None,
     ("GET", "/v1/org/invites"): None,
     ("POST", "/v1/org/invites"): {"role": "member"},
     ("DELETE", "/v1/org/invites/{invite_id}"): None,
     ("POST", "/v1/auth/invites/describe"): {"invite": "{invite_token}"},
     ("POST", "/v1/auth/accept"): {"invite": "{invite_token}"},
+    ("POST", "/v1/auth/reset/describe"): {"token": "mv_rs_not-a-real-link"},
+    ("POST", "/v1/auth/reset"): {"token": "mv_rs_not-a-real-link", "password": "attacker password"},
 }
 # Routes that act only on the caller's own account or are public without tenant data; covered by
 # test_accounts and by the switch check below.

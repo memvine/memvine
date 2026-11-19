@@ -52,6 +52,7 @@ export function LoginForm() {
       <div className="space-y-0.5 border-t border-border pt-3">
         {mode !== "invite" && other("invite", "I have an invite link")}
         {mode !== "email" && other("email", "Sign in with email instead")}
+        {mode === "email" && <p className="text-center text-[12.5px] text-text-3">Forgot your password? Ask an owner or admin of your organization for a reset link.</p>}
         {mode === "email" && other("key", "Sign in with an organization key instead")}
       </div>
     </form>

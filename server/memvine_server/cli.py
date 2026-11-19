@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 
 import typer
@@ -127,6 +128,29 @@ def add_member(email: str, org: str = "default", role: str = "owner", rename: st
 
     _run(_with_pool(go))
     typer.echo(f"{email} is now {role} of {org}. Switch to it under Settings in the console.")
+
+
+@app.command()
+def reset_link(email: str,
+               console: str = typer.Option("", help="the console's public address, e.g. https://app.memvine.dev; "
+                                                    "MEMVINE_PUBLIC_CONSOLE_URL when empty")):
+    """Print a one-time link that lets this account set a new password: for anyone locked out,
+    including the organization's only owner. It runs where the server runs (it needs the database,
+    not a password or key). The link works once, for a day; a newer one replaces it."""
+    from .accounts import RESET_HOURS, issue_reset
+
+    async def go(conn):
+        user = await (await conn.execute("SELECT id FROM users WHERE lower(email) = lower(%s)", (email,))).fetchone()
+        if not user:
+            raise typer.BadParameter(f"no account for {email}")
+        token, _ = await issue_reset(conn, user["id"], "operator (memvine-server reset-link)")
+        return token
+
+    token = _run(_with_pool(go))
+    base = (console or os.environ.get("MEMVINE_PUBLIC_CONSOLE_URL", "")).rstrip("/")
+    typer.echo(f"{base or '<console address>'}/reset?token={token}")
+    typer.echo(f"Give this to {email} over a channel you trust. It works once, within {RESET_HOURS} hours, and "
+               "signs them out everywhere when used.")
 
 
 @app.command()

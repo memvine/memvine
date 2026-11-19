@@ -69,6 +69,15 @@ With the console address and that `mv_mk_` key:
 
 Organization keys are added and revoked through the API (`/v1/org/keys`).
 
+**A forgotten password.** An owner or admin opens Settings → Members → **Reset a password**, picks
+the person and sends them the one-time link it shows (24 hours, single use). If the person locked out
+is the only owner, or belongs to more than one organization, the server's operator makes the link on
+the host, with no key or password needed:
+
+```sh
+docker compose exec api memvine-server reset-link you@example.com --console https://app.example.com
+```
+
 **Who can create an account.** With this compose file, only someone holding an invite link from an
 organization admin (`MEMVINE_SIGNUP=invite`); the organization key above always signs in. Set
 `MEMVINE_SIGNUP=open` in `.env` to let anyone who can reach the console create an account and an

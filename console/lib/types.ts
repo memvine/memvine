@@ -704,6 +704,8 @@ export interface MemvineApi {
   createInvite(email: string | null, role: Role): Promise<{ token: string }>;
   revokeInvite(id: string): Promise<void>;
   changePassword(current: string, next: string): Promise<void>;
+  /** A one-time password reset link token for a member who cannot sign in (owners and admins). */
+  createResetLink(userId: string): Promise<{ token: string }>;
   switchOrg(slug: string): Promise<string>;
   listAudit(): Promise<AuditEvent[]>;
   listOrgKeys(): Promise<OrgKey[]>;

@@ -613,6 +613,10 @@ export const liveApi: MemvineApi = {
   async changePassword(current, next) {
     await call("/v1/auth/password", { method: "POST", body: { current, new: next } });
   },
+  async createResetLink(userId) {
+    const r = await call<{ token: string }>(`/v1/org/members/${userId}/reset`, { method: "POST" });
+    return { token: r.token };
+  },
   async switchOrg(slug) {
     return (await call<{ token: string }>("/v1/auth/switch", { method: "POST", body: { org: slug } })).token;
   },

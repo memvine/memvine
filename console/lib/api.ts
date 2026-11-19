@@ -143,6 +143,7 @@ export const listInvites = forward("listInvites");
 export const createInvite = forward("createInvite");
 export const revokeInvite = forward("revokeInvite");
 export const changePassword = forward("changePassword");
+export const createResetLink = forward("createResetLink");
 export const switchOrg = forward("switchOrg");
 export const listAudit = forward("listAudit");
 export const listOrgKeys = forward("listOrgKeys");

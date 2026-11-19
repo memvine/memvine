@@ -43,7 +43,7 @@ export function middleware(request: NextRequest) {
   };
   const live = Boolean(process.env.MEMVINE_API_URL);
   const configured = Boolean(process.env.MEMVINE_MANAGEMENT_KEY);
-  if (path === "/login" || path === "/signup") {
+  if (path === "/login" || path === "/signup" || path === "/reset") {
     forward.set("x-memvine-login", "1");
     return secured(NextResponse.next({ request: { headers: forward } }));
   }

@@ -81,6 +81,7 @@ curl -s localhost:8400/v1/recall -H "Authorization: Bearer $KEY" -H 'content-typ
 | `GET /v1/org`, `GET/POST /v1/org/keys`, `DELETE /v1/org/keys/{id}` | Who is calling (person, role, organizations), and the organization's keys (never the last one). |
 | `POST /v1/auth/signup`, `/login`, `/logout`, `/switch`, `/accept`, `/password`; `GET /v1/auth/config`, `POST /v1/auth/invites/describe` | Accounts: email and password, sign-in sessions (`mv_us_`), invite links, organization switching. Sign-up follows `MEMVINE_SIGNUP` (`open`, `invite`, `closed`). |
 | `GET /v1/org/members`, `PATCH/DELETE /v1/org/members/{user}`, `GET/POST /v1/org/invites`, `DELETE /v1/org/invites/{id}` | People and roles (owner, admin, member), invite links. |
+| `POST /v1/org/members/{user}/reset`; `POST /v1/auth/reset/describe`, `POST /v1/auth/reset` | Password reset links: an owner or admin makes a one-time link (`mv_rs_`, 24 hours) for a member who forgot their password; the reset page uses it to set a new one, which ends the person's sign-ins. For anyone, including a lone owner: `memvine-server reset-link <email> --console <console URL>`. |
 | `GET /v1/audit` | Administrative changes and memory edits, per organization. |
 | `GET/POST /v1/orgs` | Operator only: list and create organizations (the first key is returned once). |
 | `/mcp` | MCP over streamable HTTP with a project key: `memory_recall`, `memory_remember`, `memory_session_brief`, `memory_forget`. |

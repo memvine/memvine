@@ -1,5 +1,6 @@
 """People and their sign-in: accounts with email and password, organization membership with a role
-(owner, admin, member), invite links, and sign-in sessions (mv_us_ tokens, stored hashed).
+(owner, admin, member), invite links, password reset links, and sign-in sessions (mv_us_ tokens,
+stored hashed).
 
 Sign-up follows MEMVINE_SIGNUP: open (anyone who can reach the server; without an invite they get
 their own organization), invite (an invite link is required), closed. Passwords are hashed with
@@ -29,6 +30,8 @@ router = APIRouter()
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MIN_PASSWORD = 10
 INVITE_DAYS = 7
+RESET_HOURS = 24
+RESET_PREFIX = "mv_rs_"
 
 
 # ------------------------------------------------------------------ passwords and tokens
@@ -130,6 +133,31 @@ def _session_admin(request: Request, user, org, role: str) -> None:
     """Lets the audit log name who signed up or joined, though the request carried no token."""
     request.state.admin = Admin(org_id=org["id"], org_slug=org["slug"], user_id=user["id"], user_email=user["email"], role=role)
     request.state.audit_target = user["email"]
+
+
+async def issue_reset(conn, user_id: UUID, created_by: str) -> tuple[str, datetime]:
+    """A one-time password reset token for a person (shown once; only its hash is kept). Earlier
+    unused links for the same person stop working."""
+    token = RESET_PREFIX + secrets.token_urlsafe(32)
+    expires = datetime.now(UTC) + timedelta(hours=RESET_HOURS)
+    await conn.execute("UPDATE password_resets SET revoked_at = now() WHERE user_id = %s AND used_at IS NULL AND revoked_at IS NULL",
+                       (user_id,))
+    await conn.execute("INSERT INTO password_resets (user_id, token_hash, created_by, expires_at) VALUES (%s, %s, %s, %s)",
+                       (user_id, hash_key(token), created_by, expires))
+    return token, expires
+
+
+RESET_INVALID = {"code": "reset-invalid", "message": "This reset link is used, replaced or expired. Ask for a new one."}
+
+
+async def _valid_reset(conn, token: str):
+    row = await (await conn.execute(
+        "SELECT r.id, r.user_id, u.email, u.name FROM password_resets r JOIN users u ON u.id = r.user_id "
+        "WHERE r.token_hash = %s AND r.used_at IS NULL AND r.revoked_at IS NULL AND r.expires_at > now()",
+        (hash_key(token),))).fetchone()
+    if not row:
+        raise HTTPException(404, RESET_INVALID)
+    return row
 
 
 # ------------------------------------------------------------------ sign-up, login, sessions
@@ -311,6 +339,48 @@ async def change_password(body: PasswordChange, request: Request, admin: Admin =
                            (admin.user_id, hash_key(_bearer(request))))
 
 
+class ResetLookup(BaseModel):
+    token: str = Field(max_length=200)
+
+
+@router.post("/v1/auth/reset/describe")
+async def describe_reset(body: ResetLookup, request: Request):
+    """Whose password a reset link sets, for the reset page. Public; a POST, so the token never lands
+    in an access log."""
+    async with request.app.state.pool.connection() as conn:
+        row = await _valid_reset(conn, body.token)
+    return {"email": row["email"]}
+
+
+class ResetPassword(BaseModel):
+    token: str = Field(max_length=200)
+    password: str = Field(max_length=200)
+
+
+@router.post("/v1/auth/reset", status_code=204)
+async def reset_password(body: ResetPassword, request: Request):
+    """Set a new password with a reset link. The link is used up, and every sign-in the person had
+    ends: they sign in again with the new password."""
+    if len(body.password) < MIN_PASSWORD:
+        raise HTTPException(422, {"code": "weak-password", "message": f"Use at least {MIN_PASSWORD} characters"})
+    new_hash = await hash_password_async(body.password)
+    async with request.app.state.pool.connection() as conn, conn.transaction():
+        row = await _valid_reset(conn, body.token)
+        # Claim the link first, conditionally: of two requests racing on one link, only one wins.
+        claimed = await (await conn.execute(
+            "UPDATE password_resets SET used_at = now() WHERE id = %s AND used_at IS NULL AND revoked_at IS NULL "
+            "AND expires_at > now() RETURNING id", (row["id"],))).fetchone()
+        if not claimed:
+            raise HTTPException(404, RESET_INVALID)
+        await conn.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, row["user_id"]))
+        await conn.execute("UPDATE user_sessions SET revoked_at = now() WHERE user_id = %s AND revoked_at IS NULL", (row["user_id"],))
+        org = await (await conn.execute(
+            "SELECT o.id, o.slug, m.role FROM memberships m JOIN organizations o ON o.id = m.org_id "
+            "WHERE m.user_id = %s ORDER BY m.created_at LIMIT 1", (row["user_id"],))).fetchone()
+    if org:
+        _session_admin(request, {"id": row["user_id"], "email": row["email"]}, org, org["role"])
+
+
 # ------------------------------------------------------------------ members and invites
 
 @router.get("/v1/org/members")
@@ -369,6 +439,31 @@ async def remove_member(user_id: UUID, request: Request, admin: Admin = Depends(
         await conn.execute("UPDATE user_sessions SET revoked_at = now() WHERE org_id = %s AND user_id = %s AND revoked_at IS NULL",
                            (admin.org_id, user_id))
     request.state.audit_target = member["email"]
+
+
+@router.post("/v1/org/members/{user_id}/reset", status_code=201)
+async def create_reset_link(user_id: UUID, request: Request, admin: Admin = Depends(require_manager)):
+    """A one-time password reset link for a member who cannot sign in (shown once; the console turns
+    it into <console>/reset?token=<token>). Only an owner can make one for an owner. A person who
+    belongs to other organizations too gets theirs from the server's operator
+    (`memvine-server reset-link`): one organization's admin does not open an account that reaches
+    into another."""
+    if admin.is_operator:
+        raise HTTPException(400, {"code": "org-required", "message": "Call as a member of an organization"})
+    if admin.user_id == user_id:
+        raise HTTPException(400, {"code": "self-reset", "message": "Change your own password under Settings"})
+    async with request.app.state.pool.connection() as conn, conn.transaction():
+        member = await _member(conn, admin.org_id, user_id)
+        if member["role"] == "owner" and admin.role != "owner":
+            raise HTTPException(403, {"code": "owner-required", "message": "Only an owner can make a reset link for an owner"})
+        others = await (await conn.execute("SELECT count(*) AS n FROM memberships WHERE user_id = %s AND org_id <> %s",
+                                           (user_id, admin.org_id))).fetchone()
+        if others["n"]:
+            raise HTTPException(409, {"code": "other-organizations", "message": (
+                "This person belongs to other organizations too, so their reset link comes from the server's operator")})
+        token, expires = await issue_reset(conn, user_id, admin.actor)
+    request.state.audit_target = member["email"]
+    return {"token": token, "expires_at": expires, "email": member["email"]}
 
 
 class InviteCreate(BaseModel):

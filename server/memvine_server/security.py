@@ -198,6 +198,8 @@ AUTH_LIMITS: dict[str, list[Limit]] = {
     "/v1/auth/accept": [Limit("accept", 20, 600)],
     "/v1/auth/invites/describe": [Limit("invite", 30, 600)],
     "/v1/auth/password": [Limit("password", 20, 600)],
+    "/v1/auth/reset": [Limit("reset", 20, 600)],
+    "/v1/auth/reset/describe": [Limit("reset-describe", 30, 600)],
 }
 LOGIN_FAILURES = Limit("login-fail", 10, 900)       # per account (email) and per address
 PASSWORD_FAILURES = Limit("password-fail", 5, 900)  # per signed-in person

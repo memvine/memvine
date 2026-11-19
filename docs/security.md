@@ -14,7 +14,7 @@ proxy that terminates TLS (`deploy/README.md`).
 | Operator key | `MEMVINE_MANAGEMENT_KEY` | the person running the server | every organization; creating organizations |
 
 - Keys and session tokens are 256-bit random values, stored as SHA-256 hashes (`api_keys.key_hash`,
-  `org_keys`, `user_sessions.token_hash`, `invites.token_hash`); a database dump holds no usable
+  `org_keys`, `user_sessions.token_hash`, `invites.token_hash`, `password_resets.token_hash`); a database dump holds no usable
   credential. A lookup by hash needs no constant-time compare; the operator key, the only
   credential held in configuration, is compared with `hmac.compare_digest`.
 - Passwords: scrypt, N=2^14, r=8, p=5 (OWASP's 16 MiB profile), 16-byte salt, run off the event
@@ -24,6 +24,14 @@ proxy that terminates TLS (`deploy/README.md`).
   organization and a password change (other sessions) revoke them on the server.
 - Invites: 7 days, single use (claimed with one conditional update, so two people racing on one
   link cannot both join), optionally bound to one email, revocable.
+- Password reset links (`mv_rs_`): 24 hours, single use (claimed the same way), and a newer link for
+  the same person cancels the older. Using one ends every sign-in the person had. An owner or admin
+  makes one for a member of their organization (only an owner for an owner, never for themselves)
+  and passes it on; the link is the credential, so it goes over a channel they trust. A person who
+  also belongs to another organization gets theirs only from the server's operator
+  (`memvine-server reset-link`, run where the server runs; it needs database access, not a key):
+  one organization's admin does not open an account that reaches into another. Both steps are in
+  the audit log.
 
 ## Authorization and tenant isolation
 
@@ -175,7 +183,11 @@ re-checking after redirects.
 - The API does not see the browser's address when the console is not behind a proxy that sets
   `X-Forwarded-For` (then the console's own address is the client for sign-ins made through it).
 - Sign-up answers "an account with this email exists" (account enumeration, rate-limited).
-- No multi-factor sign-in, no SSO, no email verification or password reset by email.
+- No multi-factor sign-in, no SSO, no email verification or password reset by email: a forgotten
+  password is reset with a link from an organization admin or the operator. An admin who makes a
+  reset link for a member can use it, and with it open that member's personal projects; the member
+  notices (their sign-ins end and their password no longer works) and the audit log names the
+  admin. Choose admins accordingly.
 - Project keys do not expire; they are revoked by hand. Session tokens are bearer tokens: a stolen
   cookie works until it expires or the person signs out.
 - Access logs of the hosting platform (uvicorn) include request paths, which can name an identity

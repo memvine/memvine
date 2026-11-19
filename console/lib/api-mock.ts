@@ -597,6 +597,9 @@ export const mockApi: MemvineApi = {
     if (i >= 0) mockInvites.splice(i, 1);
   },
   async changePassword() {},
+  async createResetLink() {
+    return { token: `mv_rs_mock${Math.random().toString(36).slice(2, 10)}` };
+  },
   async switchOrg() {
     return "";
   },

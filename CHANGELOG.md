@@ -21,6 +21,8 @@ its own changelog in `legacy/cli/`.)
 - Each person's sessions go to a project only they can open. A team space holds only the memories
   people chose to share, and every agent on the team is briefed from both.
 - Review in the console (keep, wrong, forget); forgotten memories are never learned again.
+- A forgotten password is reset with a one-time link: an owner or admin makes it in Settings, or
+  the server's operator with `memvine-server reset-link` (also for a locked-out owner).
 
 **Agents**
 - Claude Code plugin (0.8.1) and Codex plugin, each installed from its marketplace.

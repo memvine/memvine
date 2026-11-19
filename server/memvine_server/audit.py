@@ -35,6 +35,8 @@ AUDITED: list[tuple[str, re.Pattern, str]] = [
     ("POST", re.compile(r"^/v1/auth/login$"), "account.login"),
     ("POST", re.compile(r"^/v1/auth/accept$"), "member.join"),
     ("POST", re.compile(r"^/v1/auth/password$"), "account.password"),
+    ("POST", re.compile(r"^/v1/auth/reset$"), "account.reset"),
+    ("POST", re.compile(r"^/v1/org/members/([^/]+)/reset$"), "member.reset_link"),
     ("PATCH", re.compile(r"^/v1/org/members/([^/]+)$"), "member.role"),
     ("DELETE", re.compile(r"^/v1/org/members/([^/]+)$"), "member.remove"),
     ("POST", re.compile(r"^/v1/org/invites$"), "invite.create"),

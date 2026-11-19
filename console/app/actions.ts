@@ -154,6 +154,34 @@ export async function changePassword(_prev: PasswordState, formData: FormData): 
   }
 }
 
+export interface ResetLinkState {
+  link?: string;
+  email?: string;
+  error?: string;
+}
+
+/** An owner or admin makes a one-time password reset link for a member who cannot sign in. */
+export async function createResetLink(_prev: ResetLinkState, formData: FormData): Promise<ResetLinkState> {
+  const [id, email] = String(formData.get("member") ?? "").split("|");
+  if (!id) return { error: "Choose the person who cannot sign in." };
+  try {
+    const { token } = await api.createResetLink(id);
+    return { link: `${await consoleOrigin()}/reset?token=${token}`, email };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message.replace(/^\d+ [a-z-]+: /, "") : "Could not create the reset link." };
+  }
+}
+
+/** Sets a new password with a reset link (no sign-in needed); the person then signs in with it. */
+export async function resetPassword(_prev: PasswordState, formData: FormData): Promise<PasswordState> {
+  const { publicCall } = await import("@/lib/api-live");
+  const password = String(formData.get("password") ?? "");
+  if (password !== String(formData.get("confirm") ?? "")) return { error: "The two passwords differ." };
+  const r = await publicCall<void>("/v1/auth/reset", { token: String(formData.get("token") ?? ""), password });
+  if (!r.ok) return { error: r.message };
+  return { ok: true };
+}
+
 export async function switchProject(formData: FormData) {
   await api.selectProject(String(formData.get("project")));
   revalidatePath("/", "layout");
