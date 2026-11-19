@@ -3,18 +3,56 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Memvine</title>
+  <title>Memvine: open-source memory for AI agents (Claude Code, Codex, MCP)</title>
   <meta name="description" content="Memvine is shared memory for a team's coding agents. Teach one agent a rule once, and every teammate's agent knows it the next day.">
-  <meta property="og:title" content="Memvine">
+  <link rel="canonical" href="https://www.memvine.dev/">
+  <meta property="og:site_name" content="Memvine">
+  <meta property="og:title" content="Memvine: memory for AI agents">
   <meta property="og:description" content="Shared memory for a team's coding agents. Teach one agent once, and every agent on your team remembers.">
-  <meta property="og:url" content="https://memvine.dev/">
+  <meta property="og:url" content="https://www.memvine.dev/">
   <meta property="og:type" content="website">
+  <meta property="og:image" content="https://www.memvine.dev/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Memvine. Memory that grows with your team.">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://www.memvine.dev/#website",
+        "name": "Memvine",
+        "url": "https://www.memvine.dev/"
+      },
+      {
+        "@type": "Organization",
+        "@id": "https://www.memvine.dev/#organization",
+        "name": "Memvine",
+        "url": "https://www.memvine.dev/",
+        "logo": "https://www.memvine.dev/icon.svg",
+        "sameAs": ["https://github.com/memvine/memvine"]
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "Memvine",
+        "url": "https://www.memvine.dev/",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS, Linux, Windows",
+        "license": "https://opensource.org/licenses/MIT",
+        "description": "Open-source memory for AI agents. Memvine keeps what stays true from each agent session, shares it with the team, and briefs the next session. Works with Claude Code, Codex, any MCP client, and TypeScript and Python libraries.",
+        "publisher": { "@id": "https://www.memvine.dev/#organization" }
+      }
+    ]
+  }
+  </script>
   <meta name="theme-color" content="#0b1310">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
   <canvas id="vine" aria-hidden="true"></canvas>
@@ -41,7 +79,7 @@
         <span class="line"><span>Memory that grows</span></span>
         <span class="line"><span>with your team.</span></span>
       </h1>
-      <p class="lede">Shared memory for your team's coding agents, across Claude Code, Codex and any MCP client.</p>
+      <p class="lede">Open-source, shared memory for your team's coding agents, across Claude Code, Codex and any MCP client.</p>
       <div class="actions">
         <a class="button primary" href="#connect">Connect an agent</a>
         <a class="button" href="https://app.memvine.dev">Open the console</a>
@@ -92,13 +130,22 @@ Run nothing else. Tell me what each command printed, never the key, and tell me 
       </details>
     </section>
 
+    <section class="connect own" id="self-host" aria-labelledby="own-title">
+      <h2 id="own-title">Run it yourself.</h2>
+      <p class="also">Memvine is open source under the MIT license. One Docker command starts the server and the console on a machine you control. The hosted service at app.memvine.dev is open by invitation.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/memvine/memvine/blob/main/deploy/README.md">Self-host with Docker</a>
+        <a class="button" href="https://github.com/memvine/memvine">View the code</a>
+      </div>
+    </section>
+
     <section class="close">
       <p class="statement">Memory grows on the trellis of your work. When the work moves, the vine notices.</p>
     </section>
   </main>
 
   <footer class="bottom">
-    <span>Memvine</span>
+    <span>Memvine is open source (MIT)</span>
     <nav aria-label="Footer">
       <a href="/how-it-works">How it works</a>
       <a href="https://github.com/memvine/memvine">GitHub</a>

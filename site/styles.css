@@ -168,6 +168,8 @@ a:focus-visible, .button:focus-visible {
 /* Recall and connect */
 
 .recall, .connect { padding: 8vh var(--gutter) 14vh; }
+/* Run it yourself: the hero's buttons, without the hero's entrance animation. */
+.own .actions { margin-top: 36px; opacity: 1; animation: none; }
 
 h2 {
   margin: 0;
