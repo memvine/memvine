@@ -354,16 +354,32 @@ def render(subject_kind: str, subject: str, lines: list[dict], description: str 
     return "\n".join([head, *body])
 
 
-async def brief_sections(conn, project_id: UUID, identity: str | None) -> tuple[str, int]:
-    """The caller's person profile, then the project profile: what a session-start brief opens with."""
+async def _said_elsewhere(conn, lines: list[dict], shown: set[str]) -> list[dict]:
+    """The lines that say something the brief does not already say: a line whose every cited memory
+    is served word for word elsewhere in the brief (a standing rule, always on) is left out."""
+    ids = {i for line in lines for i in line.get("memory_ids", [])}
+    if not shown or not ids:
+        return lines
+    statements = {str(r["id"]): r["statement"] for r in await (await conn.execute(
+        "SELECT id, statement FROM memory_items WHERE id = ANY(%s::uuid[])", (list(ids),))).fetchall()}
+    return [line for line in lines
+            if not (line.get("memory_ids") and all(statements.get(i) in shown for i in line["memory_ids"]))]
+
+
+async def brief_sections(conn, project_id: UUID, identity: str | None, shown: set[str] | None = None) -> tuple[str, int]:
+    """The caller's person profile, then the project profile: what a session-start brief opens with.
+    `shown`: statements the brief serves anyway (its standing rules); profile lines that only restate
+    them are left out, so the brief says nothing twice."""
     parts = []
-    if identity:
-        person = await get(conn, project_id, "person", identity)
-        if person and person["text"]:
-            parts.append(person["text"])
-    project = await get(conn, project_id, "project", "")
-    if project and project["text"]:
-        parts.append(project["text"])
+    targets = [("person", identity)] if identity else []
+    for kind, subject in [*targets, ("project", "")]:
+        profile = await get(conn, project_id, kind, subject or "")
+        if not profile:
+            continue
+        lines = await _said_elsewhere(conn, profile["lines"], shown or set())
+        text = render(kind, subject or "", lines, profile["description"] or "") if lines != profile["lines"] else profile["text"]
+        if text:
+            parts.append(text)
     text = "\n\n".join(parts)
     return text, tokens_of(text) if text else 0
 

@@ -42,7 +42,7 @@ cd server && .venv/bin/python ../benchmark/memory/check.py --agent-e2e  # + real
 ```
 Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local machine) or
 `anthropic` with `ANTHROPIC_API_KEY`. (`openai` is any OpenAI-compatible server, for people who
-self-host; nothing is measured on it, and quoted results are Claude's.) Last results: 28/28 (16 Nov); agent test 9/9 right with memory,
+self-host; nothing is measured on it, and quoted results are Claude's.) Last results: 28/28 (19 Nov); agent test 9/9 right with memory,
 0/9 without. Don't ship a change to extraction, reconciliation or recall without running it.
 
 ## Decisions to keep

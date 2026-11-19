@@ -229,12 +229,19 @@ async def test_the_session_start_brief_carries_profiles_and_prompt_recall_does_n
     nums = await numbers(app, pid, "person", "Priya")
     await build(client, app, pid, "person", "Priya", [{"text": "Prefers async review over meetings.", "cite": cite(nums, "async review")}])
     pnums = await numbers(app, pid, "project", "")
-    await build(client, app, pid, "project", "", [{"text": "Never deploy on Fridays.", "cite": cite(pnums, "Never deploy on Fridays")}])
+    await build(client, app, pid, "project", "", [
+        {"text": "Never deploy on Fridays.", "cite": cite(pnums, "Never deploy on Fridays")},
+        {"text": "Refunds over $500 need a human approver.", "cite": cite(pnums, "Refunds over $500")}])
 
     brief = (await client.post("/v1/recall", json={"query": "billing recent decisions, conventions and open work", "identity": "Priya",
                                                     "profiles": True, "budget": 1500})).json()
     assert brief["profiles"].startswith("=== memvine · about Priya ===\n- Prefers async review over meetings.")
-    assert "=== memvine · this project ===\n- Never deploy on Fridays." in brief["profiles"]
+    assert "=== memvine · this project ===\n- Refunds over $500 need a human approver." in brief["profiles"]
+    # Nothing twice: the Friday rule is a standing rule, served in its own section, so the profile
+    # line that only restates it is left out of the brief (the profile itself keeps it).
+    assert "Never deploy on Fridays." in brief["standing"]
+    assert "Fridays" not in brief["profiles"]
+    assert "Never deploy on Fridays." in (await client.get("/v1/profiles/project")).json()["text"]
     assert 0 < brief["profile_tokens"] < 100 and brief["tokens"] + brief["profile_tokens"] <= 1500
     prompt = (await client.post("/v1/recall", json={"query": "when is the public launch?", "identity": "Priya"})).json()
     assert prompt["profiles"] == "" and "about Priya" not in prompt["briefing"]
@@ -251,6 +258,7 @@ async def test_the_session_start_brief_carries_profiles_and_prompt_recall_does_n
         text = (await client.get("/v1/sessions/s-prof/brief")).json()["text"]
     assert text.startswith("=== memvine · this session's working state ===")
     assert "=== memvine · about Priya ===\n- Prefers async review" in text and "=== memvine · this project ===" in text
+    assert text.count("Fridays") <= 1, "the session brief says the Friday rule once, not in the profile and again as standing"
 
     # Only managers rebuild; members read.
     assert (await client.post("/v1/profiles/rebuild", json={"subject_kind": "person"})).status_code == 400

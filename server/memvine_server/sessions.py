@@ -176,20 +176,24 @@ async def brief(conn, embedder: Embedder, project_id: UUID, session: SessionOut,
     text = render_state(session)
     spent = max(1, len(text) // 4)
     about, about_tokens = await brief_sections(conn, project_id, session.identity)
-    if about and spent + about_tokens <= budget:
-        text, spent = f"{text}\n\n{about}", spent + about_tokens
+    if not (about and spent + about_tokens <= budget):
+        about, about_tokens = "", 0
+    spent += about_tokens
+    memory = ""
     query = " ".join([session.state.goal, *session.state.in_play[:3], *session.open_questions_for_recall()]) if session.state.goal else ""
     if query.strip() and budget - spent > 200:
         audiences = await audiences_for(conn, project_id, session.identity) if session.identity else ["project"]
         recalled = await recall(conn, embedder, project_id, RecallRequest(query=query[:1000], budget=budget - spent), audiences)
         if not recalled.abstained:
-            text = f"{text}\n\n{recalled.briefing}"
-            spent += recalled.tokens
+            memory, spent = recalled.briefing, spent + recalled.tokens
         elif recalled.standing:  # nothing relevant to the goal, but the project's rules still apply
-            section = "\n".join([STANDING_HEADER, *(f"- {s}" for s in recalled.standing)])
-            text = f"{text}\n\n{section}"
-            spent += max(1, len(section) // 4)
-    return text, spent
+            memory = "\n".join([STANDING_HEADER, *(f"- {s}" for s in recalled.standing)])
+            spent += max(1, len(memory) // 4)
+        if about and recalled.standing:
+            # The standing rules come below in their own section: profile lines that only restate them go.
+            shorter, shorter_tokens = await brief_sections(conn, project_id, session.identity, set(recalled.standing))
+            about, spent = shorter, spent - about_tokens + shorter_tokens
+    return "\n\n".join(part for part in (text, about, memory) if part), spent
 
 
 # SessionOut is a pydantic model; a small helper keeps brief() readable.

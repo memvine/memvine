@@ -282,6 +282,9 @@ async def serve_recall(conn, body: RecallRequest, request: Request, principal: P
     # The console's playground (no project key) is a person looking, not an agent using memory.
     result = await run_recall(conn, request.app.state.embedder, principal.project_id, body, audiences,
                               track=principal.key_id is not None, llm=getattr(request.app.state, "llm", None))
+    if body.profiles and result.standing:
+        # The standing rules are served in their own section: profile lines that only restate them go.
+        profile_text, profile_tokens = await profile_ops.brief_sections(conn, principal.project_id, body.identity, set(result.standing))
     result.profiles, result.profile_tokens = profile_text, profile_tokens
     request.state.log_detail = recall_log_detail(result)
     if principal.key_id is not None:  # the console's playground is not billed
