@@ -134,7 +134,7 @@ def _short(dt: datetime) -> str:
 
 # What an item is when it has no category (a fact stored directly without one).
 KIND_WORD = {"semantic": "fact", "procedural": "procedure", "episodic": "event", "prospective": "plan", "preference": "preference"}
-# Trust words (docs/how-memory-works.md), shown where trust is lower than a person saying it or a run showing it.
+# Trust words (docs/memory-reference.md), shown where trust is lower than a person saying it or a run showing it.
 TRUST_WORD = {"claimed": "assistant said, unverified", "inferred": "inferred"}
 NEIGHBOR_CHARS = 120
 

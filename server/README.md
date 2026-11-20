@@ -7,7 +7,8 @@ recall returns a budgeted briefing an agent can use as is.
 
 What a memory is, the edges between memories (`supersedes`, `contradicts`,
 `anchored`, `decided_in`, `extends`, `derived`) and how memory is forgotten:
-[How Memvine memory works](../docs/how-memory-works.md). This page is the
+[How Memvine memory works](../docs/how-memory-works.md), with every detail in
+[the memory reference](../docs/memory-reference.md). This page is the
 operator's and API reference.
 
 Design: the platform design doc, sections "Core concepts and data model",
@@ -77,7 +78,7 @@ curl -s localhost:8400/v1/recall -H "Authorization: Bearer $KEY" -H 'content-typ
 | `GET /v1/jobs`, `POST /v1/jobs/{id}/retry` | Synthesis queue with per-episode results and errors; retry a failed job. |
 | `GET /v1/requests`, `GET /v1/usage` | Request log (a recall's `detail` says what it served or why it abstained); billable calls and credits per day. |
 | `PUT/GET/DELETE /v1/audiences/{slug}`, `PUT/GET/DELETE /v1/identities/{id}` | Who may read which memory (see Access). |
-| `GET/POST /v1/projects`, `PATCH/DELETE /v1/projects/{slug}`, `GET/POST /v1/projects/{slug}/keys`, `DELETE .../keys/{id}` | Projects (name, tags, `monthly_credit_cap`, `retention_days`, `description`, `recall_min_relevance`, `recall_half_life_days`, `memory_mode`: `coding` or `conversation`, see `docs/how-memory-works.md`) and project keys, under a management key. Delete needs `?confirm=<slug>`. On create, `personal: true` makes a project only its creator opens (any member may; a key may not), and `team_space: true` makes one that refuses conversation and holds shared memories, with `share_policy`: `ask` or `auto` (changeable; `team_space` cannot be turned on for a project that already holds sessions or sources: 409 `has-conversation`). |
+| `GET/POST /v1/projects`, `PATCH/DELETE /v1/projects/{slug}`, `GET/POST /v1/projects/{slug}/keys`, `DELETE .../keys/{id}` | Projects (name, tags, `monthly_credit_cap`, `retention_days`, `description`, `recall_min_relevance`, `recall_half_life_days`, `memory_mode`: `coding` or `conversation`, see `docs/memory-reference.md`) and project keys, under a management key. Delete needs `?confirm=<slug>`. On create, `personal: true` makes a project only its creator opens (any member may; a key may not), and `team_space: true` makes one that refuses conversation and holds shared memories, with `share_policy`: `ask` or `auto` (changeable; `team_space` cannot be turned on for a project that already holds sessions or sources: 409 `has-conversation`). |
 | `GET /v1/org`, `GET/POST /v1/org/keys`, `DELETE /v1/org/keys/{id}` | Who is calling (person, role, organizations), and the organization's keys (never the last one). |
 | `POST /v1/auth/signup`, `/login`, `/logout`, `/switch`, `/accept`, `/password`; `GET /v1/auth/config`, `POST /v1/auth/invites/describe` | Accounts: email and password, sign-in sessions (`mv_us_`), invite links, organization switching. Sign-up follows `MEMVINE_SIGNUP` (`open`, `invite`, `closed`). |
 | `GET /v1/org/members`, `PATCH/DELETE /v1/org/members/{user}`, `GET/POST /v1/org/invites`, `DELETE /v1/org/invites/{id}` | People and roles (owner, admin, member), invite links. |

@@ -18,7 +18,7 @@ for work in progress, and serves recall back into each session.
 - `legacy/cli/`: the earlier git-native CLI (npm `memvine`), a separate tool with its own package,
   tests and benchmark. Not part of the service; leave it alone unless asked.
 - `deploy/`: self-hosting with Docker (`deploy/README.md`). The hosted service's own setup is in the private repository `memvine/memvine-cloud`.
-- `docs/how-memory-works.md`; `docs/plans/` holds parked plans (graph work: on hold, below).
+- `docs/how-memory-works.md` (the guide), `docs/memory-reference.md` (every detail); `docs/plans/` holds parked plans (graph work: on hold, below).
 
 ## Setup and tests
 

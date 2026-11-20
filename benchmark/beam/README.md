@@ -155,7 +155,7 @@ the two arms with each other, on six questions per category.
 | **overall** | **0.894** | **0.869** |
 
 What it shows: the two are level except on summaries, where digests of the conversation
-(`docs/how-memory-works.md`) carry the points a ranking of excerpts misses. Plain search is a little
+(`docs/memory-reference.md`) carry the points a ranking of excerpts misses. Plain search is a little
 ahead on information extraction and preferences, by one question's worth. Ingestion took 25 to 60
 minutes per 100K conversation on the local model; plain search needs only embeddings.
 

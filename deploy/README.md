@@ -87,12 +87,12 @@ an owner or admin creates one **Team space**, and gives its key to the team; eac
 their own project (**Only me**), connects their agent to it with the command shown, and then adds
 the team space with `/memvine:team mv_sk_<team space key> https://api.example.com`. Sessions go to
 each person's own project, which nobody else in the organization can open; the team space refuses
-sessions and holds what people share (`docs/how-memory-works.md`, "Your own memory and the
+sessions and holds what people share (`docs/how-memory-works.md`, "Your memory and your
 team's"). Whoever holds the operator key and the database can still read everything on the server.
 
 A project is in `coding` mode unless you choose otherwise: it keeps few, durable memories. Choose
 `conversation` for one person's long conversation with an assistant
-(`memory_mode` on the project; `docs/how-memory-works.md`).
+(`memory_mode` on the project; `docs/memory-reference.md`).
 
 ## 3. Operate
 
