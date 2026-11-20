@@ -404,9 +404,10 @@ button.button { font: inherit; font-size: 16.5px; font-weight: 500; letter-spaci
 .see .tour-track.pinned::after { height: clamp(760px, 125vh, 1200px); }
 .see .tour-track.pinned .tour-pin { position: sticky; top: var(--tour-top, 20px); }
 .see .tour-track.pinned .tour { position: static; }
-.see .tour { margin-top: 48px; grid-template-columns: minmax(280px, 430px) minmax(0, 1fr); column-gap: clamp(28px, 4vw, 64px); max-width: 1220px; }
+/* (56px short of the full width: with the gutter, that is the margin the vine grows down, beside the screens) */
+.see .tour { margin-top: 48px; grid-template-columns: minmax(260px, min(430px, 40%)) minmax(0, 1fr); column-gap: clamp(28px, 4vw, 64px); max-width: min(1220px, calc(100% - 56px)); }
 .see .step > button { padding-bottom: 30px; }
-.see .step > button .name { font-size: clamp(21px, 1.75vw, 26px); }
+.see .step > button .name { font-size: clamp(19px, 1.75vw, 26px); }
 .see .step > button .what {
   max-height: 0;
   margin-top: 0;
@@ -437,7 +438,7 @@ button.button { font: inherit; font-size: 16.5px; font-weight: 500; letter-spaci
   .step > figure { opacity: 1; visibility: visible; margin-bottom: 44px; }
   .screen { max-height: 560px; }
   .talk { padding: 18px 18px; font-size: 15px; }
-  .see .tour { margin-top: 44px; }
+  .see .tour { margin-top: 44px; max-width: none; }
   .see .step > button .what { max-height: none; margin-top: 5px; opacity: 1; }
   .see .step:last-child > figure { margin-bottom: 0; }
   .screen.wide { max-width: 400px; max-height: 520px; aspect-ratio: auto; }

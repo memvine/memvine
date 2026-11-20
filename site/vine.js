@@ -19,6 +19,7 @@
   let pts = [];          // sampled stem: {x, y, s (arc length), t (tangent angle)}
   let total = 0;         // full stem length
   let leaves = [];       // {s, side, size, tilt, curl}
+  let beside = [];       // screens the stem passes beside, not behind: {top, bottom, x, amp, leaf}
   let grown = 0;         // length drawn now
   let target = 0;        // length the reader has earned (monotonic)
   let lastTime = 0;
@@ -51,6 +52,20 @@
     scale = clamp(W / 1280, 0.5, 1);
     const phone = W < 720;
 
+    // The console screens are solid, so a stem or leaf that slips behind one is cut off at its edge.
+    // Beside each of them the stem keeps to the margin on the right, and its leaves stay small
+    // enough to fit there. A pinned screen travels down its track, so the whole track counts.
+    beside = [];
+    for (const track of document.querySelectorAll(".tour-track")) {
+      const screens = [...track.querySelectorAll(".screen")].map((e) => e.getBoundingClientRect()).filter((b) => b.width > 0);
+      if (!screens.length) continue;
+      const t = track.getBoundingClientRect();
+      const right = Math.max(...screens.map((b) => b.right));
+      const room = W - right;                                   // the margin the stem has to itself
+      const x = W - clamp(room * 0.3, 9, 64);
+      beside.push({ top: t.top + scrollY, bottom: t.bottom + scrollY, x, amp: clamp((room - 60) / 8, 0, 12), leaf: x - right - 16 });
+    }
+
     const r = rng(7);
     const axis = phone ? W - 18 : W < 1100 ? W * 0.76 : W * 0.7;
     const amp = phone ? 12 : 72;
@@ -64,7 +79,10 @@
       y += 230 + r() * 130;
       i++;
       const settle = Math.min(1, i / 2.5);
-      way.push({ x: lerp(topX, axis, settle) + (Math.sin(i * 1.05) * amp + (r() - 0.5) * amp * 0.9) * (0.5 + 0.5 * settle), y });
+      let x = lerp(topX, axis, settle) + (Math.sin(i * 1.05) * amp + (r() - 0.5) * amp * 0.9) * (0.5 + 0.5 * settle);
+      const lane = laneAt(y);
+      if (lane) x = lerp(x, lane.x + Math.sin(i * 1.7) * lane.amp, lane.w);
+      way.push({ x, y });
     }
 
     pts = [];
@@ -91,11 +109,31 @@
     let ls = 260 * scale, side = 1;
     while (ls < total - 120) {
       // A leaf near the right edge opens to the left, so none is cut off; on a phone that is all of them.
-      const edge = phone || pointAt(ls).x > W - 150 * scale;
-      leaves.push({ s: ls, side: edge ? -1 : side, size: (0.78 + r2() * 0.5) * scale * (phone ? 0.8 : 1), tilt: (r2() - 0.5) * (phone ? 0.9 : 0.5), curl: !phone && r2() > 0.62 });
+      const at = pointAt(ls);
+      const edge = phone || at.x > W - 150 * scale;
+      const leaf = { s: ls, side: edge ? -1 : side, size: (0.78 + r2() * 0.5) * scale * (phone ? 0.8 : 1), tilt: (r2() - 0.5) * (phone ? 0.9 : 0.5), curl: !phone && r2() > 0.62 };
+      // Beside a screen: a leaf opens into the margin and is no longer than the margin is wide
+      // (a leaf is about 111 long at size 1); where there is no room for one, the stem goes bare.
+      const b = beside.find((k) => at.y > k.top - 170 && at.y < k.bottom + 170);
+      if (b) { leaf.side = -1; leaf.curl = false; leaf.size = Math.min(leaf.size, b.leaf / 111); }
+      if (!b || leaf.size >= 0.34) leaves.push(leaf);
       side = -side;
       ls += (150 + r2() * 110) * scale;
     }
+  }
+
+  // How far the stem has moved into the margin beside a screen at this height: fully for the whole
+  // of its track and a waypoint's distance either side (waypoints are at most 360 apart, so the stem
+  // is in the margin before the screen starts), easing in and out over the stretch before and after.
+  function laneAt(y) {
+    let best = null;
+    for (const b of beside) {
+      const away = y < b.top - 380 ? b.top - 380 - y : y > b.bottom + 380 ? y - b.bottom - 380 : 0;
+      const t = clamp(1 - away / 520, 0, 1);
+      const w = t * t * (3 - 2 * t);
+      if (w > 0 && (!best || w > best.w)) best = { w, x: b.x, amp: b.amp };
+    }
+    return best;
   }
 
   function arcAtY(y) {
@@ -355,6 +393,7 @@
       track.classList.toggle("pinned", fits);
       follow();
       play();
+      rebuild();                                    // the screens may have moved: the stem keeps beside them
     };
 
     steps.forEach((step, i) => {

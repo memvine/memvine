@@ -1,7 +1,7 @@
 // A screenshot of one console page, through Chrome's DevTools protocol, with no packages.
 //
 //   node shot.mjs <project-slug> <out.png> <path> [--width 430] [--height 1400] [--until "Heading"]
-//                 [--selector css] [--pad 0] [--click "text"] [--top "text"] [--hover "text"] [--tap "text"] [--scroll px] [--text css] [--wait ms] [--scale 2] [--full]
+//                 [--selector css] [--pad 0] [--click "text"] [--top "text"] [--hover "text"] [--tap "text"] [--scroll px] [--text css] [--wait ms] [--still] [--scale 2] [--full]
 //
 // --until stops the picture at the bottom of the card whose heading reads exactly that text.
 // The console is MEMVINE_DEMO_CONSOLE (http://127.0.0.1:3119), running against a server with an
@@ -46,7 +46,8 @@ const fail = (message) => { console.error(message); ws.close(); chrome.kill(); p
 
 await send("Page.enable");
 await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: +opt("scale", 2), mobile: false });
-await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "dark" }] });
+// --still asks for reduced motion, so a page that animates is pictured at rest.
+await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "dark" }, ...(rest.includes("--still") ? [{ name: "prefers-reduced-motion", value: "reduce" }] : [])] });
 await send("Network.setCookie", { name: "mv_project", value: slug, url: ORIGIN, path: "/" });
 // A console where people sign in (no operator key): MEMVINE_DEMO_TOKEN is that person's sign-in.
 if (process.env.MEMVINE_DEMO_TOKEN) await send("Network.setCookie", { name: "mv_key", value: process.env.MEMVINE_DEMO_TOKEN, url: ORIGIN, path: "/" });
