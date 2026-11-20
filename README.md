@@ -4,7 +4,7 @@
 
 <h1 align="center">Memvine</h1>
 
-<p align="center"><strong>Memory for your agents. Memory for your team.</strong><br />One agent learns it. Every agent knows it.</p>
+<p align="center"><strong>Your coding agent's memory, your team's knowledge.</strong><br />One agent learns it. Every agent knows it.</p>
 
 <p align="center"><a href="#quick-start">Quick start</a> · <a href="#how-it-works">How it works</a> · <a href="#does-it-work">Does it work?</a> · <a href="docs/how-memory-works.md">Documentation</a> · <a href="ROADMAP.md">Roadmap</a> · <a href="https://memvine.dev">Website</a></p>
 
