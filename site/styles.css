@@ -165,9 +165,9 @@ a:focus-visible, .button:focus-visible {
   padding: 8vh var(--gutter) 16vh;
 }
 
-/* Recall and connect */
+/* Connect */
 
-.recall, .connect { padding: 8vh var(--gutter) 14vh; }
+.connect { padding: 8vh var(--gutter) 14vh; }
 /* Run it yourself: the hero's buttons, without the hero's entrance animation. */
 .own .actions { margin-top: 36px; opacity: 1; animation: none; }
 
@@ -180,74 +180,6 @@ h2 {
   letter-spacing: -0.028em;
   text-wrap: balance;
 }
-
-/* Said once, remembered after: a short stem down the left, the day it was said at its top and a
-   leaf for each later session. vine.js adds "ready" (hide, then play) and "shown" (in view). */
-
-.teach {
-  --lh: 1.4em;
-  display: grid;
-  gap: 38px;
-  margin: 60px 0 0;
-  padding: 0 0 0 64px;
-  max-width: var(--col);
-  list-style: none;
-  font-size: clamp(20px, 1.7vw, 25px);
-  line-height: 1.4;
-  letter-spacing: -0.012em;
-}
-.teach li { position: relative; text-wrap: balance; }
-.teach li:first-child { font-weight: 500; }
-.teach code { font-family: var(--mono); font-size: 0.86em; letter-spacing: 0; }
-
-/* the stem: each line carries the stretch down to the next one */
-.teach li:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  left: -50px;
-  top: calc(var(--lh) / 2);
-  width: 2px;
-  height: calc(100% + 38px);
-  border-radius: 1px;
-  background: var(--stem);
-  transform-origin: top;
-}
-/* where it was said, then a leaf for each time it was remembered */
-.teach li::before {
-  content: "";
-  position: absolute;
-  z-index: 1;
-  left: -49px;
-  top: calc(var(--lh) / 2 - 10px);
-  width: 38px;
-  height: 20px;
-  background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%22-1 -10 38 20%22%3E%3Cdefs%3E%3ClinearGradient id=%22g%22%3E%3Cstop offset=%220%22 stop-color=%22%235a9a78%22/%3E%3Cstop offset=%221%22 stop-color=%22%23a6d8bb%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d=%22M0 0C8 -10 26 -8 36 0C26 8 8 10 0 0Z%22 fill=%22url%28%23g%29%22 stroke=%22%23bfe9cf%22 stroke-opacity=%22.45%22 stroke-width=%22.6%22/%3E%3Cpath d=%22M2 0H33%22 fill=%22none%22 stroke=%22%23d8f5e3%22 stroke-opacity=%22.4%22 stroke-width=%22.5%22/%3E%3C/svg%3E") no-repeat center / contain;
-  transform: rotate(7deg);
-  transform-origin: left center;
-}
-.teach li:first-child::before {
-  left: -55px;
-  top: calc(var(--lh) / 2 - 6px);
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--sprout);
-  border-radius: 50%;
-  background: var(--night);
-  transform: none;
-}
-
-.teach.ready li { opacity: 0; transform: translateY(6px); }
-.teach.ready li::after { transform: scaleY(0); }
-.teach.ready li:not(:first-child)::before { transform: rotate(-50deg) scale(0); }
-.teach.shown li { opacity: 1; transform: none; transition: opacity 600ms ease, transform 600ms cubic-bezier(0.2, 0.7, 0.15, 1); }
-.teach.shown li::after { transform: none; transition: transform 500ms ease-in-out; }
-.teach.shown li:not(:first-child)::before { transform: rotate(7deg); transition: transform 520ms cubic-bezier(0.3, 1.5, 0.5, 1); }
-.teach.shown li:nth-child(1)::after { transition-delay: 350ms; }
-.teach.shown li:nth-child(2), .teach.shown li:nth-child(2)::before { transition-delay: 800ms; }
-.teach.shown li:nth-child(2)::after { transition-delay: 1150ms; }
-.teach.shown li:nth-child(3), .teach.shown li:nth-child(3)::before { transition-delay: 1600ms; }
-.teach.shown li:nth-child(3)::after { transition-delay: 1950ms; }
-.teach.shown li:nth-child(4), .teach.shown li:nth-child(4)::before { transition-delay: 2400ms; }
 
 /* Connect: one prompt to paste into an agent, shown in full to anyone who opens it */
 
@@ -460,7 +392,36 @@ button.button { font: inherit; font-size: 16.5px; font-weight: 500; letter-spaci
 .talk code { font-family: var(--mono); font-size: 0.88em; }
 .talk .who { display: block; margin-bottom: 3px; font-size: 13.5px; color: var(--ash); }
 
-.how .real { margin: 30px 0 0; max-width: 72ch; font-size: 15.5px; line-height: 1.5; color: var(--ash); }
+.how .real, .see .real { margin: 30px 0 0; max-width: 72ch; font-size: 15.5px; line-height: 1.5; color: var(--ash); }
+
+/* The homepage's own tour: four things the console shows, one screen at a time, on the same stem
+   and leaves. Only the chosen line says more, so the list stays four short sentences. Scrolling
+   moves through them: the heading and the tour stay put (vine.js adds "pinned" when the window can
+   hold them) while this much page scrolls under them. */
+
+.see { padding: 8vh var(--gutter) 14vh; }
+.see .tour-track { margin-top: 0; }
+.see .tour-track.pinned::after { height: clamp(760px, 125vh, 1200px); }
+.see .tour-track.pinned .tour-pin { position: sticky; top: var(--tour-top, 20px); }
+.see .tour-track.pinned .tour { position: static; }
+.see .tour { margin-top: 48px; grid-template-columns: minmax(280px, 430px) minmax(0, 1fr); column-gap: clamp(28px, 4vw, 64px); max-width: 1220px; }
+.see .step > button { padding-bottom: 30px; }
+.see .step > button .name { font-size: clamp(21px, 1.75vw, 26px); }
+.see .step > button .what {
+  max-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 320ms ease, margin-top 320ms ease, opacity 240ms ease;
+}
+.see .step.current > button .what { max-height: 6em; margin-top: 6px; opacity: 1; }
+.see .real { margin-top: 26px; }
+
+/* a wide console screen: the top of the page at the console's narrow layout */
+.screen.wide { width: 100%; max-width: 720px; max-height: none; aspect-ratio: 760 / 580; }
+.screen.wide img { height: 100%; object-fit: cover; object-position: top; }
+/* pinned: the whole screen stays in view, so in a short window it gets narrower, not cut off */
+.see .tour-track.pinned .screen.wide { width: min(100%, max(380px, calc((100vh - 250px) * 1.31))); max-height: none; }
 
 @media (max-width: 860px) {
   .how { padding-top: 104px; }
@@ -476,7 +437,11 @@ button.button { font: inherit; font-size: 16.5px; font-weight: 500; letter-spaci
   .step > figure { opacity: 1; visibility: visible; margin-bottom: 44px; }
   .screen { max-height: 560px; }
   .talk { padding: 18px 18px; font-size: 15px; }
-}
+  .see .tour { margin-top: 44px; }
+  .see .step > button .what { max-height: none; margin-top: 5px; opacity: 1; }
+  .see .step:last-child > figure { margin-bottom: 0; }
+  .screen.wide { max-width: 400px; max-height: 520px; aspect-ratio: auto; }
+  .screen.wide img { height: auto; }
 }
 
 /* Terms and privacy: one column of plain text */
@@ -521,10 +486,7 @@ button.button { font: inherit; font-size: 16.5px; font-weight: 500; letter-spaci
   .hero h1 .line { display: inline; overflow: visible; padding: 0; margin: 0; }
   .hero h1 .line > span { display: inline; transform: none; opacity: 0; animation: appear 900ms ease 120ms forwards; }
   .grows { gap: 16vh; }
-  .teach { padding: 0 44px 0 54px; gap: 30px; }
-  .teach li:not(:last-child)::after { left: -42px; height: calc(100% + 30px); }
-  .teach li::before { left: -41px; }
-  .teach li:first-child::before { left: -47px; }
+  .see .step > button { padding-right: 40px; } /* clear of the vine down the right edge */
   #vine { opacity: 0.62; }
   .bottom { flex-direction: column; align-items: flex-start; }
 }
@@ -534,7 +496,5 @@ button.button { font: inherit; font-size: 16.5px; font-weight: 500; letter-spaci
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .hero h1 .line > span, .lede, .actions { animation: none; transform: none; opacity: 1; }
-  .teach.ready li, .teach.ready li::before, .teach.ready li::after { opacity: 1; transform: none; transition: none; }
-  .teach.ready li:not(:first-child)::before { transform: rotate(7deg); }
-  .step > figure, .step > button::before, .step > button .name { transition: none; }
+  .step > figure, .step > button::before, .step > button .name, .see .step > button .what { transition: none; }
 }

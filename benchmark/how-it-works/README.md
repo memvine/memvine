@@ -32,3 +32,21 @@ console screenshots; its usage is at the top of the file.
 `readme-image.html` lays the same run out as one picture for the repository's README; render it
 with headless Chrome (`--window-size=1600,800 --force-device-scale-factor=1.5 --screenshot`) and save
 it as `docs/images/memvine-run.png`.
+
+## The team example (the homepage's screens)
+
+`team.py` makes the run behind the four screens on [memvine.dev](https://memvine.dev): two people,
+each with a project only they can open, beside one team space. You teach your agent a deploy rule
+and a preference of your own; a teammate teaches theirs why a timeout is long; each shares one
+memory with the team. Real Claude Code sessions, the real plugin and a real model.
+
+```sh
+python3 benchmark/how-it-works/team.py all       # setup, you, teammate, share, shots
+python3 benchmark/how-it-works/team.py publish   # copies the screenshots to site/home-*.png
+```
+
+It needs a server on an empty database, started with `MEMVINE_SIGNUP=open` and a real model, and
+the console running against it **without** an operator key, so people sign in and a personal
+project can be opened (defaults `127.0.0.1:8421` and `127.0.0.1:3121`). The page shows the run of
+20 Nov 2026: your project kept one rule and one preference, the teammate's one gotcha, and the
+team space holds the two that were shared.

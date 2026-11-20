@@ -52,7 +52,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <canvas id="vine" aria-hidden="true"></canvas>
@@ -90,14 +90,74 @@
       <p class="statement">Every session adds a little. Nothing is lost between them.</p>
     </section>
 
-    <section class="recall" aria-labelledby="recall-title">
-      <h2 id="recall-title">Teach one agent once. Every agent on your team remembers.</h2>
-      <ol class="teach">
-        <li>Today, you tell your agent: use <code>make deploy</code>, never <code>kubectl</code>.</li>
-        <li>Tomorrow, a teammate's coding agent deploys with <code>make deploy</code>.</li>
-        <li>Next week, another teammate's coding agent does the same.</li>
-        <li>Next month, your own new session still remembers.</li>
-      </ol>
+    <section class="see" aria-labelledby="see-title">
+      <div class="tour-track">
+      <div class="tour-pin">
+      <h2 id="see-title">See what your agents remember.</h2>
+      <div class="tour">
+        <section class="step current">
+          <button type="button" aria-controls="see-made" aria-current="step">
+            <span class="name">A session becomes a memory</span>
+            <span class="what">You said it once. Memvine kept the rule, with your own words as its source.</span>
+          </button>
+          <figure id="see-made">
+            <div class="screen wide">
+              <picture>
+                <source media="(max-width: 860px)" srcset="home-made-phone.png" width="860" height="1200">
+                <img src="home-made.png" width="1520" height="1160" alt="The Memvine console, a memory's page. The memory reads: Always deploy the billing-api service with make deploy, never with kubectl directly. Its status is active. Under Evidence is the line you said, with Claude Code, billing-api, you@example.com and the time.">
+              </picture>
+            </div>
+          </figure>
+        </section>
+
+        <section class="step">
+          <button type="button" aria-controls="see-decide">
+            <span class="name">You decide what stays</span>
+            <span class="what">Keep a memory, correct it, or forget it. What you forget is never learned again.</span>
+          </button>
+          <figure id="see-decide">
+            <div class="screen wide">
+              <picture>
+                <source media="(max-width: 860px)" srcset="home-decide-phone.png" width="860" height="1200">
+                <img src="home-decide.png" width="1520" height="1160" loading="lazy" alt="The console's Review list in your own project, with two new memories. One is open: it shows the words you said and four buttons, Keep, Wrong, Forget and Share with team. The other is marked as shared with the team.">
+              </picture>
+            </div>
+          </figure>
+        </section>
+
+        <section class="step">
+          <button type="button" aria-controls="see-yours">
+            <span class="name">Your sessions stay yours</span>
+            <span class="what">They go to a project only you can open, whatever role anyone else holds.</span>
+          </button>
+          <figure id="see-yours">
+            <div class="screen wide">
+              <picture>
+                <source media="(max-width: 860px)" srcset="home-yours-phone.png" width="860" height="1200">
+                <img src="home-yours.png" width="1520" height="1160" loading="lazy" alt="The console's Projects page with two projects: billing-api, marked only you, and Northwind team, marked team space.">
+              </picture>
+            </div>
+          </figure>
+        </section>
+
+        <section class="step">
+          <button type="button" aria-controls="see-team">
+            <span class="name">The team gets what you share</span>
+            <span class="what">One memory at a time, with the line it came from. Every teammate's agent is briefed from it.</span>
+          </button>
+          <figure id="see-team">
+            <div class="screen wide">
+              <picture>
+                <source media="(max-width: 860px)" srcset="home-team-phone.png" width="860" height="1200">
+                <img src="home-team.png" width="1520" height="1160" loading="lazy" alt="The team space's memories: a gotcha a teammate shared, that the 90-second export timeout is deliberate, and the deploy rule you shared. Each names who said it.">
+              </picture>
+            </div>
+          </figure>
+        </section>
+      </div>
+      </div>
+      </div>
+      <p class="real">Real screens from one run on 20 November 2026: two people, Claude Code with the Memvine plugin, and a sample repository.</p>
     </section>
 
     <section class="connect" id="connect" aria-labelledby="connect-title">
@@ -155,6 +215,6 @@ Run nothing else. Tell me what each command printed, never the key, and tell me 
     </nav>
   </footer>
 
-  <script src="vine.js?v=3" defer></script>
+  <script src="vine.js?v=5" defer></script>
 </body>
 </html>

@@ -310,15 +310,66 @@
     document.addEventListener("pointerleave", () => { pointer = null; });
   }
 
-  // The short timeline under "Teach one agent once" plays once, when it comes into view.
-  const teach = document.querySelector(".teach");
-  if (teach && "IntersectionObserver" in window) {
-    teach.classList.add("ready");
-    const io = new IntersectionObserver((entries) => {
-      for (const e of entries) if (e.isIntersecting) { teach.classList.add("shown"); io.disconnect(); }
-    }, { threshold: 0.35 });
-    io.observe(teach);
+  // "See what your agents remember": scrolling moves through the four screens. The heading and the
+  // tour stay in place while the page scrolls under them, and choosing a line scrolls to it. In a
+  // window too short to hold them nothing is pinned: there the tour moves on by itself until a
+  // line is chosen. On a narrow screen every screen is shown.
+  const track = document.querySelector(".see .tour-track");
+  if (track) {
+    const pin = track.querySelector(".tour-pin");
+    const steps = [...track.querySelectorAll(".step")];
+    const wide = matchMedia("(min-width: 861px)");
+    let top = 0, timer = 0, chosen = false;        // top: where the pinned tour sits in the window
+
+    const show = (step) => {
+      for (const s of steps) {
+        s.classList.toggle("current", s === step);
+        if (s === step) s.querySelector("button").setAttribute("aria-current", "step");
+        else s.querySelector("button").removeAttribute("aria-current");
+      }
+    };
+    const pinned = () => track.classList.contains("pinned");
+    const distance = () => track.offsetHeight - pin.offsetHeight;
+
+    const follow = () => {
+      if (!pinned()) return;
+      const p = clamp((top - track.getBoundingClientRect().top) / distance(), 0, 1);
+      show(steps[Math.min(steps.length - 1, Math.floor(p * steps.length))]);
+    };
+    const play = () => {
+      clearInterval(timer);
+      timer = 0;
+      if (pinned() || chosen || !wide.matches || reduceMotion) return;
+      timer = setInterval(() => {
+        const r = track.getBoundingClientRect();
+        if (r.top < innerHeight * 0.6 && r.bottom > innerHeight * 0.4) show(steps[(steps.findIndex((s) => s.classList.contains("current")) + 1) % steps.length]);
+      }, 5500);
+    };
+    const fit = () => {
+      // measure the heading and tour as they would be pinned; pin them if the window can hold them
+      track.classList.add("pinned");
+      const room = innerHeight - pin.offsetHeight;
+      const fits = wide.matches && room >= 24;
+      top = fits ? Math.round(Math.min(120, room / 2)) : 0;
+      pin.style.setProperty("--tour-top", top + "px");
+      track.classList.toggle("pinned", fits);
+      follow();
+      play();
+    };
+
+    steps.forEach((step, i) => {
+      step.querySelector("button").addEventListener("click", () => {
+        if (!pinned()) { chosen = true; show(step); return play(); }
+        const start = track.getBoundingClientRect().top + scrollY - top;
+        scrollTo({ top: start + distance() * (i + 0.5) / steps.length });
+      });
+    });
+    addEventListener("scroll", follow, { passive: true });
+    addEventListener("resize", fit);
+    addEventListener("load", fit);
+    fit();
   }
+
   // "Copy prompt": the text of the element the button names goes to the clipboard.
   for (const button of document.querySelectorAll("[data-copy]")) {
     const label = button.textContent;
