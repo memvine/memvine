@@ -4,7 +4,7 @@
 
 <h1 align="center">Memvine</h1>
 
-<p align="center"><strong>Memory for AI agents.</strong><br />Teach one agent once. Every agent on your team remembers.</p>
+<p align="center"><strong>The memory layer for your agents, and for your whole team.</strong><br />Teach one agent once. Every teammate's agent remembers.</p>
 
 <p align="center"><a href="#quick-start">Quick start</a> · <a href="#how-it-works">How it works</a> · <a href="#does-it-work">Does it work?</a> · <a href="docs/how-memory-works.md">Documentation</a> · <a href="ROADMAP.md">Roadmap</a> · <a href="https://memvine.dev">Website</a></p>
 
