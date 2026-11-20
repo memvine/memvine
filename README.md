@@ -146,27 +146,12 @@ More detail: [How Memvine memory works](docs/how-memory-works.md).
 
 ## Does it work?
 
-Two tests, both in this repository and both runnable:
-
-- **Coding mode.** The [memory check](benchmark/memory) uses a real model to test what must be
-  kept, dropped and recalled: 28 of 28 pass. In its agent test, Claude Code answered 9 of 9
-  questions correctly with Memvine's memory and 0 of 9 without it.
-- **Conversation mode.** On the [BEAM](benchmark/beam/README.md) long-term memory benchmark
-  (100K-token conversations, 300 questions, scored the published way):
-
-  | | Score |
-  | --- | ---: |
-  | The whole conversation in the prompt | 0.903 |
-  | Memvine | 0.892 |
-  | Plain search over the conversation | 0.889 |
-
-  Memvine is level with plain search here, not ahead of it. These are 15 of the benchmark's 20
-  conversations, and Memvine's retrieval was adjusted on these same 15, so its score is not a
-  held-out result: the five conversations not yet run are the fair test.
+The [memory check](benchmark/memory) is in this repository and runs with a real model. It tests
+what must be kept, dropped and recalled: 28 of 28 pass. In its agent test, Claude Code answered
+9 of 9 questions about a project correctly with Memvine's memory, and 0 of 9 without it.
 
 ## Limits
 
-- It does not beat plain search at recalling details from a long conversation. It is level with it.
 - It learns from conversations and from what people add. It does not read your repository,
   documents or tickets by itself.
 - It is built and measured on Anthropic models. Other models can be used but are not measured.

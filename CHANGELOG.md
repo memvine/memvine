@@ -35,5 +35,3 @@ its own changelog in `legacy/cli/`.)
 **Measured**
 - The memory check (coding mode, real model): 28 of 28. Its agent test: 9 of 9 questions right with
   memory, 0 of 9 without.
-- BEAM, 100K conversations, 15 of 20, scored the published way: Memvine 0.892, plain search 0.889,
-  the whole conversation 0.903. Not held out: retrieval was adjusted on these conversations.

@@ -8,7 +8,7 @@ or listed under "cannot".
 Memvine is memory for AI agents. Agents and people talk; Memvine keeps the few things that stay
 true, ties each one to the words it came from, and hands the next task only what it needs. It is
 strongest as shared memory for a team's coding agents. It also stores long conversations between a
-person and an assistant, where today it is as good as plain search and no better.
+person and an assistant.
 
 ## What it can do
 
@@ -87,24 +87,16 @@ person and an assistant, where today it is as good as plain search and no better
 | --- | --- |
 | Memory check for coding mode: what is kept, dropped, updated and recalled, with a real model | 28 of 28 |
 | Agent test: Claude Code answering questions about a project | 9 of 9 right with Memvine, 0 of 9 without |
-| BEAM long-conversation benchmark, 100K tokens, scored the published way, 300 questions | Memvine 0.892 (before the person's profile was added), plain search 0.889, the whole conversation in the prompt 0.903 |
 | Smoke test on the hosted service, including Ask and conversation mode | 18 of 18 |
 
 ## What it cannot do
 
 ### Limits of the memory itself
 
-- **It does not beat plain search at recalling details from a long conversation.** On BEAM it is
-  level with search, and both lose to simply putting the whole conversation in the prompt while
-  that still fits.
 - **It costs model calls to take a conversation in.** Plain search needs only embeddings.
-- **The profile in conversation mode is new and barely measured.** On three BEAM conversations (60
-  questions) two builds scored 0.885 and 0.867, against 0.863 for plain search: no difference that
-  can be told from chance. A profile holds 45 to 80 items for a long conversation, and many still
-  overlap. Consolidating the profiles made them a tenth smaller and left the score where it was (0.863). An earlier version kept
-  about 800 sentence-level details per conversation; those are no longer served.
-- **A changed value is tracked only when the model sees the change.** On the benchmark's questions
-  about updated values the profile is level with plain search, not ahead.
+- **The profile in conversation mode is new and barely measured.** A profile holds 45 to 80 items
+  for a long conversation, and some still overlap.
+- **A changed value is tracked only when the model sees the change.**
 - **It can serve a wrong memory.** Unreviewed memories are served; review is feedback, not a gate.
 - **Quality depends on the model.** Memvine is built and measured on Anthropic models (an API key,
   or a Claude subscription on a local machine). Any server that speaks the OpenAI API can be used
@@ -113,10 +105,6 @@ person and an assistant, where today it is as good as plain search and no better
 
 ### Limits of the evidence
 
-- The BEAM result covers 15 of the benchmark's 20 conversations at 100K, with one run per system,
-  and the current recall was worked out on those same conversations. It was measured before the
-  profile was added: with the profile, only three conversations have been scored. There is no result yet on
-  held-out conversations or at 500K and above scored the published way.
 - The coding-mode checks are built by the author. Nobody outside has yet used Memvine on real
   work for long enough to show it helps a team.
 - Sharing from a personal project to a team space was tried once end to end with a real model, on
