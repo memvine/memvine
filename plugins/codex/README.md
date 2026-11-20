@@ -8,8 +8,14 @@ How memory is made, connected and forgotten: [How Memvine memory works](../../do
 ## Install
 
 Needs Node 18+ on your `PATH` and Codex CLI with hooks (0.155 or later; `codex features list`
-shows `hooks  stable  true`). Add the plugin from Codex's marketplace, then connect it with a
+shows `hooks  stable  true`). Install and connect it with a
 project key from the console's **API keys** screen and the email your memories are attributed to:
+
+```
+npx -y memvine-codex install mv_sk_... you@company.com
+```
+
+Or from Codex's marketplace:
 
 ```
 codex plugin marketplace add memvine/memvine
@@ -113,5 +119,5 @@ idempotence, other config left untouched, a hand-written table replaced, an unre
 ## Packaging
 
 `package.json` publishes this as the `memvine-codex` npm package (`npm pack` copies the shared
-`memvine-hook.mjs` from the Claude Code plugin into `lib/`). Once it is published,
-`npx -y memvine-codex install mv_sk_... you@company.com` installs and connects in one command.
+`memvine-hook.mjs` from the Claude Code plugin into `lib/`). `npx -y memvine-codex install
+mv_sk_... you@company.com` installs and connects in one command.
