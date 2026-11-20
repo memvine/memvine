@@ -1,9 +1,7 @@
 # @memvine/sdk (TypeScript)
 
 ```sh
-# from a clone of this repository; not on npm yet
-cd sdk/typescript && npm ci        # installs and builds dist/
-cd /path/to/your/project && npm install /path/to/memvine/sdk/typescript
+npm install @memvine/sdk
 ```
 
 Memory for your agent in ten lines. With a project key and the sample data loaded

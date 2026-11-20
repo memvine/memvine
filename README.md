@@ -131,8 +131,8 @@ print(r.briefing)                             # give this to your model as backg
 
 </details>
 
-For now the libraries are installed from a clone of this repository
-([TypeScript](sdk/typescript/README.md), [Python](sdk/python/README.md)).
+Install with `npm install @memvine/sdk` ([TypeScript](sdk/typescript/README.md)) or
+`pip install memvine-sdk` ([Python](sdk/python/README.md)).
 
 ## How it works
 

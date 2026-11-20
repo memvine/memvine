@@ -1,7 +1,7 @@
 # memvine-sdk (Python)
 
 ```sh
-pip install -e sdk/python        # from a clone of this repository; not on PyPI yet
+pip install memvine-sdk
 ```
 
 Memory for your agent in ten lines. With a project key and the sample data loaded
