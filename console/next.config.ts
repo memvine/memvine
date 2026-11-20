@@ -10,8 +10,6 @@ const allowedOrigins = (process.env.MEMVINE_CONSOLE_ALLOWED_ORIGINS ?? "")
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  // A production build beside a running `next dev` needs its own directory (deploy/laptop).
-  distDir: process.env.NEXT_DIST_DIR || ".next",
   // The dev badge sits over the sidebar's account block.
   devIndicators: false,
   ...(allowedOrigins.length ? { experimental: { serverActions: { allowedOrigins } } } : {}),

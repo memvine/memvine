@@ -17,8 +17,7 @@ for work in progress, and serves recall back into each session.
 - `site/`: the memvine.dev homepage (static HTML, CSS and a canvas vine; nginx Dockerfile).
 - `legacy/cli/`: the earlier git-native CLI (npm `memvine`), a separate tool with its own package,
   tests and benchmark. Not part of the service; leave it alone unless asked.
-- `deploy/`: self-hosting with Docker (`deploy/README.md`); `deploy/laptop/` (a team server on one
-  Mac). The hosted service's own setup is in the private repository `memvine/memvine-cloud`.
+- `deploy/`: self-hosting with Docker (`deploy/README.md`). The hosted service's own setup is in the private repository `memvine/memvine-cloud`.
 - `docs/how-memory-works.md`; `docs/plans/` holds parked plans (graph work: on hold, below).
 
 ## Setup and tests

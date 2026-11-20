@@ -93,8 +93,7 @@ export async function switchOrg(formData: FormData) {
   redirect("/");
 }
 
-/** Where people reach this console: MEMVINE_PUBLIC_CONSOLE_URL when set (the laptop server sets
- *  it while shared), so an invite made while browsing at localhost still works for others; else
+/** Where people reach this console: MEMVINE_PUBLIC_CONSOLE_URL when set, so an invite made while browsing at localhost still works for others; else
  *  the address this request came in on. */
 async function consoleOrigin(): Promise<string> {
   const configured = (process.env.MEMVINE_PUBLIC_CONSOLE_URL ?? "").replace(/\/$/, "");

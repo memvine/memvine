@@ -6,9 +6,6 @@ by default, or any server that speaks the OpenAI API ("Other models" below). Peo
 **organizations**: each gets a management key, signs in to the console with it, and sees only its
 own projects. For one person or one team, one organization is enough.
 
-Another way to run it: `deploy/laptop/` (a team server on
-one Mac, using a Claude subscription instead of an API key).
-
 ## 1. Run the stack
 
 ```sh
