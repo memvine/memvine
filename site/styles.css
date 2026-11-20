@@ -91,13 +91,13 @@ a:focus-visible, .button:focus-visible {
   padding: 120px var(--gutter) 80px;
 }
 
+/* two lines, each a clause of the tagline; sized so the longer one stays on its line */
 .hero h1 {
   margin: 0;
-  font-size: clamp(46px, 7.2vw, 112px);
+  font-size: clamp(38px, 5.6vw, 88px);
   font-weight: 500;
-  line-height: 0.98;
+  line-height: 1.02;
   letter-spacing: -0.035em;
-  max-width: 16ch;
 }
 
 .hero h1 .line { display: block; overflow: hidden; padding-bottom: 0.06em; margin-bottom: -0.06em; }
@@ -110,7 +110,7 @@ a:focus-visible, .button:focus-visible {
 
 .lede {
   margin: 36px 0 0;
-  max-width: 36ch;
+  max-width: 40ch;
   font-size: clamp(19px, 1.55vw, 23px);
   line-height: 1.45;
   letter-spacing: -0.01em;
@@ -483,6 +483,8 @@ button.button { font: inherit; font-size: 16.5px; font-weight: 500; letter-spaci
   .top { padding: 22px var(--gutter); }
   .top nav { display: none; }
   .hero { padding-top: 110px; }
+  .hero h1, .hero .lede { max-width: calc(100% - 34px); } /* clear of the vine down the right edge */
+  .hero h1 { font-size: 35px; line-height: 1.06; }
   .hero h1 .line { display: inline; overflow: visible; padding: 0; margin: 0; }
   .hero h1 .line > span { display: inline; transform: none; opacity: 0; animation: appear 900ms ease 120ms forwards; }
   .grows { gap: 16vh; }

@@ -8,7 +8,7 @@ screenshots `how-kept.png` and `how-rechecked.png`, made by `benchmark/how-it-wo
 the repository's README and docs show, and the site does not serve it); and `terms.html` and
 `privacy.html` (served at `/terms` and `/privacy`; drafts until a lawyer has reviewed them). For search engines and link
 previews: `robots.txt`, `sitemap.xml` (add each new page to it, and to the Dockerfile's `COPY`),
-`og.png` (1200×630), and a canonical link on every page that names its `www.memvine.dev` address. Open `index.html` in a browser, or
+`og.png` (1200×630; its source is `og.html`, which is not served and says how to render it), and a canonical link on every page that names its `www.memvine.dev` address. Open `index.html` in a browser, or
 `python3 -m http.server 8787` here and visit `http://127.0.0.1:8787/`.
 
 The Dockerfile serves the files with nginx on the `PORT` its host sets (8080 by default).
