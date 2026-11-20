@@ -53,11 +53,6 @@ another MCP client.
   machine with Docker, or use the hosted service at [app.memvine.dev](https://app.memvine.dev), open
   by invitation.
 
-> [!NOTE]
-> Memvine is early. It passes its own memory check, and on a public benchmark it is level with plain
-> search, not ahead of it. No outside team has yet used it on real work for long enough to show that
-> it helps. See [Does it work?](#does-it-work) and [Limits](#limits).
-
 ### Two modes
 
 Each project uses one of two modes:
