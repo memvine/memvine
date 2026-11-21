@@ -9,8 +9,6 @@ GitHub issues in this repo, labelled `now` / `next` / `later` / `parked`, with `
 `area:` label.
 
 ## Now (this week)
-- The first public release (0.1.0, `CHANGELOG.md`): the repository goes public and the client
-  libraries go to npm and PyPI (#11).
 - Personal projects and team spaces (a person's sessions stay theirs; the team gets what they
   share), live on the hosted service since 16 Nov. To learn from the first real teams: do people
   share what is suggested?
@@ -20,7 +18,7 @@ GitHub issues in this repo, labelled `now` / `next` / `later` / `parked`, with `
 
 ## Next (this month)
 - Cursor plugin (#8) · self-serve sign-up (#9)
-- MCP with OAuth for Claude.ai and ChatGPT (#10) · publish the SDKs (#11)
+- MCP with OAuth for Claude.ai and ChatGPT (#10)
 - Files, PDFs and URLs as sources (#12) · webhooks on memory events (#13)
 - Ask the team: judges for agent questions (#20, #21, #22; plan in `docs/plans/judges-plan.md`)
 

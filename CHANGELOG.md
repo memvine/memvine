@@ -3,6 +3,30 @@
 The memory service: server, console, plugins and client libraries. (The earlier git-native CLI has
 its own changelog in `legacy/cli/`.)
 
+## Unreleased
+
+**Fixed**
+- Anthropic backend: a request leaves the model room to think on top of the room its answer needs.
+  Thinking counts toward `max_tokens`, so a short cap was spent before the answer began: on the
+  hosted service recall lost about half of the fast model's picks that way and similarity decided
+  instead. The reconcile judge could fail the same way without a sign; it now says so in the log.
+- Recall without the model's pick (late, or no usable answer) serves no memory below the relevance
+  threshold. A pending message or the branch's page that made the question a hit used to bring the
+  closest memories with it, relevant or not.
+- A pending message shares a word with the question only when one of its words starts with it:
+  "port" is no longer found in "report".
+- Claude Code and Codex plugins (0.8.2): a session with more than 500 unsent turns is sent in
+  several requests. It was refused whole, and so was every later attempt, so the session stopped
+  reaching memory.
+- The server refuses a database that is not UTF8 and says why, instead of reporting changed
+  migrations. `scripts/dev-setup.sh` creates its cluster as UTF-8 and works when run as root.
+
+**Changed**
+- The memory check waits for the model's pick on every recall (on the Claude CLI it never arrived
+  within the server's three seconds, so similarity had been deciding) and checks two more things:
+  a question about the project that memory cannot answer abstains, and the briefing was picked by
+  the model.
+
 ## 0.1.0 (first public release)
 
 **Memory**

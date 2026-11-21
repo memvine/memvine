@@ -10,9 +10,12 @@ database, then:
      `memvine-server feedback-export` into ~/.memvine/eval/drop-cases.jsonl (MEMVINE_DROP_CASES);
      extraction over each source excerpt must not yield the forgotten statement again
   2. the October test: three facts become the right memories, each is recalled first, an
-     unrelated question abstains, a re-send changes nothing, a contradiction supersedes
+     unrelated question abstains and so does one about the project that memory cannot answer, a
+     re-send changes nothing, a contradiction supersedes
   3. the briefing: what the agent receives for one question carries the answer once, nothing
-     unrelated, under a token ceiling
+     unrelated, under a token ceiling, and was picked by the model (a recall waits
+     MEMVINE_CHECK_GATE_WAIT seconds for the pick here, 60, since the Claude CLI is slow to start;
+     section 5 runs with the server's own 3)
   4. a fresh agent given only the briefing answers correctly
   5. (--agent-e2e) a real Claude Code agent, run headless with the plugin connected and again
      without memory, deploys, answers and tests the way memory says (benchmark/memory/agent_e2e.py:
@@ -49,6 +52,10 @@ ADMIN_DSN = os.environ.get("MEMVINE_CHECK_ADMIN_URL", "postgresql://memvine:memv
 DB = os.environ.get("MEMVINE_CHECK_DB", "memvine_check")  # parallel runs: one each
 PORT = int(os.environ.get("MEMVINE_CHECK_PORT", "8411"))
 BRIEFING_CEILING = int(os.environ.get("MEMVINE_CHECK_TOKENS", "300"))  # tokens for a one-fact question
+# How long a recall waits for the fast model's pick, in seconds. The server's own wait is 3, after
+# which similarity decides alone; the Claude CLI takes longer than that to start, so with 3 no recall
+# here would ever be decided by the model. Sections 2-4 check what the model picks, not how fast.
+GATE_WAIT = os.environ.get("MEMVINE_CHECK_GATE_WAIT", "60")
 
 EPISODES = [
     {"id": "ep1", "timestamp": "2026-10-20T10:00:00Z", "content": "User: For the muse project, the production database is Postgres 16 running on port 5544. Assistant: Got it, Postgres 16 on port 5544 for muse production."},
@@ -88,9 +95,11 @@ def reset_database() -> str:
     return ADMIN_DSN.rsplit("/", 1)[0] + "/" + DB
 
 
-def start_server(server_dir: Path, dsn: str, mgmt: str) -> subprocess.Popen:
+def start_server(server_dir: Path, dsn: str, mgmt: str, gate_wait: str | None = GATE_WAIT) -> subprocess.Popen:
     env = {**os.environ, "MEMVINE_DATABASE_URL": dsn, "MEMVINE_MANAGEMENT_KEY": mgmt, "MEMVINE_ROW_SECURITY": "false",
            "MEMVINE_WORKER_ENABLED": "true"}
+    if gate_wait:
+        env["MEMVINE_RECALL_GATE_TIMEOUT"] = gate_wait
     # -c puts the working directory first on sys.path, so --server-dir's code is the code tested.
     proc = subprocess.Popen([sys.executable, "-c", f"import uvicorn; uvicorn.run('memvine_server.main:app', host='127.0.0.1', port={PORT}, log_level='warning')"],
                             cwd=server_dir, env=env, stdout=subprocess.DEVNULL, stderr=open(HERE / "check-server.log", "w"))
@@ -124,6 +133,7 @@ def briefing_checks(r: dict, label: str) -> None:
           r["items"][0]["memory"]["statement"][:80] if r["items"] else "no items")
     check(f"{label}: the old port is shown only as history", "5544" not in text or "was:" in text)
     check(f"{label}: nothing unrelated (no SvelteKit)", "SvelteKit" not in text and "Next.js" not in text)
+    check(f"{label}: the model picked what is served, not similarity alone", r.get("picked_by_model") is True)
     deploy_mentions = text.count("make deploy ENV=prod")
     check(f"{label}: the standing deploy rule appears once", deploy_mentions == 1, f"{deploy_mentions} times")
     check(f"{label}: within {BRIEFING_CEILING} tokens", r["tokens"] <= BRIEFING_CEILING, f"{r['tokens']} tokens")
@@ -224,24 +234,34 @@ def main() -> int:
     print(f"== server: {args.server_dir}", flush=True)
     mgmt = "mv_mk_check_" + secrets.token_hex(8)
     dsn = reset_database()
-    proc = start_server(args.server_dir, dsn, mgmt)
+    server = [start_server(args.server_dir, dsn, mgmt)]
+
+    def stop() -> None:
+        server[0].terminate()
+        server[0].wait(timeout=20)
+
+    def as_in_production() -> None:
+        """The same server, waiting for the model's pick only as long as it does in production: the
+        plugin's hook gives a recall eight seconds, so section 5 cannot wait a minute for one."""
+        stop()
+        server[0] = start_server(args.server_dir, dsn, mgmt, gate_wait=None)
+
     try:
         if not args.consolidation_only:
-            october(args, mgmt)
+            october(args, mgmt, as_in_production)
         if args.consolidation:
             from consolidation_check import run_section as consolidation_section
 
             consolidation_section(call, check, mgmt, dsn, args.server_dir)
     finally:
-        proc.terminate()
-        proc.wait(timeout=20)
+        stop()
 
     failed = [n for n, ok, _ in results if not ok]
     print(f"\n{len(results) - len(failed)}/{len(results)} passed" + (f"; FAILED: {', '.join(failed)}" if failed else ""))
     return 1 if failed else 0
 
 
-def october(args, mgmt: str) -> None:
+def october(args, mgmt: str, as_in_production) -> None:
     """Sections 2-6 on the project "muse"."""
     print("== 2. the October test", flush=True)
     call("POST", "/v1/projects", mgmt, {"name": "muse", "slug": "muse",
@@ -261,6 +281,10 @@ def october(args, mgmt: str) -> None:
     check("recalled: How do I deploy muse?", "make deploy ENV=prod" in r["briefing"])
     r = recall(key, "What is the weather in Paris?")
     check("an unrelated question abstains", r["abstained"] and r["tokens"] == 0, f"{r.get('abstain_reason')} at {r.get('top_relevance')}")
+    # In the project's own words, so similarity lets it through; only the model can turn it away.
+    r = recall(key, "How often is the muse production database backed up?")
+    check("a question about the project that memory cannot answer abstains", r["abstained"] and r["tokens"] == 0,
+          f"{r.get('abstain_reason')} at {r.get('top_relevance')}")
     again = call("POST", "/v1/ingest", key, {"items": EPISODES})
     check("a re-send changes nothing", again["queued"] == 0 and all(i["outcome"] == "unchanged" for i in again["items"]))
     call("POST", "/v1/ingest", key, {"items": [UPDATE]})
@@ -285,6 +309,7 @@ def october(args, mgmt: str) -> None:
     if args.agent_e2e:
         from agent_e2e import run_section
 
+        as_in_production()
         run_section(call, check, key, PORT, wait_synthesized, HERE)
 
     if args.profiles:

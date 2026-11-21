@@ -15,10 +15,12 @@ cd console && npm install
 MEMVINE_API_URL=http://127.0.0.1:8400 MEMVINE_MANAGEMENT_KEY=mv_mk_dev npm run dev                      # :3000
 ```
 
-The console authenticates to the server with the organization's management key
-and names the selected project on every request (`X-Memvine-Project`). There is
-no sign-in yet: whoever can reach the console acts as the organization owner, so
-run it locally or behind your own auth until that lands.
+Started like this, with `MEMVINE_MANAGEMENT_KEY` set, the console sends the
+organization's key with every request and nobody signs in: whoever can reach it
+acts as the organization's owner, so keep it to your own machine. Leave the key
+unset and people sign in instead, with an email and password, an invite link or
+an organization key, and see what their role allows. Either way the console
+names the selected project on every request (`X-Memvine-Project`).
 
 ## Run on mock data
 
@@ -37,5 +39,4 @@ seeded with two demo projects (`lib/mock-data.ts`); the sidebar shows a
 
 ## Not built yet
 
-Sign-in and members, audiences and identities, entity pages, live sessions,
-webhooks.
+Webhooks on memory events (#13).

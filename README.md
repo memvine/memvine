@@ -147,7 +147,7 @@ More detail: [How Memvine memory works](docs/how-memory-works.md).
 ## Does it work?
 
 The [memory check](benchmark/memory) is in this repository and runs with a real model. It tests
-what must be kept, dropped and recalled: 28 of 28 pass. In its agent test, Claude Code answered
+what must be kept, dropped and recalled: 30 of 30 pass. In its agent test, Claude Code answered
 9 of 9 questions about a project correctly with Memvine's memory, and 0 of 9 without it.
 
 ## Limits

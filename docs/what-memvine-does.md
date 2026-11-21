@@ -85,7 +85,7 @@ person and an assistant.
 
 | Check | Result |
 | --- | --- |
-| Memory check for coding mode: what is kept, dropped, updated and recalled, with a real model | 28 of 28 |
+| Memory check for coding mode: what is kept, dropped, updated and recalled, with a real model | 30 of 30 |
 | Agent test: Claude Code answering questions about a project | 9 of 9 right with Memvine, 0 of 9 without |
 | Smoke test on the hosted service, including Ask and conversation mode | 18 of 18 |
 
@@ -119,7 +119,6 @@ person and an assistant.
 - A memory changed in a person's own project reaches the team space only when the new one is
   shared (it then replaces the team's copy); a team that wants that without a step sets sharing to
   automatic. Forgetting your own copy of a shared memory does not take it back from the team.
-- The client libraries are in the repository but not published to npm or PyPI.
 - Ask is in the console and the HTTP API only: not yet in the client libraries, the MCP tools or
   the plugins.
 - No password reset by email, no email verification, no single sign-on. The hosted service is
