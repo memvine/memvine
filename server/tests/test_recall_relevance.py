@@ -83,6 +83,18 @@ async def test_relevant_query_returns_the_right_memory_first(client):
     assert "pages" not in r, "recall serves thread pages only"
 
 
+def test_a_word_inside_another_word_is_not_shared():
+    """A pending message that shares a word with the question makes the question a hit, so "port"
+    must not be found in "report"."""
+    from memvine_server.recall import query_terms, shared_terms
+
+    terms = query_terms("What port does staging use?")
+    assert terms == {"port", "staging"}
+    assert shared_terms(terms, "Please report the export numbers by Friday.") == 0
+    assert shared_terms(terms, "Staging moved to port 6543; ports below 1024 stay closed.") == 2
+    assert shared_terms({"seconds"}, "TIMEOUT_SECONDS stays at 90") == 1
+
+
 @pytest.mark.asyncio
 async def test_unrelated_query_abstains_despite_standing_rules(client):
     """The Paris case from the live test: memories and two standing rules exist, yet

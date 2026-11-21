@@ -223,8 +223,9 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
     by key; or a pending message sharing a word with the question. Pages found only by
     similarity, standing instructions, and unrelated pending messages are context, never hits. When
     the model picks, a memory it did not pick is not a hit, and a page found only by similarity is
-    served if and only if the model picked it. On abstention the briefing is empty, but the standing
-    instructions still come back in `standing`."""
+    served if and only if the model picked it. Without the model's pick, no memory below the
+    threshold is served: a page or a pending message that is a hit comes without them. On abstention
+    the briefing is empty, but the standing instructions still come back in `standing`."""
     budget = min(req.budget or settings.recall_default_budget, settings.recall_max_budget)
     include_history = req.include_history if req.include_history is not None else bool(HISTORY_WORDS.search(req.query))
     if req.as_of:
@@ -412,7 +413,10 @@ async def recall(conn, embedder: Embedder, project_id: UUID, req: RecallRequest,
             return await abstain("not_needed")
     elif not broad and not detail:
         first = max(ranked_ids, key=lambda t: (base_score[t[1]], rows[t[1]]["recorded_at"]))[1] if ranked_ids else None
-        ranked_ids = trim_to_margin(ranked_ids, rows, relevance, first=first)
+        # Without the model's pick similarity decides alone, so the threshold holds for every item: a
+        # memory less relevant than a hit must be is not served, whatever made the question a hit (a
+        # pending message, the branch's page, or one other memory that only just reached it).
+        ranked_ids = trim_to_margin(ranked_ids, rows, relevance, first=first, floor=min_relevance)
         similar = [thread_similarity(t) for t in threads if not thread_is_hit(t)]
         best_any = max([*([best] if best is not None else []), *similar], default=0.0)
         threads = [t for t in threads if thread_is_hit(t) or thread_similarity(t) >= best_any - RELEVANCE_MARGIN]
@@ -733,17 +737,17 @@ def with_partners(keep: set[UUID], ranked: list[tuple[float, UUID]], rows: dict)
 
 
 def trim_to_margin(ranked: list[tuple[float, UUID]], rows: dict, relevance, margin: float = RELEVANCE_MARGIN,
-                   first: UUID | None = None) -> list[tuple[float, UUID]]:
+                   first: UUID | None = None, floor: float = 0.0) -> list[tuple[float, UUID]]:
     """The ranked items within `margin` of the best relevance, in rank order. The first-ranked (or
-    `first`: the first by the score before recency) and the most relevant item always stay, and so
-    does every item that contradicts, supersedes or is superseded by a kept one: a pair is shown
-    together or not at all."""
+    `first`: the first by the score before recency) and the most relevant item stay too. Nothing less
+    relevant than `floor` is kept for itself, but every item that contradicts, supersedes or is
+    superseded by a kept one comes with it: a pair is shown together or not at all."""
     if not ranked:
         return ranked
     best = max(relevance(mid) for _, mid in ranked)
     keep = {first if first is not None else ranked[0][1], max(ranked, key=lambda t: relevance(t[1]))[1]}
     keep |= {mid for _, mid in ranked if relevance(mid) >= best - margin}
-    return with_partners(keep, ranked, rows)
+    return with_partners({mid for mid in keep if relevance(mid) >= floor}, ranked, rows)
 
 
 def said_in(words: frozenset[str], said: list[frozenset[str]]) -> bool:
@@ -835,8 +839,10 @@ def query_terms(query: str) -> set[str]:
 
 
 def shared_terms(terms: set[str], text: str) -> int:
+    """How many of the terms a word of the text starts with: "deploy" is in "deployed" and in
+    "make_deploy", and "port" is not in "report"."""
     text = text.lower()
-    return sum(1 for w in terms if w in text)
+    return sum(1 for w in terms if re.search(rf"(?<![a-z0-9]){re.escape(w)}", text))
 
 
 async def has_memory(conn, project_id: UUID, audiences: list[str] | None) -> bool:

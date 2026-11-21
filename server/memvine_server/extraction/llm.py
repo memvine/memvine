@@ -43,6 +43,13 @@ class LLMRateLimited(LLMError):
 
 
 class AnthropicLLM:
+    # A caller's max_tokens is the room its answer needs. Current Claude models think before they
+    # answer, and what they think counts toward max_tokens: a cap sized for a short answer is spent
+    # before the answer begins, and the response stops with no text. On the hosted service the recall
+    # gate (200) lost half its answers that way, and the reconcile judge (300) fails without a sign.
+    # So every request asks for the answer's room and this much more.
+    THINKING_ROOM = 2000
+
     def __init__(self, model: str) -> None:
         import anthropic
 
@@ -61,7 +68,7 @@ class AnthropicLLM:
     async def _create(self, system: str, user: str, max_tokens: int):
         return await self._client.messages.create(
             model=self._model,
-            max_tokens=max_tokens,
+            max_tokens=max_tokens + self.THINKING_ROOM,
             system=system,
             messages=[{"role": "user", "content": user}],
             # Extraction is routine work: low effort keeps it fast and cheap.
@@ -74,7 +81,8 @@ class AnthropicLLM:
             raise LLMError(f"model refused: {getattr(response, 'stop_details', None)}")
         text = "".join(block.text for block in response.content if block.type == "text")
         if response.stop_reason == "max_tokens":
-            raise LLMError("response truncated at max_tokens")
+            raise LLMError("response truncated at max_tokens" if text else
+                           "response truncated at max_tokens before the answer began: thinking used the room")
         return text
 
 

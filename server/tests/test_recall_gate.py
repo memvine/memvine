@@ -106,6 +106,37 @@ async def test_a_late_model_falls_back_to_similarity(client, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_without_the_models_pick_no_memory_below_the_threshold_is_served(client):
+    """The margin used to keep every memory near the best one, so a question that one memory only just
+    made a hit came back with its neighbours, each less relevant than a hit has to be."""
+    await seed(client)
+    gate_answers("no idea")
+    r = await recall(client)
+    assert len(r["items"]) == 2, "both are within the margin of the better one"
+    # Now only the better one is relevant enough to be a hit.
+    await client.patch(f"/v1/projects/{client.project_slug}", json={"recall_min_relevance": r["top_relevance"] - 0.01}, headers=MGMT)
+    r = await recall(client)
+    assert r["picked_by_model"] is False and not r["abstained"] and len(r["items"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_pending_message_does_not_bring_memories_that_were_not_relevant_enough(client):
+    """Another live session is talking about what the question asks, so the question is a hit and
+    that message is served. Similarity found no memory relevant enough, and the message does not
+    change that: without the model's pick it used to come with whatever was closest."""
+    await seed(client)
+    await client.patch(f"/v1/projects/{client.project_slug}", json={"recall_min_relevance": 0.99}, headers=MGMT)
+    said = "Northwind invoices go out on Mondays from now on."
+    r = await client.post("/v1/sessions/live1/events", json={"events": [{"role": "user", "content": said}]})
+    assert r.status_code == 202
+    for answer in ("no idea", '{"use": []}'):  # the model gives no usable answer; the model picks nothing
+        gate_answers(answer)
+        r = await recall(client, session_id="asker")
+        assert not r["abstained"] and r["items"] == [], answer
+        assert [p["content"] for p in r["pending"]] == [said] and said in r["briefing"]
+
+
+@pytest.mark.asyncio
 async def test_numbers_outside_the_list_are_ignored(client):
     await seed(client)
     gate_answers('{"use": ["1", 99, 0]}')

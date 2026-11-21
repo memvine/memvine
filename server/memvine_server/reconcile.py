@@ -8,6 +8,7 @@ makes the call except for near-identical statements, which need no model.
 """
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,6 +20,8 @@ from .extraction.extract import Candidate, normalize, parse_json
 from .extraction.llm import LLM, LLMError, fast
 from .extraction.prompts import RECONCILE_SYSTEM, reconcile_user
 from .store import add_evidence, insert_item
+
+log = logging.getLogger("memvine.reconcile")
 
 MAX_CANDIDATES = 5
 # Loose on purpose: subject overlap already narrows the field and the LLM judges each
@@ -116,8 +119,10 @@ async def _classify(llm: LLM, cand: Candidate, new_date: datetime, related: list
         verdict = parse_json(raw)
         relation = str(verdict.get("relation", "different"))
         match = verdict.get("match")
-    except (LLMError, ValueError, AttributeError):
-        # When the judge fails, keeping both items is the safe default.
+    except (LLMError, ValueError, AttributeError) as exc:
+        # When the judge fails, keeping both items is the safe default. Said in the log, because a judge
+        # that fails every time looks from outside like a memory that never updates.
+        log.warning("reconcile judge gave no verdict: %s: %s", type(exc).__name__, exc)
         return "different", None
     if relation not in {"same", "update", "contradiction", "extends"} or not isinstance(match, int) or not 1 <= match <= len(related):
         return "different", None

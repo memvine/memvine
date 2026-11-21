@@ -130,7 +130,7 @@ recorded by `as_of`) or `below_threshold`; `min_relevance` and `top_relevance` s
 
 A served briefing carries what the question needs and says nothing twice. For a question that is not
 broad (summaries, overviews, "how many", ... keep their breadth), items are kept only within 0.10
-(`RELEVANCE_MARGIN`) of the best item's relevance; the top item always stays, and an item that
+(`RELEVANCE_MARGIN`) of the best item's relevance and at or above the threshold; an item that
 contradicts, supersedes or is superseded by a kept one stays with it. A thread page is served when it
 is the caller's branch page, named by the question, or within the same margin of the best relevance
 (and above the threshold). When no memory is relevant enough but a page is (its similarity to the
