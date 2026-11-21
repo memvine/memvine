@@ -31,7 +31,7 @@ import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const VERSION = "0.8.1";
+export const VERSION = "0.8.2";
 const HOME = join(homedir(), ".memvine");
 export const CONFIG_PATH = join(HOME, "config.json");
 const STATE_PATH = join(HOME, "state.json");
@@ -45,11 +45,14 @@ export const PROMPT_BUDGET = 4000;
 export const TEAM_BRIEF_BUDGET = 1200;
 export const TEAM_PROMPT_BUDGET = 2000;
 export const MIN_PROMPT_CHARS = 12;
-const BACKFILL_BATCH = 400;
+// What the server takes in one request: at most 500 turns, each at most 100,000 characters.
+const SEND_BATCH = 400;
 const MAX_CODE_FILES = 300;
 // Tools whose input names a file the session read or changed.
 const FILE_INPUTS = ["file_path", "notebook_path"];
 const MAX_EVENT_CHARS = 100_000;
+/** A turn's text as the server accepts it: cut to the limit, and never in the middle of a character. */
+const clipped = (text) => { const t = text.slice(0, MAX_EVENT_CHARS); return /[\uD800-\uDBFF]$/.test(t) ? t.slice(0, -1) : t; };
 
 // Claude Code writes several kinds of synthetic turn into the transcript. None is something a
 // person said, so none belongs in memory.
@@ -744,19 +747,24 @@ export async function flush(config, sessionId, transcriptPath, cwd, { close = fa
   const { turns, branch, files } = read(transcriptPath, { outcomes });
   const state = loadState();
   const entry = state.sessions[sessionId] || { sentThrough: 0 };
-  const pending = turns.slice(resumeIndex(turns, entry, outcomes));
+  const from = resumeIndex(turns, entry, outcomes);
+  const pending = turns.slice(from);
   const project = basename(cwd || "");
-  if (pending.length) {
+  // In requests the server accepts, each one recorded as sent before the next. Sent as one request,
+  // a backlog of more than 500 turns (a long run between two sends, or a while without the server)
+  // was refused whole, and so was every later attempt: the session never reached memory again.
+  for (let done = 0; done < pending.length; done += SEND_BATCH) {
+    const batch = pending.slice(done, done + SEND_BATCH);
     const result = await api(config, "POST", `/v1/sessions/${encodeURIComponent(sessionId)}/events`, {
-      events: pending.map((t) => ({ role: t.role, content: t.content, at: t.at || undefined })),
+      events: batch.map((t) => ({ role: t.role, content: clipped(t.content), at: t.at || undefined })),
       code: codeContext(cwd, files),
       agent,
       identity: config.identity || undefined,
       label: `${labelPrefix} · ${project || "unknown project"}${branch ? ` · ${branch}` : ""}`,
     }, 30000);
-    if (!result || result.error) { recordError(result, "events"); return { sent: 0, error: true }; }
+    if (!result || result.error) { recordError(result, "events"); return { sent: done, error: true }; }
     delete entry.fmt;
-    Object.assign(entry, sentMark(turns, outcomes));
+    Object.assign(entry, sentMark(turns.slice(0, from + done + batch.length), outcomes));
     entry.lastSentAt = new Date().toISOString();
     entry.transcript = transcriptPath;
     entry.cwd = cwd;
@@ -1052,9 +1060,9 @@ async function modeBackfill(argv) {
   for (const t of candidates) {
     const label = `Claude Code · ${basename(t.cwd || cwd)}${t.branch ? ` · ${t.branch}` : ""} (imported)`;
     let failed = false;
-    for (let i = 0; i < t.turns.length && !failed; i += BACKFILL_BATCH) {
+    for (let i = 0; i < t.turns.length && !failed; i += SEND_BATCH) {
       const result = await api(config, "POST", `/v1/sessions/${encodeURIComponent(t.sessionId)}/events`, {
-        events: t.turns.slice(i, i + BACKFILL_BATCH).map((x) => ({ role: x.role, content: x.content.slice(0, MAX_EVENT_CHARS), at: x.at || undefined })),
+        events: t.turns.slice(i, i + SEND_BATCH).map((x) => ({ role: x.role, content: clipped(x.content), at: x.at || undefined })),
         agent: AGENT, identity: config.identity || undefined, label, live: false,
         code: i === 0 ? codeContext(t.cwd || cwd, t.files || []) : undefined,
       }, 60000);

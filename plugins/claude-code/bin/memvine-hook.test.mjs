@@ -577,3 +577,77 @@ test("with a team space: sessions go to the person's own project only, recall re
     shared.server.close();
   }
 });
+
+// ------------------------------------------------------------------ sending a long backlog
+
+test("a backlog longer than one request is sent in several, and a failed one does not resend what arrived", async () => {
+  const { execFile } = await import("node:child_process");
+  const { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } = await import("node:fs");
+  const { createServer } = await import("node:http");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const script = fileURLToPath(new URL("./memvine-hook.mjs", import.meta.url));
+
+  // The server's own limits: at most 500 turns a request, 100,000 characters a turn.
+  const requests = [];
+  let failNext = 0;
+  const server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => { raw += chunk; });
+    req.on("end", () => {
+      const events = JSON.parse(raw).events;
+      const refused = events.length > 500 || events.some((e) => e.content.length > 100_000);
+      const down = !refused && failNext > 0 && (failNext -= 1) === 0;
+      if (!refused && !down) requests.push(events);
+      res.statusCode = refused ? 422 : down ? 503 : 202;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(refused ? { detail: "too long" } : {}));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "memvine-backlog-")));
+    const home = join(root, "home");
+    const work = join(root, "work");
+    mkdirSync(join(home, ".memvine"), { recursive: true });
+    mkdirSync(work);
+    const apiUrl = `http://127.0.0.1:${server.address().port}`;
+    writeFileSync(join(home, ".memvine", "config.json"), JSON.stringify({ projects: { [work]: { apiUrl, apiKey: "mv_sk_folder", identity: "ana@northwind.test" } } }));
+    const env = { ...process.env, HOME: home, MEMVINE_API_URL: "", MEMVINE_API_KEY: "" };
+    const flush = (session, transcript) => new Promise((resolve, reject) => {
+      execFile(process.execPath, [script, "flush", session, transcript, work], { cwd: work, env }, (error) => (error ? reject(error) : resolve()));
+    });
+    const sent = (session) => JSON.parse(readFileSync(join(home, ".memvine", "state.json"), "utf8")).sessions[session].sentThrough;
+    const said = (n) => `Invoice ${n} was checked against the Northwind ledger.`;
+    const transcript = (name, pairs, first = (n) => said(n)) => {
+      const path = join(root, name);
+      const rows = [];
+      for (let n = 1; n <= pairs; n += 1) {
+        rows.push(line({ type: "user", timestamp: "2026-02-05T10:00:00Z", cwd: work, message: { content: n === 1 ? first(n) : said(n) } }));
+        rows.push(line({ type: "assistant", timestamp: "2026-02-05T10:00:05Z", message: { content: [{ type: "text", text: `Checked ${n}.` }] } }));
+      }
+      writeFileSync(path, rows.join("\n"));
+      return path;
+    };
+
+    // 900 turns, the first of them longer than the server takes: three requests, every turn once.
+    await flush("long", transcript("long.jsonl", 450, () => "x".repeat(150_000)));
+    assert.deepEqual(requests.map((r) => r.length), [400, 400, 100]);
+    assert.equal(requests[0][0].content.length, 100_000, "the long turn is cut to what the server takes");
+    assert.equal(requests[2][99].content, "Checked 450.");
+    assert.equal(sent("long"), 900);
+
+    // The second request fails: the first one's turns are recorded as sent, and the next send starts after them.
+    requests.length = 0;
+    failNext = 2;
+    const path = transcript("flaky.jsonl", 300);
+    await flush("flaky", path);
+    assert.deepEqual([requests.map((r) => r.length), sent("flaky")], [[400], 400]);
+    await flush("flaky", path);
+    assert.deepEqual([requests.map((r) => r.length), sent("flaky")], [[400, 200], 600]);
+    assert.equal(requests[1][0].content, said(201), "nothing is sent twice");
+  } finally {
+    server.close();
+  }
+});
