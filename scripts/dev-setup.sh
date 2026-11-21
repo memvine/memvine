@@ -13,7 +13,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
   docker compose -f "$ROOT/server/docker-compose.yml" up -d --wait db
 else
-  SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+  # As root (a container, a cloud session) there is no sudo to go through, and often none installed.
+  SUDO=""; AS_POSTGRES="runuser -u postgres --"
+  if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; AS_POSTGRES="sudo -u postgres"; fi
   if ! command -v pg_ctlcluster >/dev/null || ! ls /usr/share/postgresql/*/extension/vector.control >/dev/null 2>&1; then
     $SUDO apt-get update -qq
     $SUDO apt-get install -y -qq postgresql-common >/dev/null
@@ -21,12 +23,14 @@ else
     $SUDO apt-get install -y -qq postgresql-16 postgresql-16-pgvector >/dev/null
   fi
   if ! pg_lsclusters 2>/dev/null | grep -q "^16 *memvine "; then
-    $SUDO pg_createcluster 16 memvine --port 5433 >/dev/null
+    # UTF-8 whatever the machine's locale is: under the C locale a cluster's databases are SQL_ASCII,
+    # which the server refuses.
+    $SUDO pg_createcluster 16 memvine --port 5433 --encoding UTF8 --locale C.UTF-8 >/dev/null
   fi
   $SUDO pg_ctlcluster 16 memvine start 2>/dev/null || true
-  $SUDO -u postgres psql -p 5433 -qc "DO \$\$BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='memvine') THEN CREATE ROLE memvine LOGIN SUPERUSER PASSWORD 'memvine'; END IF; END\$\$;"
-  $SUDO -u postgres psql -p 5433 -tAc "SELECT 1 FROM pg_database WHERE datname='memvine'" | grep -q 1 \
-    || $SUDO -u postgres createdb -p 5433 -O memvine memvine
+  $AS_POSTGRES psql -p 5433 -qc "DO \$\$BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='memvine') THEN CREATE ROLE memvine LOGIN SUPERUSER PASSWORD 'memvine'; END IF; END\$\$;"
+  $AS_POSTGRES psql -p 5433 -tAc "SELECT 1 FROM pg_database WHERE datname='memvine'" | grep -q 1 \
+    || $AS_POSTGRES createdb -p 5433 -O memvine memvine
 fi
 
 cd "$ROOT/server"

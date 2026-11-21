@@ -209,6 +209,14 @@ async def _verify_legacy(conn, baseline: Migration) -> None:
 async def migrate(conn, directory: Path | None = None, dry_run: bool = False) -> list[str]:
     """Apply pending migrations on an autocommit connection. Returns what was (or, with dry_run,
     would be) done, one line per step; empty when the database is current."""
+    # From any other encoding text does not come back as it went in (from SQL_ASCII, what a cluster
+    # made under the C locale gives, it comes back as bytes), and the first thing to break is the
+    # checksum comparison below, which then blames the migration files.
+    encoding = conn.info.parameter_status("server_encoding") or "unknown"
+    if encoding != "UTF8":
+        raise MigrationError(
+            f"the database's encoding is {encoding}, and Memvine needs UTF8. Create the database again as UTF8 "
+            "(createdb -E UTF8 -T template0 --locale=C.UTF-8 <name>) and start the server on that one.")
     st = await status(conn, directory)
     _refuse(st)
     if st.up_to_date:

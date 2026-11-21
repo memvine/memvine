@@ -172,6 +172,21 @@ async def test_changed_migration_refuses_to_start(scratch_dsn, tmp_path):
             await migrate(conn, directory)
 
 
+async def test_a_database_that_is_not_utf8_refuses_to_start_and_says_why(scratch_dsn):
+    """A cluster made under the C locale creates SQL_ASCII databases. Text read from one is bytes, so a
+    second start used to say that every applied migration had changed."""
+    name = scratch_dsn.rsplit("/", 1)[-1] + "_ascii"
+    with psycopg.connect(ADMIN_DSN, autocommit=True) as admin:
+        admin.execute(f"CREATE DATABASE \"{name}\" ENCODING 'SQL_ASCII' TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'")
+    try:
+        async with await connect(scratch_dsn.rsplit("/", 1)[0] + "/" + name) as conn:
+            with pytest.raises(MigrationError, match="encoding is SQL_ASCII, and Memvine needs UTF8"):
+                await migrate(conn)
+    finally:
+        with psycopg.connect(ADMIN_DSN, autocommit=True) as admin:
+            admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+
+
 async def test_database_from_a_newer_release_refuses_to_start(scratch_dsn, tmp_path):
     directory = migrations_copy(tmp_path, {f"{NEXT}_newer.sql": "CREATE TABLE newer (id int);"})
     async with await connect(scratch_dsn) as conn:
