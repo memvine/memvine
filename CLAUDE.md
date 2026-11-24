@@ -88,7 +88,7 @@ model no recall is ever picked by the model, so abstention seen there is the fal
 
 ## Status (16 Nov 2026)
 
-Priorities and what's next: `ROADMAP.md` and the GitHub issues labelled now/next/later.
+Priorities and what's next: the GitHub issues labelled now/next/later.
 
 - A hosted instance runs at `app.memvine.dev` (API `api.memvine.dev`, site `www.memvine.dev`),
   open to invited teams only (`MEMVINE_SIGNUP=invite`). How it is deployed, backed up and run lives

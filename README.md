@@ -6,7 +6,7 @@
 
 <p align="center"><strong>Your coding agent's memory, your team's knowledge.</strong><br />One agent learns it. Every agent knows it.</p>
 
-<p align="center"><a href="#quick-start">Quick start</a> · <a href="#how-it-works">How it works</a> · <a href="#does-it-work">Does it work?</a> · <a href="docs/how-memory-works.md">Documentation</a> · <a href="ROADMAP.md">Roadmap</a> · <a href="https://memvine.dev">Website</a></p>
+<p align="center"><a href="#quick-start">Quick start</a> · <a href="#how-it-works">How it works</a> · <a href="#does-it-work">Does it work?</a> · <a href="docs/how-memory-works.md">Documentation</a> · <a href="https://memvine.dev">Website</a></p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3e8c5e?style=flat&amp;labelColor=0b1310" alt="License: MIT" /></a>
@@ -187,7 +187,7 @@ not part of the memory service and is no longer developed.
 | [What Memvine can and cannot do](docs/what-memvine-does.md) | Every claim, with what has and has not been measured |
 | [Self-hosting guide](deploy/README.md) | Running, operating and upgrading your own server |
 | [Security](docs/security.md) | What Memvine protects, what an operator has to set up, and the known limits |
-| [Roadmap](ROADMAP.md) and [changelog](CHANGELOG.md) | What is planned and what has shipped |
+| [Changelog](CHANGELOG.md) | What has shipped |
 
 ## Contributing
 
