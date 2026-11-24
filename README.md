@@ -6,7 +6,7 @@
 
 <p align="center"><strong>Your coding agent's memory, your team's knowledge.</strong><br />One agent learns it. Every agent knows it.</p>
 
-<p align="center"><a href="#quick-start">Quick start</a> · <a href="#how-it-works">How it works</a> · <a href="#does-it-work">Does it work?</a> · <a href="docs/how-memory-works.md">Documentation</a> · <a href="https://memvine.dev">Website</a></p>
+<p align="center"><a href="#quick-start">Quick start</a> · <a href="#how-it-works">How it works</a> · <a href="docs/how-memory-works.md">Documentation</a> · <a href="https://memvine.dev">Website</a></p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3e8c5e?style=flat&amp;labelColor=0b1310" alt="License: MIT" /></a>
@@ -25,7 +25,6 @@
   - [2. Connect an agent](#2-connect-an-agent)
   - [3. Or call it from your own code](#3-or-call-it-from-your-own-code)
 - [How it works](#how-it-works)
-- [Does it work?](#does-it-work)
 - [Limits](#limits)
 - [What is in this repository](#what-is-in-this-repository)
 - [Documentation](#documentation)
@@ -143,12 +142,6 @@ people chose to share. After a session Memvine says which of your new memories a
 and you say which ones go. Every agent on the team is briefed from both.
 
 More detail: [How Memvine memory works](docs/how-memory-works.md).
-
-## Does it work?
-
-The [memory check](benchmark/memory) is in this repository and runs with a real model. It tests
-what must be kept, dropped and recalled: 30 of 30 pass. In its agent test, Claude Code answered
-9 of 9 questions about a project correctly with Memvine's memory, and 0 of 9 without it.
 
 ## Limits
 
