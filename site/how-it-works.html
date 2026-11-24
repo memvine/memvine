@@ -49,14 +49,14 @@
       <section class="step current">
         <button type="button" aria-controls="said" aria-current="step">
           <span class="name">Conversation</span>
-          <span class="what">You tell your agent something the code does not say: the long timeout is deliberate.</span>
+          <span class="what">You tell your agent something the code does not say: a field that looks like a duplicate has to stay.</span>
         </button>
         <figure id="said">
           <div class="talk">
-            <p class="you"><span class="who">You</span>I'm tidying export.py before the release. Read it and tell me what you would change. Don't edit anything yet.</p>
-            <p class="agent"><span class="who">Your agent</span>Here's what I'd change in <code>export.py</code>, in rough priority order. I haven't edited anything. …</p>
-            <p class="you"><span class="who">You</span>Leave the timeout in export.py alone. 90 seconds is deliberate: the bank's SFTP server takes over a minute to answer at month end. It was lowered to 15 once and the nightly export failed for three days.</p>
-            <p class="agent"><span class="who">Your agent</span>Understood. I won't touch <code>TIMEOUT_SECONDS</code>, and it stays at 90. I didn't flag it in my review, so nothing I proposed changes it. …</p>
+            <p class="you"><span class="who">You</span>I'm tidying invoices.py before the release. Read it and tell me what you would change. Don't edit anything yet.</p>
+            <p class="agent"><span class="who">Your agent</span>I read <code>invoices.py</code>. It's 21 lines and mostly fine. Here is what I'd change, most important first. …</p>
+            <p class="you"><span class="who">You</span>Leave legacy_total in invoices.py alone. It looks like a duplicate of total_cents, but the iOS app before version 4.2 still reads it. It was removed in a cleanup once and the app crashed for everyone who hadn't updated.</p>
+            <p class="agent"><span class="who">Your agent</span>Understood. <code>legacy_total</code> stays, and I'm dropping item 1 from the list. The earlier review left that part open, and your answer settles it. …</p>
           </div>
           <figcaption>Your session in Claude Code, with the Memvine plugin installed.</figcaption>
         </figure>
@@ -69,7 +69,7 @@
         </button>
         <figure id="kept">
           <div class="screen">
-            <img src="how-kept.png" width="860" height="1314" alt="The Memvine console, a memory's page. The memory reads: The bank's SFTP server takes over a minute to respond at month end, so the export timeout (TIMEOUT_SECONDS in export.py) must stay at 90 seconds; do not lower it. Its status is active. Under Evidence is the line you said, with Claude Code, billing-api, you@example.com and the time.">
+            <img src="how-kept.png" width="860" height="1194" alt="The Memvine console, a memory's page. The memory reads: Do not remove the legacy_total field in billing-api's invoices.py even though it looks like a duplicate of total_cents: iOS app versions before 4.2 still read it. Its status is active. Under Evidence is the line you said, with Claude Code, billing-api, you@example.com and the time.">
           </div>
           <figcaption>The memory's page in the Memvine console, half a minute after the session.</figcaption>
         </figure>
@@ -78,17 +78,14 @@
       <section class="step">
         <button type="button" aria-controls="used">
           <span class="name">Memory recalled</span>
-          <span class="what">A teammate's agent, in a new session, is asked to lower the timeout. It already knows why not.</span>
+          <span class="what">A teammate's agent, in a new session, is asked to remove the field. It already knows why not.</span>
         </button>
         <figure id="used">
           <div class="talk">
-            <p class="you"><span class="who">A teammate</span>The export job takes too long to give up when the bank is down. Lower the timeout in export.py to 10 seconds.</p>
-            <p class="agent"><span class="who">Their agent</span>I haven't changed anything. <code>TIMEOUT_SECONDS</code> in <code>export.py:7</code> is still 90, and project memory says it should stay there:</p>
-            <ul>
-              <li>The bank's SFTP server takes over a minute to respond at month end.</li>
-              <li>Someone lowered the timeout to 15 before, and the nightly export failed for three days.</li>
-            </ul>
-            <p class="agent">At 10 seconds, the export would probably time out every month end. It would give up quickly when the bank is really down, but it would also give up when the bank is only slow. …</p>
+            <p class="you"><span class="who">A teammate</span>The invoice response sends the total twice. Remove legacy_total from invoices.py, total_cents is enough.</p>
+            <p class="agent"><span class="who">Their agent</span>I haven't removed it yet, because your request conflicts with a note from earlier work on this repo.</p>
+            <p class="agent">Memvine's standing instruction for billing-api says to keep <code>legacy_total</code> in <code>invoices.py:19</code>. It looks like a duplicate of <code>total_cents</code>, but iOS app versions before 4.2 still read it. Removing it would crash those clients. …</p>
+            <p class="agent">You may know something that note doesn't, such as iOS 4.2 being the minimum supported version now. If so, I'll delete the line right away. …</p>
           </div>
           <figcaption>A teammate's session, in their own copy of the repository. Nobody told this agent.</figcaption>
         </figure>
@@ -97,19 +94,19 @@
       <section class="step">
         <button type="button" aria-controls="rechecked">
           <span class="name">Memory rechecked</span>
-          <span class="what">Later, export.py changes. Memvine knows the memory is about that file, marks it as possibly outdated and tells agents to check the code.</span>
+          <span class="what">Later, invoices.py changes. Memvine knows the memory is about that file, marks it as possibly outdated and tells agents to check the code.</span>
         </button>
         <figure id="rechecked">
           <div class="screen">
-            <img src="how-rechecked.png" width="860" height="1574" loading="lazy" alt="The same memory's page. Its status is now stale, and a notice reads: May be outdated. export.py changed since 17 Nov 2026. Agents see this warning with the memory. Confirm it if it still holds, or retire it. The evidence below it is unchanged.">
+            <img src="how-rechecked.png" width="860" height="1454" loading="lazy" alt="The same memory's page. Its status is now stale, and a notice reads: May be outdated. invoices.py changed since 24 Nov 2026. Agents see this warning with the memory. Confirm it if it still holds, or retire it. The evidence below it is unchanged.">
           </div>
-          <figcaption>The same page after a commit changed export.py. One click confirms the memory or retires it.</figcaption>
+          <figcaption>The same page after a commit changed invoices.py. One click confirms the memory or retires it.</figcaption>
         </figure>
       </section>
     </div>
     </div>
 
-    <p class="real">Every screen is from one run on 17 November 2026: Claude Code with the Memvine plugin, a Memvine server on a laptop and a sample repository. A “…” marks where a reply is shortened.</p>
+    <p class="real">Every screen is from one run on 24 November 2026: Claude Code with the Memvine plugin, a Memvine server on a laptop and a sample repository. A “…” marks where a reply is shortened.</p>
 
     <div class="actions">
       <a class="button primary" href="/#connect">Connect an agent</a>

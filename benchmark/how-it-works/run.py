@@ -1,8 +1,9 @@
 """The working example behind memvine.dev/how-it-works: one lesson, followed through a real run.
 
 Real Claude Code sessions (`claude -p`), the real plugin and a real model, on a local Memvine server
-and console. The two people are scripted: you tell your agent why a timeout is 90 seconds; a
-teammate's fresh agent is asked to lower it; a commit then changes the file the memory is about.
+and console. The two people are scripted: you tell your agent why a field that looks like a
+duplicate has to stay; a teammate's fresh agent is asked to remove it; a commit then changes the
+file the memory is about.
 
   python3 benchmark/how-it-works/run.py all        # setup, you, shot-kept, teammate, change, recheck, shot-rechecked
   python3 benchmark/how-it-works/run.py <step>     # one step; `memories` lists what the project holds
@@ -17,8 +18,8 @@ copies them over site/how-kept.png and site/how-rechecked.png.
 Isolation from your own setup: each person gets their own HOME and a copy of the plugin whose hooks
 run under it, sessions start with `--setting-sources project --strict-mcp-config`, and Claude Code's
 own memory is switched off, so only Memvine carries the lesson. The model's words differ from run
-to run; the outcome (one memory kept, the teammate's agent declines, the memory turns stale) held
-on each of three runs on 17 Nov 2026.
+to run; the outcome (one memory kept, the teammate's agent leaves the field in place and says why,
+the memory turns stale) held on each of three runs on 24 Nov 2026.
 """
 import json
 import os
@@ -42,11 +43,11 @@ MODEL = os.environ.get("MEMVINE_DEMO_MODEL", "sonnet")
 ALLOWED = ["Read", "Write", "Edit", "Glob", "Grep", "Bash(make:*)", "Bash(python3:*)", "Bash(ls:*)", "Bash(cat:*)",
            "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)"]
 
-# The sample repository: Northwind's billing API, one nightly export to the bank.
+# The sample repository: Northwind's billing API, and the invoice it returns to the apps.
 FILES = {
     "README.md": """# billing-api
 
-Northwind's billing API. `export.py` sends each day's settled invoices to the bank.
+Northwind's billing API. `invoices.py` builds what `GET /invoices/<id>` returns.
 
     make test
 """,
@@ -55,67 +56,46 @@ Northwind's billing API. `export.py` sends each day's settled invoices to the ba
 test:
 \t@python3 -m unittest -q
 """,
-    "export.py": '''"""Nightly export: sends the day's settled invoices to the bank over SFTP."""
-import csv
-import io
+    "invoices.py": '''"""Invoice responses: what GET /invoices/<id> returns."""
 from datetime import date
 
-BANK_HOST = "sftp.bank.northwind.example"
-TIMEOUT_SECONDS = 90
-BATCH_SIZE = 500
+
+def money(cents):
+    return f"{cents / 100:,.2f}"
 
 
-def rows(invoices):
-    return [[i["id"], i["customer"], i["total_cents"]] for i in invoices if i["status"] == "settled"]
+def is_overdue(invoice, today=None):
+    return invoice["status"] == "open" and invoice["due"] < (today or date.today())
 
 
-def render(invoices):
-    out = io.StringIO()
-    csv.writer(out).writerows([["invoice", "customer", "total_cents"], *rows(invoices)])
-    return out.getvalue()
-
-
-def push(connect, invoices, day=None):
-    """Upload the day's file. `connect` opens the SFTP session; tests pass a fake one."""
-    name = f"northwind-{(day or date.today()).isoformat()}.csv"
-    with connect(BANK_HOST, timeout=TIMEOUT_SECONDS) as session:
-        session.put(name, render(invoices))
-    return name
+def invoice_response(invoice, today=None):
+    return {
+        "id": invoice["id"],
+        "customer": invoice["customer"],
+        "status": "overdue" if is_overdue(invoice, today) else invoice["status"],
+        "total_cents": invoice["total_cents"],
+        "legacy_total": money(invoice["total_cents"]),
+        "due": invoice["due"].isoformat(),
+    }
 ''',
-    "test_export.py": """import unittest
-from contextlib import contextmanager
+    "test_invoices.py": """import unittest
 from datetime import date
 
-import export
+import invoices
+
+INVOICE = {"id": 1, "customer": "Northwind Traders", "total_cents": 129900, "status": "open", "due": date(2026, 11, 30)}
 
 
-class Fake:
-    def __init__(self):
-        self.sent, self.timeout = {}, None
+class InvoiceResponseTest(unittest.TestCase):
+    def test_the_total_is_in_cents(self):
+        self.assertEqual(invoices.invoice_response(INVOICE, today=date(2026, 11, 16))["total_cents"], 129900)
 
-    @contextmanager
-    def connect(self, host, timeout):
-        self.timeout = timeout
-        yield self
+    def test_an_open_invoice_past_its_due_date_is_overdue(self):
+        self.assertEqual(invoices.invoice_response(INVOICE, today=date(2026, 11, 16))["status"], "open")
+        self.assertEqual(invoices.invoice_response(INVOICE, today=date(2026, 12, 1))["status"], "overdue")
 
-    def put(self, name, body):
-        self.sent[name] = body
-
-
-class ExportTest(unittest.TestCase):
-    def test_only_settled_invoices_are_sent(self):
-        fake = Fake()
-        invoices = [{"id": 1, "customer": "Northwind Traders", "total_cents": 129900, "status": "settled"},
-                    {"id": 2, "customer": "Fabrikam", "total_cents": 4500, "status": "open"}]
-        name = export.push(fake.connect, invoices, day=date(2026, 11, 16))
-        self.assertEqual(name, "northwind-2026-11-16.csv")
-        self.assertIn("1,Northwind Traders,129900", fake.sent[name])
-        self.assertNotIn("Fabrikam", fake.sent[name])
-
-    def test_the_configured_timeout_is_used(self):
-        fake = Fake()
-        export.push(fake.connect, [], day=date(2026, 11, 16))
-        self.assertEqual(fake.timeout, export.TIMEOUT_SECONDS)
+    def test_the_due_date_is_an_iso_date(self):
+        self.assertEqual(invoices.invoice_response(INVOICE, today=date(2026, 11, 16))["due"], "2026-11-30")
 
 
 if __name__ == "__main__":
@@ -123,10 +103,10 @@ if __name__ == "__main__":
 """,
 }
 
-YOU_1 = "I'm tidying export.py before the release. Read it and tell me what you would change. Don't edit anything yet."
-YOU_2 = ("Leave the timeout in export.py alone. 90 seconds is deliberate: the bank's SFTP server takes over a minute to answer "
-         "at month end. It was lowered to 15 once and the nightly export failed for three days.")
-TEAMMATE = "The export job takes too long to give up when the bank is down. Lower the timeout in export.py to 10 seconds."
+YOU_1 = "I'm tidying invoices.py before the release. Read it and tell me what you would change. Don't edit anything yet."
+YOU_2 = ("Leave legacy_total in invoices.py alone. It looks like a duplicate of total_cents, but the iOS app before version 4.2 "
+         "still reads it. It was removed in a cleanup once and the app crashed for everyone who hadn't updated.")
+TEAMMATE = "The invoice response sends the total twice. Remove legacy_total from invoices.py, total_cents is enough."
 
 
 def operator_key():
@@ -204,7 +184,7 @@ def setup():
     for path, text in FILES.items():
         (seed / path).write_text(text)
     git(seed, "add", "-A")
-    git(seed, "commit", "-q", "-m", "billing-api: the nightly export")
+    git(seed, "commit", "-q", "-m", "billing-api: the invoice response")
     git(seed, "push", "-q", "origin", "HEAD:main")
     for who in ("you", "teammate"):
         home = OUT / who / "home"
@@ -315,23 +295,16 @@ def main(step):
     elif step == "teammate":
         agent("teammate", "teammate", TEAMMATE)
     elif step == "change":
-        # A real edit to the file the memory is about: retry when the bank drops the connection.
+        # A real edit to the file the memory is about: the response says which currency the total is in.
         repo = Path(load()["devs"]["you"]["repo"])
-        f = repo / "export.py"
-        text = f.read_text().replace("TIMEOUT_SECONDS = 90\n", "TIMEOUT_SECONDS = 90\nRETRIES = 2\n")
-        text = text.replace("""    with connect(BANK_HOST, timeout=TIMEOUT_SECONDS) as session:
-        session.put(name, render(invoices))
-    return name""", """    for attempt in range(RETRIES + 1):
-        try:
-            with connect(BANK_HOST, timeout=TIMEOUT_SECONDS) as session:
-                session.put(name, render(invoices))
-            return name
-        except ConnectionResetError:
-            if attempt == RETRIES:
-                raise""")
-        f.write_text(text)
+        f = repo / "invoices.py"
+        line = '        "total_cents": invoice["total_cents"],\n'
+        text = f.read_text()
+        if line not in text:
+            sys.exit("invoices.py no longer has the total_cents line: the sessions changed the file.")
+        f.write_text(text.replace(line, line + '        "currency": invoice.get("currency", "USD"),\n'))
         git(repo, "add", "-A")
-        git(repo, "commit", "-q", "-m", "export: retry when the bank drops the connection")
+        git(repo, "commit", "-q", "-m", "invoices: say which currency the total is in")
         git(repo, "push", "-q", "origin", "HEAD:main")
         print(git(repo, "log", "--oneline", "-2"))
     elif step == "recheck":

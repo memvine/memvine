@@ -1,6 +1,6 @@
 <a id="readme-top"></a>
 
-<p align="center"><img src="docs/images/memvine-run.png" alt="One lesson followed through a real run, in four steps. Conversation: you tell your agent the 90-second timeout in export.py is deliberate, and why. Memory saved: the Memvine console shows the one memory kept from that session, with your words as its source. Memory recalled: a teammate's agent, asked to lower the timeout, declines and gives the reason from memory. Memory rechecked: after export.py changes, the same memory is marked stale, May be outdated." width="960" /></p>
+<p align="center"><img src="docs/images/memvine-run.png" alt="One lesson followed through a real run, in four steps. Conversation: you tell your agent that legacy_total in invoices.py has to stay although it looks like a duplicate, and why. Memory saved: the Memvine console shows the one memory kept from that session, with your words as its source. Memory recalled: a teammate's agent, asked to remove the field, holds off and gives the reason from memory. Memory rechecked: after invoices.py changes, the same memory is marked stale, May be outdated." width="960" /></p>
 
 <h1 align="center">Memvine</h1>
 

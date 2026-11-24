@@ -1,9 +1,9 @@
 # How Memvine memory works
 
-AI coding agents forget everything when a session ends. Tell one agent on Monday that a timeout is
-deliberate, and on Tuesday another agent "fixes" it. Memvine closes that gap: it listens to your
-agents' sessions, keeps the few things worth remembering, and briefs every later session with them,
-yours and your teammates'.
+AI coding agents forget everything when a session ends. Tell one agent on Monday that a field which
+looks like a duplicate has to stay, and on Tuesday another agent removes it. Memvine closes that
+gap: it listens to your agents' sessions, keeps the few things worth remembering, and briefs every
+later session with them, yours and your teammates'.
 
 ![One lesson followed through a real run: a conversation, the memory Memvine saved from it with its source, a teammate's agent recalling it, and the memory marked as possibly outdated after the code changed.](images/memvine-run.png)
 
@@ -36,7 +36,7 @@ said.
 | --- | --- |
 | Decision | "Launch is 12 Nov." |
 | Rule | "Refunds over $500 need a human approver." |
-| Gotcha | "The 90-second timeout in `export.py` is deliberate." |
+| Gotcha | "`legacy_total` looks like a duplicate, but the old iOS app still reads it." |
 | Fact | "Staging runs Postgres 16." |
 | Preference | "Priya prefers async review over meetings." |
 

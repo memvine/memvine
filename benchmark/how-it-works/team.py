@@ -3,7 +3,7 @@
 Real Claude Code sessions (`claude -p`), the real plugin and a real model, on a local Memvine server
 and console. Two people are scripted, each with a project only they can open, beside one team
 space: you teach your agent a deploy rule and a preference of your own; a teammate teaches theirs
-why a timeout is long; each shares one memory with the team.
+why a field that looks like a duplicate has to stay; each shares one memory with the team.
 
   python3 benchmark/how-it-works/team.py all       # setup, you, teammate, share, shots
   python3 benchmark/how-it-works/team.py <step>    # one step; `memories` lists what each project holds
@@ -54,7 +54,7 @@ echo "applying migrations"
 }
 
 YOU = [
-    "I'm about to ship the export fix. Read the Makefile and tell me how this service gets deployed. Don't run anything.",
+    "I'm about to ship the invoice fix. Read the Makefile and tell me how this service gets deployed. Don't run anything.",
     ("From now on, always deploy with `make deploy`, never with kubectl directly. make deploy runs the database migrations "
      "first. Last month someone restarted the deployment with kubectl, the API went out without its migration, and invoicing "
      "was down for an hour."),
@@ -95,7 +95,7 @@ def setup():
         (seed / path).write_text(text)
     (seed / "scripts" / "migrate.sh").chmod(0o755)
     git(seed, "add", "-A")
-    git(seed, "commit", "-q", "-m", "billing-api: the nightly export, and make deploy")
+    git(seed, "commit", "-q", "-m", "billing-api: the invoice response, and make deploy")
     git(seed, "push", "-q", "origin", "HEAD:main")
 
     for who, name in (("you", "billing-api"), ("teammate", "billing-api")):
