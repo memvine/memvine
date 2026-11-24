@@ -105,9 +105,8 @@ Two stores with different jobs. Memory leads, the transcript supports, and plain
 ## Where this helps
 
 - **Developers of coding agents (today, proven).** Coding mode keeps the few things a teammate's agent
-  could not learn from the repo. Its check passes 25 of 25, and in its agent test Claude Code
-  answered 9 of 9 right with memory and 0 of 9 without. This plan brings the same rule, keep little
-  and keep what matters, to the other mode.
+  could not learn from the repo. This plan brings the same rule, keep little and keep what matters,
+  to the other mode.
 - **Companies building assistants and agents that talk to the same person over time:** support,
   tutoring, coaching, personal assistants, sales follow-up. What they need and search alone does
   not give:
@@ -130,7 +129,6 @@ Before more ingestion, on conversations already stored:
 | Share that restates the assistant | under 5% |
 | Knowledge update and contradiction resolution | above plain search |
 | Overall on the full 100K set | above plain search; full context (0.903) is the stretch |
-| Memory check for coding mode | still 25 of 25 |
 
 Cost: step 1 needs no re-ingestion. Steps 2 to 4 need it, at a fraction of today's model calls, since
 most of today's calls reconcile hundreds of lines that will no longer be written.
@@ -190,7 +188,6 @@ Against the pass marks:
 | Under 5% restating the assistant | Met: none |
 | Knowledge update and contradiction resolution above plain search | Contradictions yes on six questions; knowledge update level |
 | Overall above plain search | Above, within noise |
-| Memory check for coding mode | 25 of 25 |
 
 The 60 in the first pass mark was an estimate from the friend test, not a measurement. A read of
 all 100 items of conversation 13 put a tidy profile at 55 to 60: about six exact repeats, and about
