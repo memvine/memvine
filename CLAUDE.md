@@ -41,8 +41,8 @@ cd server && .venv/bin/python ../benchmark/memory/check.py --agent-e2e  # + real
 ```
 Real model calls: `MEMVINE_LLM_BACKEND=claude-cli` (a Claude subscription, local machine) or
 `anthropic` with `ANTHROPIC_API_KEY`. (`openai` is any OpenAI-compatible server, for people who
-self-host; nothing is measured on it, and quoted results are Claude's.) Last results: 30/30 (20 Nov); agent test 9/9 right with memory (19 Nov),
-0/9 without. Don't ship a change to extraction, reconciliation or recall without running it.
+self-host; nothing is measured on it, and quoted results are Claude's.) Don't ship a change to
+extraction, reconciliation or recall without running it.
 The check waits 60 seconds for the fast model's pick on a recall (the server's own wait is 3, which
 the Claude CLI never meets); its agent test goes through the plugin and keeps the 3. With the fake
 model no recall is ever picked by the model, so abstention seen there is the fallback's, not recall's.

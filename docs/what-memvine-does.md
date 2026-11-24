@@ -81,14 +81,6 @@ person and an assistant.
 - Hosted at memvine.dev for invited teams, or self-hosted with Docker Compose. Nightly backups that
   are restore-tested, and a smoke test to run after each deploy.
 
-## What has been measured
-
-| Check | Result |
-| --- | --- |
-| Memory check for coding mode: what is kept, dropped, updated and recalled, with a real model | 30 of 30 |
-| Agent test: Claude Code answering questions about a project | 9 of 9 right with Memvine, 0 of 9 without |
-| Smoke test on the hosted service, including Ask and conversation mode | 18 of 18 |
-
 ## What it cannot do
 
 ### Limits of the memory itself

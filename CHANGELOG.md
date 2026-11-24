@@ -55,7 +55,3 @@ its own changelog in `legacy/cli/`.)
 **Running it**
 - Self-host with Docker: Postgres with pgvector, the API and the console (`deploy/README.md`).
 - Anthropic models by default; any OpenAI-compatible server can be used, unmeasured.
-
-**Measured**
-- The memory check (coding mode, real model): 28 of 28. Its agent test: 9 of 9 questions right with
-  memory, 0 of 9 without.
